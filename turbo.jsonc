@@ -1,0 +1,19 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // TUI's React 19 Parakeet copy lives in pnpm's virtual store. Its files
+    // must be synchronized after a fresh build or a restored build artifact.
+    "build": {
+      "dependsOn": ["^build", "@fungi.computer/parakeet#sync:injected"],
+    },
+    "lint": {
+      "dependsOn": ["^build", "@fungi.computer/parakeet#sync:injected"],
+    },
+    "typecheck": {
+      "dependsOn": ["^build", "@fungi.computer/parakeet#sync:injected"],
+    },
+    // The regression builds only its disposable checkout, not this workspace.
+    "test:merge": { "dependsOn": [], "cache": false, "outputs": [] },
+  },
+}

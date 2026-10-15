@@ -1,0 +1,7 @@
+objc2 workspace attribution
+Source: https://raw.githubusercontent.com/madsmtm/objc2/8d214f5477365ffcbcbb7de058c86ed9a518efb7/Cargo.toml
+
+Declared upstream authors: Mads Marquart <mads@marquart.dk>.
+Distributed here under the offered MIT terms. Upstream LICENSE.md supplies
+the per-crate license declaration and Apple SDK notice. The standard MIT terms
+follow in this notices document; no copyright year or holder has been invented.

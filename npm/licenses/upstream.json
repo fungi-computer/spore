@@ -1,0 +1,440 @@
+[
+  {
+    "packages": ["@earendil-works/pi-ai@0.99.2"],
+    "sourceRevision": "v0.99.2",
+    "revisionEvidence": "release tag",
+    "notices": [
+      {
+        "file": "LICENSE.pi",
+        "source": "https://raw.githubusercontent.com/earendil-works/pi/v0.99.2/LICENSE",
+        "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48"
+      }
+    ]
+  },
+  {
+    "packages": ["@tanstack/markdown@0.0.12"],
+    "sourceRevision": "b3ca355f9fd704d0cfdfc4632229533df0c9b131",
+    "revisionEvidence": "published package VCS metadata",
+    "noticeEvidence": "upstream declaration and attribution; separate license file absent",
+    "notices": [
+      {
+        "file": "NOTICE.@tanstack-markdown@0.0.12",
+        "source": "https://raw.githubusercontent.com/TanStack/markdown/b3ca355f9fd704d0cfdfc4632229533df0c9b131/package.json",
+        "sha256": "1732031786b2e599273f0a36458f3c85f24dee0803520109ace806e342f01464"
+      },
+      {
+        "file": "LICENSE.MIT-terms",
+        "source": "https://opensource.org/license/mit/",
+        "sha256": "6bc952b80e0b1f6f9eac784eebf81814745a6602788d5fca3388a16181241a14"
+      }
+    ]
+  },
+  {
+    "packages": ["allocative@0.3.6", "allocative_derive@0.3.6"],
+    "sourceRevision": "c256f0bb074252ded51614aaa73a9a41cb38a2a4",
+    "revisionEvidence": "upstream license snapshot; published package omits VCS metadata",
+    "notices": [
+      {
+        "file": "facebookexperimental-allocative-c256f0bb07-LICENSE-APACHE",
+        "source": "https://raw.githubusercontent.com/facebookexperimental/allocative/c256f0bb074252ded51614aaa73a9a41cb38a2a4/LICENSE-APACHE",
+        "sha256": "50e6751797c50dedd75ef1b8a0d9e42f5f8472e9fbce91f34718e9f97b0c780a"
+      },
+      {
+        "file": "facebookexperimental-allocative-c256f0bb07-LICENSE-MIT",
+        "source": "https://raw.githubusercontent.com/facebookexperimental/allocative/c256f0bb074252ded51614aaa73a9a41cb38a2a4/LICENSE-MIT",
+        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      }
+    ]
+  },
+  {
+    "packages": ["asn1-rs-impl@0.2.0"],
+    "sourceRevision": "a20e5f7319c896737ad0f2557037817b91ad854f",
+    "revisionEvidence": "published package VCS metadata",
+    "notices": [
+      {
+        "file": "rusticata-asn1-rs-a20e5f7319-LICENSE-APACHE",
+        "source": "https://raw.githubusercontent.com/rusticata/asn1-rs/a20e5f7319c896737ad0f2557037817b91ad854f/LICENSE-APACHE",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      {
+        "file": "rusticata-asn1-rs-a20e5f7319-LICENSE-MIT",
+        "source": "https://raw.githubusercontent.com/rusticata/asn1-rs/a20e5f7319c896737ad0f2557037817b91ad854f/LICENSE-MIT",
+        "sha256": "a5c61b93b6ee1d104af9920cf020ff3c7efe818e31fe562c72261847a728f513"
+      }
+    ]
+  },
+  {
+    "packages": ["debugserver-types@0.5.0"],
+    "sourceRevision": "d444f163123af5b4fbce7375d1afead7e9b8a224",
+    "revisionEvidence": "published package VCS metadata",
+    "noticeEvidence": "upstream declaration and attribution; separate license file absent",
+    "notices": [
+      {
+        "file": "NOTICE.debugserver-types@0.5.0",
+        "source": "https://raw.githubusercontent.com/Marwes/debugserver-types/d444f163123af5b4fbce7375d1afead7e9b8a224/Cargo.toml",
+        "sha256": "2a58f734e2e2ce36985065a81bae1f8aaac8bfa86a8538ab15912673d4114b11"
+      },
+      {
+        "file": "LICENSE.MIT-terms",
+        "source": "https://opensource.org/license/mit/",
+        "sha256": "6bc952b80e0b1f6f9eac784eebf81814745a6602788d5fca3388a16181241a14"
+      }
+    ]
+  },
+  {
+    "packages": ["display_container@0.9.0"],
+    "sourceRevision": "7c9c7304a1dbd451e9e448749228e88de1c193ce",
+    "revisionEvidence": "upstream license snapshot; published package omits VCS metadata",
+    "notices": [
+      {
+        "file": "facebookincubator-gazebo-7c9c7304a1-LICENSE-APACHE",
+        "source": "https://raw.githubusercontent.com/facebookincubator/gazebo/7c9c7304a1dbd451e9e448749228e88de1c193ce/LICENSE-APACHE",
+        "sha256": "50e6751797c50dedd75ef1b8a0d9e42f5f8472e9fbce91f34718e9f97b0c780a"
+      },
+      {
+        "file": "facebookincubator-gazebo-7c9c7304a1-LICENSE-MIT",
+        "source": "https://raw.githubusercontent.com/facebookincubator/gazebo/7c9c7304a1dbd451e9e448749228e88de1c193ce/LICENSE-MIT",
+        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      }
+    ]
+  },
+  {
+    "packages": ["eventsource-stream@0.2.3"],
+    "sourceRevision": "3d46f1c758f9ee4681e9da0427556d24c53f9c01",
+    "revisionEvidence": "published package VCS metadata",
+    "noticeEvidence": "upstream declaration and attribution; separate license file absent",
+    "notices": [
+      {
+        "file": "NOTICE.eventsource-stream@0.2.3",
+        "source": "https://raw.githubusercontent.com/jpopesculian/eventsource-stream/3d46f1c758f9ee4681e9da0427556d24c53f9c01/Cargo.toml",
+        "sha256": "082d39e175a7820a94bf07c88952a357d91764668d44110d8ea4889ee4f5ee62"
+      },
+      {
+        "file": "LICENSE.Apache-2.0-terms",
+        "source": "https://www.apache.org/licenses/LICENSE-2.0",
+        "sha256": "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc"
+      }
+    ]
+  },
+  {
+    "packages": ["fxhash@0.2.1"],
+    "sourceRevision": "a03cbf42dde010250adef75908f109be197d982b",
+    "revisionEvidence": "upstream source snapshot; published crate omits VCS metadata",
+    "noticeEvidence": "upstream declaration and attribution; separate license file absent",
+    "notices": [
+      {
+        "file": "NOTICE.fxhash@0.2.1",
+        "source": "https://raw.githubusercontent.com/cbreeden/fxhash/a03cbf42dde010250adef75908f109be197d982b/lib.rs",
+        "sha256": "a9b10bcd5c7b0dc7e937d9c9d795f987c4ac5114236dd7aa7dc549fbe88bb4e4"
+      },
+      {
+        "file": "LICENSE.Apache-2.0-terms",
+        "source": "https://www.apache.org/licenses/LICENSE-2.0",
+        "sha256": "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc"
+      }
+    ]
+  },
+  {
+    "packages": ["Inflector@0.11.4"],
+    "sourceRevision": "a4a95eac75043f4bffb127c7c8ec886b5b106053",
+    "revisionEvidence": "published package VCS metadata",
+    "notices": [
+      {
+        "file": "whatisinternet-inflector-a4a95eac75-LICENSE",
+        "source": "https://raw.githubusercontent.com/whatisinternet/inflector/a4a95eac75043f4bffb127c7c8ec886b5b106053/LICENSE.md",
+        "sha256": "03d1bd5bfbee8d44651e7f57faf9e5b4eda4233f0d4eda36a716f2f0533d230b"
+      }
+    ]
+  },
+  {
+    "packages": [
+      "lock_free_hashtable@0.1.4",
+      "static_interner@0.1.2",
+      "strong_hash@0.1.0",
+      "strong_hash_derive@0.1.0"
+    ],
+    "sourceRevision": "a6ef6f40d03fef0de0307526125de22295d76046",
+    "revisionEvidence": "upstream license snapshot; published package omits VCS metadata",
+    "notices": [
+      {
+        "file": "facebook-buck2-a6ef6f40d0-LICENSE-APACHE",
+        "source": "https://raw.githubusercontent.com/facebook/buck2/a6ef6f40d03fef0de0307526125de22295d76046/LICENSE-APACHE",
+        "sha256": "50e6751797c50dedd75ef1b8a0d9e42f5f8472e9fbce91f34718e9f97b0c780a"
+      },
+      {
+        "file": "facebook-buck2-a6ef6f40d0-LICENSE-MIT",
+        "source": "https://raw.githubusercontent.com/facebook/buck2/a6ef6f40d03fef0de0307526125de22295d76046/LICENSE-MIT",
+        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      },
+      {
+        "file": "facebook-buck2-a6ef6f40d0-NOTICE",
+        "source": "https://raw.githubusercontent.com/facebook/buck2/a6ef6f40d03fef0de0307526125de22295d76046/NOTICE",
+        "sha256": "b3355ad324483539ba40a8ad85bcaa5c03c19b6b54831e3f7f3b67f56ac4982e"
+      }
+    ]
+  },
+  {
+    "packages": ["opentelemetry-appender-tracing@0.31.1"],
+    "sourceRevision": "00f97c948e95beb7b2c966fcdb5f946c2a89baeb",
+    "revisionEvidence": "published package VCS metadata",
+    "notices": [
+      {
+        "file": "open-telemetry-opentelemetry-rust-00f97c948e-LICENSE",
+        "source": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-rust/00f97c948e95beb7b2c966fcdb5f946c2a89baeb/LICENSE",
+        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+      }
+    ]
+  },
+  {
+    "packages": [
+      "opentelemetry-http@0.31.0",
+      "opentelemetry-otlp@0.31.0",
+      "opentelemetry-proto@0.31.0",
+      "opentelemetry-semantic-conventions@0.31.0",
+      "opentelemetry@0.31.0",
+      "opentelemetry_sdk@0.31.0"
+    ],
+    "sourceRevision": "285dc925f98403ff426acc70968f104dc820d4f2",
+    "revisionEvidence": "published package VCS metadata",
+    "notices": [
+      {
+        "file": "open-telemetry-opentelemetry-rust-285dc925f9-LICENSE",
+        "source": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-rust/285dc925f98403ff426acc70968f104dc820d4f2/LICENSE",
+        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+      }
+    ]
+  },
+  {
+    "packages": ["pagable@0.4.1", "pagable_derive@0.4.1"],
+    "sourceRevision": "8978f3cd91b2908e1e61f6b58f84293097abf8f1",
+    "revisionEvidence": "published package VCS metadata",
+    "notices": [
+      {
+        "file": "facebook-starlark-rust-8978f3cd91-LICENSE",
+        "source": "https://raw.githubusercontent.com/facebook/starlark-rust/8978f3cd91b2908e1e61f6b58f84293097abf8f1/LICENSE",
+        "sha256": "50e6751797c50dedd75ef1b8a0d9e42f5f8472e9fbce91f34718e9f97b0c780a"
+      }
+    ]
+  },
+  {
+    "packages": [
+      "rama-core@0.3.0-alpha.4",
+      "rama-dns@0.3.0-alpha.4",
+      "rama-error@0.3.0-alpha.4",
+      "rama-http-backend@0.3.0-alpha.4",
+      "rama-http-core@0.3.0-alpha.4",
+      "rama-http-headers@0.3.0-alpha.4",
+      "rama-http-types@0.3.0-alpha.4",
+      "rama-http@0.3.0-alpha.4",
+      "rama-macros@0.3.0-alpha.4",
+      "rama-net@0.3.0-alpha.4",
+      "rama-socks5@0.3.0-alpha.4",
+      "rama-tcp@0.3.0-alpha.4",
+      "rama-tls-rustls@0.3.0-alpha.4",
+      "rama-udp@0.3.0-alpha.4",
+      "rama-unix@0.3.0-alpha.4",
+      "rama-utils@0.3.0-alpha.4"
+    ],
+    "sourceRevision": "4733273a10a791762e2b7727850032b0c9b8536d",
+    "revisionEvidence": "published package VCS metadata",
+    "notices": [
+      {
+        "file": "plabayo-rama-4733273a10-LICENSE-APACHE",
+        "source": "https://raw.githubusercontent.com/plabayo/rama/4733273a10a791762e2b7727850032b0c9b8536d/LICENSE-APACHE",
+        "sha256": "95bd3988beee069fa2848f648dab43cc6e0b2add2ad6bcb17360caf749802bcc"
+      },
+      {
+        "file": "plabayo-rama-4733273a10-LICENSE-MIT",
+        "source": "https://raw.githubusercontent.com/plabayo/rama/4733273a10a791762e2b7727850032b0c9b8536d/LICENSE-MIT",
+        "sha256": "1fa7e078de3f9165a1c6742359307711e91652f035dc37a32376ca0023483e63"
+      }
+    ]
+  },
+  {
+    "packages": ["react-devtools-core@7.0.1"],
+    "sourceRevision": "3cde211b0cb1c707114c27d7fd23683d02086e31",
+    "revisionEvidence": "published package VCS metadata",
+    "notices": [
+      {
+        "file": "facebook-react-3cde211b0c-LICENSE",
+        "source": "https://raw.githubusercontent.com/facebook/react/3cde211b0cb1c707114c27d7fd23683d02086e31/LICENSE",
+        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      }
+    ]
+  },
+  {
+    "packages": ["schemafy_core@0.5.2", "schemafy_lib@0.5.2"],
+    "sourceRevision": "5f835025d16d691f168315dda93efc52ae1e4e5e",
+    "revisionEvidence": "published package VCS metadata",
+    "notices": [
+      {
+        "file": "Marwes-schemafy-5f835025d1-LICENSE",
+        "source": "https://raw.githubusercontent.com/Marwes/schemafy/5f835025d16d691f168315dda93efc52ae1e4e5e/LICENSE",
+        "sha256": "a11232911aa0d746688b560af367728021184084eeb6328a1922d60925c5eda0"
+      }
+    ]
+  },
+  {
+    "packages": ["sorted_vector_map@0.2.1"],
+    "sourceRevision": "756ae7daba100d194aa0260131937b7d96672549",
+    "revisionEvidence": "published package VCS metadata",
+    "notices": [
+      {
+        "file": "facebookexperimental-rust-shed-756ae7daba-LICENSE-APACHE",
+        "source": "https://raw.githubusercontent.com/facebookexperimental/rust-shed/756ae7daba100d194aa0260131937b7d96672549/LICENSE-APACHE",
+        "sha256": "bb28c48e3e078166e91cfc2b6db7ffebb8a0973b9e23b3df060561292d8d69ec"
+      },
+      {
+        "file": "facebookexperimental-rust-shed-756ae7daba-LICENSE-MIT",
+        "source": "https://raw.githubusercontent.com/facebookexperimental/rust-shed/756ae7daba100d194aa0260131937b7d96672549/LICENSE-MIT",
+        "sha256": "52412d7bc7ce4157ea628bbaacb8829e0a9cb3c58f57f99176126bc8cf2bfc85"
+      }
+    ]
+  },
+  {
+    "packages": ["standardwebhooks@1.1.1"],
+    "sourceRevision": "b4d2c14fc5b4ccff3ff271e3b087dff812254c59",
+    "revisionEvidence": "published package VCS metadata",
+    "notices": [
+      {
+        "file": "standard-webhooks-standard-webhooks-b4d2c14fc5-LICENSE",
+        "source": "https://raw.githubusercontent.com/standard-webhooks/standard-webhooks/b4d2c14fc5b4ccff3ff271e3b087dff812254c59/LICENSE",
+        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+      }
+    ]
+  },
+  {
+    "packages": [
+      "starlark@0.14.2",
+      "starlark_derive@0.14.2",
+      "starlark_map@0.14.2",
+      "starlark_syntax@0.14.2"
+    ],
+    "sourceRevision": "0c8d107ab963362ba47ee3ab9e0173bc39bd101d",
+    "revisionEvidence": "published package VCS metadata",
+    "notices": [
+      {
+        "file": "facebook-starlark-rust-0c8d107ab9-LICENSE",
+        "source": "https://raw.githubusercontent.com/facebook/starlark-rust/0c8d107ab963362ba47ee3ab9e0173bc39bd101d/LICENSE",
+        "sha256": "50e6751797c50dedd75ef1b8a0d9e42f5f8472e9fbce91f34718e9f97b0c780a"
+      }
+    ]
+  },
+  {
+    "packages": ["tonic-prost@0.14.3"],
+    "sourceRevision": "ed4bafc35af7a284357cf4e77e26b9c3eb0266ca",
+    "revisionEvidence": "published package VCS metadata",
+    "notices": [
+      {
+        "file": "hyperium-tonic-ed4bafc35a-LICENSE",
+        "source": "https://raw.githubusercontent.com/hyperium/tonic/ed4bafc35af7a284357cf4e77e26b9c3eb0266ca/LICENSE",
+        "sha256": "e24a56698aa6feaf3a02272b3624f9dc255d982970c5ed97ac4525a95056a5b3"
+      }
+    ]
+  },
+  {
+    "packages": ["tree-sitter@0.25.10"],
+    "sourceRevision": "da6fe9beb4f7f67beb75914ca8e0d48ae48d6406",
+    "revisionEvidence": "published package VCS metadata",
+    "notices": [
+      {
+        "file": "tree-sitter-tree-sitter-da6fe9beb4-LICENSE",
+        "source": "https://raw.githubusercontent.com/tree-sitter/tree-sitter/da6fe9beb4f7f67beb75914ca8e0d48ae48d6406/LICENSE",
+        "sha256": "5f9cf9fb6acb1972b35ae29119ce563bb60ec097656bc4b69b9bac2d04c7a147"
+      }
+    ]
+  },
+  {
+    "packages": ["ts-rs-macros@11.1.0", "ts-rs@11.1.0"],
+    "sourceRevision": "1dce5297090804082e9639d2b7d851ba815aa359",
+    "revisionEvidence": "published package VCS metadata",
+    "notices": [
+      {
+        "file": "Aleph-Alpha-ts-rs-1dce529709-LICENSE",
+        "source": "https://raw.githubusercontent.com/Aleph-Alpha/ts-rs/1dce5297090804082e9639d2b7d851ba815aa359/LICENSE",
+        "sha256": "db7f7f8e7236a2d0b41b855b2501b7b913caebbcda6ce498637a304ad1706ce1"
+      }
+    ]
+  },
+  {
+    "packages": ["block2@0.6.2", "objc2@0.6.3"],
+    "sourceRevision": "b4167b582b2f75f9a1be75495c41b765344fd03c",
+    "revisionEvidence": "published package VCS metadata",
+    "noticeEvidence": "upstream license declaration and workspace attribution; MIT terms selected",
+    "notices": [
+      {
+        "file": "madsmtm-objc2-b4167b582b-LICENSE",
+        "source": "https://raw.githubusercontent.com/madsmtm/objc2/b4167b582b2f75f9a1be75495c41b765344fd03c/LICENSE.md",
+        "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+      },
+      {
+        "file": "NOTICE.objc2-b4167b582b",
+        "source": "https://raw.githubusercontent.com/madsmtm/objc2/b4167b582b2f75f9a1be75495c41b765344fd03c/Cargo.toml",
+        "sha256": "7f72195e9d7124406527248085a91606b309c0391ebc4023df6a87f142b2eb13"
+      },
+      {
+        "file": "LICENSE.MIT-terms",
+        "source": "https://opensource.org/license/mit/",
+        "sha256": "6bc952b80e0b1f6f9eac784eebf81814745a6602788d5fca3388a16181241a14"
+      }
+    ]
+  },
+  {
+    "packages": ["objc2-encode@4.1.0"],
+    "sourceRevision": "8d214f5477365ffcbcbb7de058c86ed9a518efb7",
+    "revisionEvidence": "published package VCS metadata",
+    "noticeEvidence": "upstream license declaration and workspace attribution; MIT terms selected",
+    "notices": [
+      {
+        "file": "madsmtm-objc2-8d214f5477-LICENSE",
+        "source": "https://raw.githubusercontent.com/madsmtm/objc2/8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md",
+        "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+      },
+      {
+        "file": "NOTICE.objc2-8d214f5477",
+        "source": "https://raw.githubusercontent.com/madsmtm/objc2/8d214f5477365ffcbcbb7de058c86ed9a518efb7/Cargo.toml",
+        "sha256": "99860edb3b0f5ff77bca62e24984d4d9e39124ed64ba92a5b53234a4f0a094db"
+      },
+      {
+        "file": "LICENSE.MIT-terms",
+        "source": "https://opensource.org/license/mit/",
+        "sha256": "6bc952b80e0b1f6f9eac784eebf81814745a6602788d5fca3388a16181241a14"
+      }
+    ]
+  },
+  {
+    "packages": ["objc2-core-foundation@0.3.2", "objc2-foundation@0.3.2"],
+    "sourceRevision": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+    "revisionEvidence": "published package VCS metadata",
+    "noticeEvidence": "upstream license declaration and workspace attribution; MIT terms selected",
+    "notices": [
+      {
+        "file": "madsmtm-objc2-7b1abfd750-LICENSE",
+        "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+        "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+      },
+      {
+        "file": "NOTICE.objc2-7b1abfd750",
+        "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/Cargo.toml",
+        "sha256": "1e9e8f28f0e7446c00a9b155d05f98e4c4fc1733f9e5acd82a1109c98f9ab895"
+      },
+      {
+        "file": "LICENSE.MIT-terms",
+        "source": "https://opensource.org/license/mit/",
+        "sha256": "6bc952b80e0b1f6f9eac784eebf81814745a6602788d5fca3388a16181241a14"
+      }
+    ]
+  },
+  {
+    "packages": ["@xterm/headless@6.0.0"],
+    "sourceRevision": "f447274f430fd22513f6adbf9862d19524471c04",
+    "revisionEvidence": "published package VCS metadata",
+    "notices": [
+      {
+        "file": "xtermjs-xterm-f447274f43-LICENSE",
+        "source": "https://raw.githubusercontent.com/xtermjs/xterm.js/f447274f430fd22513f6adbf9862d19524471c04/LICENSE",
+        "sha256": "b569f629d00f2626a8100df2a1798210535621e42164dfd426a6fe5aac7b0ccd"
+      }
+    ]
+  }
+]

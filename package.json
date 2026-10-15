@@ -1,0 +1,166 @@
+{
+  "name": "@fungi.computer/tui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "fungi": "./dist/cli.js"
+  },
+  "description": "Private native React OpenTUI frame for a typed Shiitake Session",
+  "scripts": {
+    "clean": "node --input-type=module --eval \"import { rm } from 'node:fs/promises'; await rm('dist', { recursive: true, force: true });\"",
+    "lint": "eslint src test --max-warnings=0 && ../../node_modules/.bin/oxlint --config ../../oxlint.config.ts --deny-warnings src test",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "pnpm run clean && tsc -p tsconfig.build.json && node scripts/build-tool-sigils.mjs",
+    "test": "pnpm run test:unit && pnpm run test:merge",
+    "test:unit": "node scripts/test-unit.mjs",
+    "test:merge": "node --test scripts/cold-build.test.mjs",
+    "test:nightly": "bun test/cancel-local-wait.proof.mjs && TUI_CANCEL_DRAIN=1 bun test/cancel-local-wait.proof.mjs && TUI_CANCEL_FOREGROUND=1 bun test/cancel-local-wait.proof.mjs && TUI_CANCEL_FOREGROUND=1 TUI_CANCEL_KEY=ctrl-c bun test/cancel-local-wait.proof.mjs && bun test/design-native.proof.mjs && pnpm run test:goal-loop-rows && bun test/dialog-design.proof.tsx && bun test/files-edit-error-native.proof.mjs && bun test/memory-repro.proof.mjs && bun test/patch-mismatch-native.proof.mjs && pnpm run test:native-extensions && bun test/auth-native.proof.mjs && pnpm run test:native-frame && node --import tsx scripts/packed-proof.mjs",
+    "test:native-extensions": "bun test/client-extension-host.proof.mjs && bun test/client-extension-lifetime.proof.mjs",
+    "test:native-frame": "BUN_BIN=\"$PWD/node_modules/.bin/bun\" && node --input-type=module --eval \"import { rm } from 'node:fs/promises'; await rm('../../.botanical/tui-first-frame/package-native-proof', { recursive: true, force: true });\" && pnpm --filter @fungi.computer/tui deploy --prod --legacy ../../.botanical/tui-first-frame/package-native-proof && cd ../../.botanical/tui-first-frame/package-native-proof && \"$BUN_BIN\" test/tool-progress-native.proof.mjs && \"$BUN_BIN\" test/native-frame.proof.mjs && \"$BUN_BIN\" test/installed-cli.proof.mjs",
+    "package:local": "node scripts/package-local.mjs",
+    "bundle:cli": "node scripts/bundle-cli.mjs",
+    "build:binaries": "node scripts/build-binaries.mjs",
+    "proof:binary": "node scripts/prove-binary.mjs",
+    "proof:cli": "node scripts/prove-bundle.mjs",
+    "proof:linux-baseline": "node scripts/prove-linux-baseline.mjs",
+    "docs": "prettier --check README.md",
+    "start": "bun dist/cli.js",
+    "design:preview": "bun test/design-preview.mjs",
+    "format:check": "node ../../tooling/repository/scripts/format-package-check.mjs",
+    "lint:anti-slop": "node ../../tooling/repository/scripts/lint-package-anti-slop.mjs",
+    "build:proof-package": "pnpm run bundle:cli && node scripts/bundle-native.mjs",
+    "proof:preview": "bun test/fungi-models.preview.mjs",
+    "proof:acp": "bun test/acp-stdio.proof.mjs",
+    "proof:terminal-text": "node test/terminal-text-pty.proof.mjs",
+    "proof:interactive": "bash ../../.agents/skills/orchestrate-multi-lane-work/scripts/run-proof.sh bun test/interactive-smoke.proof.mjs",
+    "proof:inbox-pane-round-trip": "bun test/inbox-pane-round-trip.native.tsx",
+    "test:goal-loop-rows": "bun test/goal-loop-native.proof.mjs && ORG_SIZE=160x48 bun test/goal-loop-native.proof.mjs",
+    "proof:picker-stress": "bun test/picker-stress.proof.mjs"
+  },
+  "dependencies": {
+    "@fungi.computer/agar": "workspace:*",
+    "@fungi.computer/cairn": "workspace:*",
+    "@fungi.computer/lantern": "workspace:*",
+    "@fungi.computer/corral": "workspace:*",
+    "@fungi.computer/local": "workspace:*",
+    "@fungi.computer/maosaico": "workspace:*",
+    "@fungi.computer/parakeet": "workspace:*",
+    "@fungi.computer/shiitake": "workspace:*",
+    "@fungi.computer/shiitake-extensions": "workspace:*",
+    "@fungi.computer/stipe": "workspace:*",
+    "@fungi.computer/veil": "workspace:*",
+    "@fungi.computer/whistle": "workspace:*",
+    "@opentui/core": "0.5.10",
+    "@opentui/keymap": "0.5.10",
+    "@opentui/react": "0.5.10",
+    "@tanstack/query-core": "5.102.8",
+    "@tanstack/react-query": "5.102.8",
+    "@xterm/headless": "6.0.0",
+    "effect": "4.0.2",
+    "eventsource": "5.1.1",
+    "prettier": "3.9.6",
+    "react": "19.2.0",
+    "react-devtools-core": "7.0.1",
+    "react-dom": "19.2.0",
+    "strip-ansi": "7.2.0",
+    "web-tree-sitter": "0.25.10",
+    "write-file-atomic": "8.0.0",
+    "ws": "8.18.0",
+    "zod": "4.4.3",
+    "@fungi.computer/oyster": "workspace:*",
+    "@fungi.computer/gills": "workspace:*"
+  },
+  "dependenciesMeta": {
+    "@fungi.computer/parakeet": {
+      "injected": true
+    }
+  },
+  "devDependencies": {
+    "@agentclientprotocol/sdk": "1.7.0",
+    "@earendil-works/pi-ai": "0.99.2",
+    "@fungi.computer/parakeet-testing": "workspace:*",
+    "@types/node": "24.13.3",
+    "@types/react": "18.3.3",
+    "@types/write-file-atomic": "4.0.3",
+    "bun": "1.4.2",
+    "bun-types": "1.4.1",
+    "typescript": "5.9.3",
+    "@fungi.computer/sigils": "workspace:*",
+    "sharp": "0.35.4",
+    "esbuild": "0.28.2"
+  },
+  "license": "MIT",
+  "botanical": {
+    "role": "app",
+    "operations": {
+      "lint": "required",
+      "typecheck": "required",
+      "build": "required",
+      "test": "required",
+      "docs": "required",
+      "pack": {
+        "status": "not-applicable",
+        "reason": "Private terminal host is not published"
+      },
+      "smoke": {
+        "status": "not-applicable",
+        "reason": "The native PTY proof exercises the private terminal host"
+      },
+      "stranger": {
+        "status": "not-applicable",
+        "reason": "Private terminal host has no public artifact"
+      }
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    },
+    "./cli-runtime": {
+      "types": "./dist/cli-runtime.d.ts",
+      "import": "./dist/cli-runtime.js"
+    },
+    "./client-extensions": {
+      "types": "./dist/client-extensions.d.ts",
+      "import": "./dist/client-extensions.js"
+    },
+    "./frame": {
+      "types": "./dist/frame.d.ts",
+      "import": "./dist/frame.js"
+    },
+    "./button/model-query": {
+      "types": "./dist/button/model-query.d.ts",
+      "import": "./dist/button/model-query.js"
+    },
+    "./button/slash-completion": {
+      "types": "./dist/button/slash-completion.d.ts",
+      "import": "./dist/button/slash-completion.js"
+    },
+    "./one-shot-run": {
+      "types": "./dist/one-shot-run.d.ts",
+      "import": "./dist/one-shot-run.js"
+    },
+    "./private-bun-shiitake-host": {
+      "types": "./dist/private-bun-shiitake-host.d.ts",
+      "import": "./dist/private-bun-shiitake-host.js"
+    },
+    "./button/theme-preferences": {
+      "types": "./dist/button/theme-preferences.d.ts",
+      "import": "./dist/button/theme-preferences.js"
+    },
+    "./frame-renderer": {
+      "types": "./dist/frame-renderer.d.ts",
+      "import": "./dist/frame-renderer.js"
+    },
+    "./session-picker": {
+      "types": "./dist/session-picker.d.ts",
+      "import": "./dist/session-picker.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    }
+  }
+}
