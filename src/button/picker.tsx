@@ -101,6 +101,7 @@ export function Picker({
   const { width, height: terminalHeight } = useTerminalDimensions();
   const compact = terminalHeight < 14;
   const scroll = useRef<ScrollBoxRenderable>(null);
+  const revealPending = useRef(true);
   const focus = useRef<BoxRenderable>(null);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -220,8 +221,18 @@ export function Picker({
     if (!searchable) focus.current?.focus();
   }, [searchable]);
   useLayoutEffect(() => {
-    if (activeKey) scroll.current?.scrollChildIntoView(activeKey);
-  }, [activeKey, rows]);
+    revealPending.current = true;
+    // Reveal only after native layout has sized the resized viewport and rows.
+    const reveal = () => {
+      if (!revealPending.current || activeKey === undefined) return;
+      revealPending.current = false;
+      scroll.current?.scrollChildIntoView(activeKey);
+    };
+    renderer.addPostProcessFn(reveal);
+    return () => {
+      renderer.removePostProcessFn(reveal);
+    };
+  }, [renderer, activeKey, rows]);
   const chrome =
     (title === undefined ? 0 : compact ? 1 : 2) +
     (searchable ? (compact ? 1 : 2) : 0) +
@@ -317,9 +328,13 @@ export function Picker({
           />
         </box>
       ) : null}
+      {/* OpenTUI numeric height updates disable shrinking; a basis stays flexible. */}
       <scrollbox
         ref={scroll}
-        height={Math.min(
+        onSizeChange={() => {
+          revealPending.current = true;
+        }}
+        flexBasis={Math.min(
           maxHeight,
           Math.max(
             1,

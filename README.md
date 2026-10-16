@@ -7,14 +7,14 @@ runtime.
 
 ## Install and start
 
-The user install path is `@fungi.computer/cli`, with Node 22.13 or newer. This
-private `@fungi.computer/tui` workspace supplies its terminal implementation. It
-is not the package to install globally.
+The user install path is `@fungi.computer/spore`, with Node 22.13 or newer. This
+private `@fungi.computer/spore` workspace supplies its terminal implementation.
+It is not the package to install globally.
 
 Install with npm, then sign in through your browser:
 
 ```sh
-npm i -g @fungi.computer/cli
+npm i -g @fungi.computer/spore
 fungi login --provider fungi
 fungi doctor
 fungi
@@ -209,7 +209,7 @@ through the granted Agent's `execute`.
 From a configured repository checkout:
 
 ```sh
-pnpm turbo:run run build --filter=@fungi.computer/tui
+pnpm turbo:run run build --filter=@fungi.computer/spore
 pnpm --dir apps/tui run start --help
 # Open the disposable design fixture in an interactive terminal.
 pnpm --dir apps/tui run design:preview
@@ -316,9 +316,9 @@ qualification.
 From the repository root:
 
 ```sh
-pnpm --filter @fungi.computer/tui typecheck
-pnpm --filter @fungi.computer/tui lint
-pnpm --filter @fungi.computer/tui test
+pnpm --filter @fungi.computer/spore typecheck
+pnpm --filter @fungi.computer/spore lint
+pnpm --filter @fungi.computer/spore test
 ```
 
 [CLI grammar](test/cli-grammar.test.ts),
@@ -338,10 +338,10 @@ inference. After building the workspace and native patch engine:
 ```sh
 pnpm --dir apps/tui bundle:cli
 node apps/tui/scripts/bundle-native.mjs
-# Linux x64 example; use cli-native-darwin-arm64 on Apple Silicon
-# or cli-native-darwin-x64 on Intel Macs.
+# Linux x64 example; use spore-native-darwin-arm64 on Apple Silicon
+# or spore-native-darwin-x64 on Intel Macs.
 npm pack ./.botanical/fungi-cli-native-linux-x64 --pack-destination .botanical
-npm install --prefix .botanical/fungi-cli-package --no-save --no-audit --no-fund ./.botanical/fungi.computer-cli-native-linux-x64-0.0.1.tgz
+npm install --prefix .botanical/fungi-cli-package --no-save --no-audit --no-fund ./.botanical/fungi.computer-spore-native-linux-x64-0.0.1.tgz
 pnpm --dir apps/tui proof:acp
 ```
 
@@ -353,13 +353,13 @@ deterministic transport proof.
 
 ## Prepare the public npm candidate
 
-The bundler writes `@fungi.computer/cli` at inaugural version `0.0.1` under
+The bundler writes `@fungi.computer/spore` at inaugural version `0.0.1` under
 `.botanical/fungi-cli-package`. Its explicit file list contains the launcher,
 runtime bundles, [public README](npm/README.md) and third-party notices. One
-common CLI tarball selects `@fungi.computer/cli-native-linux-x64`,
-`@fungi.computer/cli-native-linux-arm64`,
-`@fungi.computer/cli-native-darwin-arm64` or
-`@fungi.computer/cli-native-darwin-x64` through npm optional dependencies. The
+common CLI tarball selects `@fungi.computer/spore-native-linux-x64`,
+`@fungi.computer/spore-native-linux-arm64`,
+`@fungi.computer/spore-native-darwin-arm64` or
+`@fungi.computer/spore-native-darwin-x64` through npm optional dependencies. The
 native packages carry their binary, platform metadata and notices. Node 22.13 or
 newer is required. The Node launcher admits Linux x64/arm64 with glibc 2.35+ and
 macOS 13.5+ on Apple Silicon or Intel. The common package has no npm OS/CPU
@@ -378,7 +378,7 @@ for these container builds; installed users do not need Docker or Rust.
 After building the workspace, build the native patch engine and bundle:
 
 ```sh
-pnpm --filter @fungi.computer/local build:native
+pnpm --filter @fungi.computer/truffle build:native
 for target in darwin-arm64 darwin-x64 linux-arm64; do
   node packages/cordyceps/native/apply-patch/build.mjs --target "$target" --out ".botanical/native-build/$target/bin"
 done
@@ -389,9 +389,9 @@ node apps/tui/scripts/bundle-native.mjs darwin-x64
 node apps/tui/scripts/bundle-native.mjs linux-arm64
 npm pack --dry-run ./.botanical/fungi-cli-package
 npm pack ./.botanical/fungi-cli-package ./.botanical/fungi-cli-native-linux-x64 ./.botanical/fungi-cli-native-darwin-arm64 ./.botanical/fungi-cli-native-darwin-x64 ./.botanical/fungi-cli-native-linux-arm64 --pack-destination .botanical
-pnpm --dir apps/tui proof:cli ../../.botanical/fungi.computer-cli-0.0.1.tgz ../../.botanical/fungi.computer-cli-native-linux-x64-0.0.1.tgz
+pnpm --dir apps/tui proof:cli ../../.botanical/fungi.computer-spore-0.0.1.tgz ../../.botanical/fungi.computer-spore-native-linux-x64-0.0.1.tgz
 # Linux release qualification in the builder's actual glibc 2.35 userspace:
-pnpm --dir apps/tui proof:linux-baseline ../../.botanical/fungi.computer-cli-0.0.1.tgz ../../.botanical/fungi.computer-cli-native-linux-x64-0.0.1.tgz
+pnpm --dir apps/tui proof:linux-baseline ../../.botanical/fungi.computer-spore-0.0.1.tgz ../../.botanical/fungi.computer-spore-native-linux-x64-0.0.1.tgz
 ```
 
 The bundlers' input graphs and Cargo's compiled-artifact messages supply the

@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
 import { QueryClient } from "@tanstack/query-core";
-import { prepareClientExtensions } from "@fungi.computer/tui/client-extensions";
+import { prepareClientExtensions } from "@fungi.computer/spore/client-extensions";
 
 const root = await mkdtemp(join(tmpdir(), "fungi-extension-lifetime-"));
 const appScope = await Effect.runPromise(Scope.make());

@@ -55,7 +55,11 @@ export function PaneWorkspace(props: PaneWorkspaceProps) {
   const renderer = useRenderer();
   const viewport = useTerminalDimensions();
   const dialog = props.dialog;
-  const presentation = useTerminalTheme(props.theme);
+  // Shared shell colors follow the pane's confirmed palette, without a
+  // second query for the same transition.
+  const presentation = useTerminalTheme(props.theme, {
+    refreshOnReturnToTerminal: false,
+  });
   const themePresentation = useMemo(
     () => ({
       colors: presentation.colors,

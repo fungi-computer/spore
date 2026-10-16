@@ -1,4 +1,4 @@
-import type { LocalAuthCliOptions } from "@fungi.computer/local/auth";
+import type { LocalAuthCliOptions } from "@fungi.computer/truffle/auth";
 import { Cli } from "@fungi.computer/lantern";
 import { Writable } from "node:stream";
 import process from "node:process";
@@ -9,7 +9,7 @@ import { reportFailure } from "./button/log-event.js";
 export async function runDoctor(options: {
   models: NonNullable<LocalAuthCliOptions["models"]>;
   fungiAccount: () => ReturnType<
-    typeof import("@fungi.computer/local").readFungiAccountStatus
+    typeof import("@fungi.computer/truffle").readFungiAccountStatus
   >;
   endpoint?: string | undefined;
   version: string;

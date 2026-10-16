@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { QueryObserver, CancelledError } from "@tanstack/react-query";
 import { createQueryClient } from "@fungi.computer/agar/query";
-import { localAccountOwner } from "@fungi.computer/local/login";
+import { localAccountOwner } from "@fungi.computer/truffle/login";
 import type { ModelPreference } from "@fungi.computer/shiitake/model-preference";
 import {
   effectiveModelQuery,

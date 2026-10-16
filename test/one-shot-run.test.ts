@@ -5,7 +5,7 @@ import type {
 import type {
   PrivateLocalServiceManager,
   PrivateLocalServiceConnection,
-} from "@fungi.computer/local/service";
+} from "@fungi.computer/truffle/service";
 import {
   idleActivity,
   queuedActivity,
@@ -614,12 +614,15 @@ test("error and aborted assistant terminals are not successful output", async ()
             commandId: "request-1",
             outcome: "failed",
             sequence: 1,
-            diagnostic: null,
+            diagnostic: "model:rejected: Model acquisition failed",
           },
         ],
       ),
     );
-    await assert.rejects(run, /terminal outcome: failed/u);
+    await assert.rejects(
+      run,
+      /^Error: No model is available\. Run \/login to sign in/u,
+    );
     assert.deepEqual(output, []);
   }
 });

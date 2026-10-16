@@ -14,9 +14,9 @@ import {
   slashParityCases,
   slashParityFlow,
 } from "@fungi.computer/parakeet-testing";
-import { runTuiCli } from "@fungi.computer/tui/cli-runtime";
+import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 import { createTuiFixture } from "./fixture.js";
-import { slashRows } from "@fungi.computer/tui/button/slash-completion";
+import { slashRows } from "@fungi.computer/spore/button/slash-completion";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 
 async function capture(setup, name) {
@@ -143,8 +143,11 @@ test("the terminal draws exactly Parakeet's completion for every parity draft", 
     await type("/");
     assert.doesNotMatch(
       setup.captureCharFrame(),
-      /\/(?:retry|continue|cancel|pane-close|pane-open|row-actions|session|model|help)\b/u,
+      /\/(?:retry|continue|cancel|pane-close|pane-open|row-actions|session)\b/u,
     );
+    assert.match(setup.captureCharFrame(), /More…/u);
+    for (const alias of ["help", "login", "model"])
+      assert.ok(setup.captureCharFrame().includes(`/${alias} `));
     await capture(setup, "slash-all");
     await type("/water ");
     assert.match(setup.captureCharFrame(), /\/water <bed> \| all/u);

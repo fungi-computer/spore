@@ -34,7 +34,7 @@ export async function buildIntegrationCandidate(
   await run(["git", "worktree", "add", "--detach", checkout, sha]);
   await run(["pnpm", "install", "--frozen-lockfile"], checkout);
   await run(
-    ["pnpm", "turbo:run", "run", "build", "--filter=@fungi.computer/tui"],
+    ["pnpm", "turbo:run", "run", "build", "--filter=@fungi.computer/spore"],
     checkout,
   );
   await run(["pnpm", "--dir", "apps/tui", "bundle:cli"], checkout);

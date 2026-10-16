@@ -50,6 +50,7 @@ import {
 import type { TuiPresentation, ClientEntryV1 } from "../../button/index.js";
 import { toolCodeQuery } from "../../button/index.js";
 import { TerminalMarkdown } from "../../button/index.js";
+import { userFacingCause } from "./user-facing-cause.js";
 
 const transcriptInitialSize = 60;
 const transcriptRevealSize = 60;
@@ -733,7 +734,7 @@ function CompactionNoticeRow({
   const text =
     diagnostic === null
       ? compactionNoticeText[result]
-      : `${compactionNoticeText[result]}: ${diagnostic}`;
+      : `${compactionNoticeText[result]}: ${userFacingCause(diagnostic)}`;
   return (
     <box
       id={rowRenderableId(id)}
@@ -977,7 +978,18 @@ function TimelineRowView({
 
 const TimelineRow = memo(TimelineRowView);
 
+/** What the empty conversation tells the user before the first send. */
+export type EmptyConversationState = Readonly<{
+  /** Provider and model, or undefined when no model is selected. */
+  model: string | undefined;
+  /** Project folder the Session works in, when the host names it. */
+  folder: string | undefined;
+  /** No model provider is signed in. */
+  signInRequired: boolean;
+}>;
+
 type TerminalTranscriptProps = Readonly<{
+  emptyState: EmptyConversationState;
   clients: readonly ClientEntryV1[] | undefined;
   detailsRequest: number;
   /** Increments to toggle the focused tool group (Ctrl+G). */
@@ -1023,6 +1035,7 @@ function rangeAfterReveal(
 
 /** Own the terminal-only scroll window and render one continuous transcript. */
 function TerminalTranscriptView({
+  emptyState,
   clients,
   detailsRequest,
   groupRequest,
@@ -1433,13 +1446,26 @@ function TerminalTranscriptView({
           </text>
         ) : null}
         {visibleItems.length === 0 ? (
-          <text
-            fg={presentation.colors.foreground}
-            attributes={2}
-            marginX={inset}
-          >
-            Start a conversation.
-          </text>
+          <box flexDirection="column" marginX={inset}>
+            <text fg={presentation.colors.foreground} attributes={2}>
+              Start a conversation.
+            </text>
+            <text fg={presentation.colors.foreground} attributes={2}>
+              {terminalText(
+                `Model: ${emptyState.model ?? "No model selected"}`,
+              )}
+            </text>
+            {emptyState.folder === undefined ? null : (
+              <text fg={presentation.colors.foreground} attributes={2}>
+                {terminalText(`Folder: ${emptyState.folder}`)}
+              </text>
+            )}
+            {emptyState.signInRequired ? (
+              <text fg={presentation.colors.info}>
+                Sign in to start: type /login
+              </text>
+            ) : null}
+          </box>
         ) : (
           <>{rows}</>
         )}
@@ -1447,7 +1473,9 @@ function TerminalTranscriptView({
       {sessionStatus.viewState.kind === "error" ? (
         <box flexDirection="column" height={2} paddingX={inset}>
           <text fg={presentation.colors.error} height={1} wrapMode="none">
-            {terminalText(`Stopped: ${sessionStatus.viewState.cause}`)}
+            {terminalText(
+              `Stopped: ${userFacingCause(sessionStatus.viewState.cause)}`,
+            )}
           </text>
           <text fg={presentation.colors.info} height={1} wrapMode="none">
             {composer.failure === "admission"

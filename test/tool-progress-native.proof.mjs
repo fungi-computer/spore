@@ -4,7 +4,7 @@ import { QueryClient } from "@tanstack/query-core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { testRender } from "@opentui/react/test-utils";
 import { createWhistle } from "@fungi.computer/whistle";
-import { TuiFrame } from "@fungi.computer/tui/frame";
+import { TuiFrame } from "@fungi.computer/spore/frame";
 import { act, createElement } from "react";
 
 import {

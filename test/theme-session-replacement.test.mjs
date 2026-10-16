@@ -5,7 +5,7 @@ import { act } from "react";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createWhistle } from "@fungi.computer/whistle";
 
-import { runTuiCli } from "@fungi.computer/tui/cli-runtime";
+import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 import { createTuiFixture } from "./fixture.js";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 

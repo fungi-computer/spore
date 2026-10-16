@@ -147,7 +147,10 @@ function createPaletteOwner(renderer: ReturnType<typeof useRenderer>) {
 }
 
 /** One palette observer per terminal; each pane owns its syntax resources. */
-export function useTerminalTheme(theme: ThemeName) {
+export function useTerminalTheme(
+  theme: ThemeName,
+  options: Readonly<{ refreshOnReturnToTerminal?: boolean }> = {},
+) {
   const renderer = useRenderer();
   let owner = palettes.get(renderer);
   if (owner === undefined) {
@@ -163,11 +166,15 @@ export function useTerminalTheme(theme: ThemeName) {
   const previousTheme = useRef(theme);
   useEffect(() => {
     if (theme === "terminal") {
-      if (previousTheme.current !== "terminal") refresh();
+      if (
+        previousTheme.current !== "terminal" &&
+        options.refreshOnReturnToTerminal !== false
+      )
+        refresh();
       else ensure();
     }
     previousTheme.current = theme;
-  }, [theme, ensure, refresh]);
+  }, [theme, ensure, refresh, options.refreshOnReturnToTerminal]);
   const presentation = useMemo(() => {
     const colors = resolveColors(theme, palette, mode);
     const nativeDefaults =

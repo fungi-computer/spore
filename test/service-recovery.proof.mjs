@@ -9,7 +9,7 @@ import { act } from "react";
 import { CodeRenderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createWhistle } from "@fungi.computer/whistle";
-import { runTuiCli } from "@fungi.computer/tui/cli-runtime";
+import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 
 function nodes(node) {
   return [node, ...node.getChildren().flatMap(nodes)];

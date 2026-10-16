@@ -68,7 +68,10 @@ import type { TuiModelSource } from "../../button/index.js";
 import { useModelControls } from "../../button/index.js";
 import { useInteractionDialog } from "../../button/index.js";
 import { SlashCompletionList } from "../../button/index.js";
-import { TerminalTranscript } from "./transcript.js";
+import {
+  TerminalTranscript,
+  type EmptyConversationState,
+} from "./transcript.js";
 import { reportFailure } from "../../button/index.js";
 
 const recoveryRequests = defineIdFamily({
@@ -76,7 +79,10 @@ const recoveryRequests = defineIdFamily({
   version: 1,
   kinds: { request: { prefix: "request" } },
 });
+
 export type TuiFrameProps = Readonly<{
+  /** The project folder as shown to the person (home shortened to `~`). */
+  folder?: string | undefined;
   interactionStore?: ParakeetInteractions | undefined;
   clients?: readonly ClientEntryV1[] | undefined;
   onOpen?:
@@ -170,6 +176,7 @@ function TuiFrameConversation({
   onThemeConfirm = saveThemePreference,
   themeError,
   modelSource,
+  folder,
   onTitled,
   reloadSources,
   onResume,
@@ -576,6 +583,17 @@ function TuiFrameConversation({
         ? undefined
         : formatContextUsage(sessionStatus.context),
   });
+  const footerModelText =
+    footerModel === undefined ? undefined : formatModelIdentity(footerModel);
+  const signInRequired = modelControls.signInRequired;
+  const emptyState = useMemo<EmptyConversationState>(
+    () => ({
+      model: footerModelText,
+      folder,
+      signInRequired,
+    }),
+    [footerModelText, folder, signInRequired],
+  );
   const statusTone: PaneTone = statusColors[displayedState.kind];
   const footerItems = useMemo<readonly PaneStatusItem[]>(
     () => [
@@ -594,6 +612,7 @@ function TuiFrameConversation({
       width="100%"
     >
       <TerminalTranscript
+        emptyState={emptyState}
         clients={clients}
         detailsRequest={detailsRequest}
         groupRequest={groupRequest}

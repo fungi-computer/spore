@@ -19,7 +19,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "@fungi.computer/agar/query";
 import { createAppSurfaceCommandHost } from "@fungi.computer/oyster/shell/command-host";
 import { createWhistle } from "@fungi.computer/whistle";
-import { localExtensions } from "@fungi.computer/local/extensions";
+import { localExtensions } from "@fungi.computer/truffle/extensions";
 import { PaneProvider, type PaneKindEntry, z } from "../src/button/index.js";
 import { runFungiCli } from "../src/cli.js";
 import { projectExtensionParts } from "../src/extension-command.js";

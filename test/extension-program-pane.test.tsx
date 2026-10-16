@@ -12,7 +12,7 @@ import { createWhistle } from "@fungi.computer/whistle";
 import {
   localExtensions,
   type LocalExtensions,
-} from "@fungi.computer/local/extensions";
+} from "@fungi.computer/truffle/extensions";
 import { runFungiCli } from "../src/cli.js";
 import { projectExtensionParts } from "../src/extension-command.js";
 import { TuiFrame } from "../src/frame.js";

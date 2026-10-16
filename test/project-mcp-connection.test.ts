@@ -6,7 +6,7 @@ import { test } from "bun:test";
 import {
   createPrivateLocalServiceManager,
   type PrivateLocalServiceConnection,
-} from "@fungi.computer/local/service";
+} from "@fungi.computer/truffle/service";
 import { runFungiCli } from "../src/cli.js";
 import {
   forgetProjectMcpConnection,

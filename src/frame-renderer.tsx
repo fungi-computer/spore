@@ -19,6 +19,7 @@ import { Picker } from "./button/picker.js";
 import { useTerminalTheme } from "./button/terminal-theme.js";
 import { CopySurface, copySurfaceColors } from "./button/copy-surface.js";
 import { Placeholder } from "./button/placeholder.js";
+import { Landing, type LandingProps } from "./landing.js";
 
 type FrameProjection = Readonly<{
   entries?: readonly TuiWorkspaceEntry[];
@@ -26,6 +27,7 @@ type FrameProjection = Readonly<{
   queryClient?: QueryClient;
   requested?: number;
   picker?: SessionPickerProps;
+  landing?: LandingProps & Pick<SessionPickerProps, "initialTheme">;
   recovery?: Readonly<{ message: string; retry: () => void; exit: () => void }>;
   serviceMismatch?: Readonly<{
     message: string;
@@ -53,6 +55,7 @@ function MountedFrameContent({ store }: Readonly<{ store: FrameStore }>) {
   const entries = projection.entries;
   const initialPresentation = useTerminalTheme(
     projection.picker?.initialTheme ??
+      projection.landing?.initialTheme ??
       projection.configuration?.initialTheme ??
       "terminal",
   );
@@ -122,6 +125,12 @@ function MountedFrameContent({ store }: Readonly<{ store: FrameStore }>) {
     return (
       <HostColorsContext.Provider value={initialPresentation.colors}>
         <ServiceMismatch {...projection.serviceMismatch} />
+      </HostColorsContext.Provider>
+    );
+  if (entries === undefined && projection.landing !== undefined)
+    return (
+      <HostColorsContext.Provider value={initialPresentation.colors}>
+        <Landing {...projection.landing} />
       </HostColorsContext.Provider>
     );
   if (entries === undefined || projection.queryClient === undefined)
@@ -311,6 +320,26 @@ export function renderTuiConversation(
     configuration: previous.configuration ?? workspaceConfiguration(props),
     queryClient,
     requested: request,
+  });
+}
+
+/** Bare fungi opens here until a conversation is chosen or started. */
+export function renderTuiLanding(
+  root: ReturnType<typeof createRoot>,
+  props: LandingProps & Pick<SessionPickerProps, "initialTheme">,
+): void {
+  const store = frameStore(root);
+  store.update({
+    ...store.read(),
+    landing: {
+      ...props,
+      choose: (choice) => {
+        const next = { ...store.read() };
+        delete next.landing;
+        store.update(next);
+        props.choose(choice);
+      },
+    },
   });
 }
 

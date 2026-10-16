@@ -67,7 +67,7 @@ try {
   assert.equal(builds.length, 1, "The binary extracts one runtime");
   // Qualify the supplied artifact, not an unrelated local bundler output.
   const manifest = z
-    .object({ name: z.literal("@fungi.computer/cli"), version: z.string() })
+    .object({ name: z.literal("@fungi.computer/spore"), version: z.string() })
     .parse(
       JSON.parse(
         await readFile(

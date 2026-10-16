@@ -128,6 +128,7 @@ function describe(props: TuiFrameProps): PaneSessionContext {
     interactions: props.interactionStore,
     models: props.modelSource,
     sessionTitle: props.sessionTitle,
+    folder: props.folder,
     reload: props.reloadSources,
     observationUnavailable: props.onObservationUnavailable,
     themeName: props.initialTheme,
@@ -197,7 +198,15 @@ function WorkspaceHost({
   const [themeName, setThemeName] = useState(
     initial.initialTheme ?? "terminal",
   );
-  const presentation = useTerminalTheme(themeName);
+  // The pane's chooser owns confirmed refreshes; this shell reader only
+  // requests an initial palette if no other reader has done so yet.
+  const presentation = useTerminalTheme(themeName, {
+    refreshOnReturnToTerminal: false,
+  });
+  // `sessions` below is built once, so panes opened later read the live theme
+  // through this ref rather than the theme the Session launched with.
+  const liveTheme = useRef(themeName);
+  liveTheme.current = themeName;
   const current = useRef(entries);
   current.current = entries;
   const [commandHost] = useState(
@@ -223,8 +232,10 @@ function WorkspaceHost({
     context: PaneSessionContext,
   ): PaneSessionContext => ({
     ...context,
+    themeName: liveTheme.current,
     saveTheme: async (theme) => {
       await context.saveTheme?.(theme);
+      liveTheme.current = theme;
       setThemeName(theme);
     },
   });

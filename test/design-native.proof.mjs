@@ -17,7 +17,7 @@ import {
   RGBA,
 } from "@opentui/core";
 
-import { TuiFrame } from "@fungi.computer/tui/frame";
+import { TuiFrame } from "@fungi.computer/spore/frame";
 import {
   createDesignTuiFixture,
   longHistoryDesignSnapshot,

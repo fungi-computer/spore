@@ -19,7 +19,7 @@ import { testRender } from "@opentui/react/test-utils";
 import { act, createElement } from "react";
 import { createWhistle } from "@fungi.computer/whistle";
 
-import { TuiFrame } from "@fungi.computer/tui/frame";
+import { TuiFrame } from "@fungi.computer/spore/frame";
 import { createDesignTuiFixture } from "./design-fixture.ts";
 
 class TtyInput extends Readable {

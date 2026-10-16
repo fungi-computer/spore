@@ -12,14 +12,14 @@ import { reportFailure } from "./button/log-event.js";
 import {
   createPrivateLocalServiceManager,
   type PrivateLocalServiceManager,
-} from "@fungi.computer/local/service";
+} from "@fungi.computer/truffle/service";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import type { QueryClient } from "@tanstack/query-core";
 import { createQueryClient } from "@fungi.computer/agar/query";
 import { createWhistle } from "@fungi.computer/whistle";
-import { createPrivateModels } from "@fungi.computer/local";
-import { localAccountOwner } from "@fungi.computer/local/login";
+import { createPrivateModels } from "@fungi.computer/truffle";
+import { localAccountOwner } from "@fungi.computer/truffle/login";
 import {
   contributeAccountCommands,
   type ModelAccountContext,
@@ -28,6 +28,7 @@ import { loginAllowed } from "@fungi.computer/veil/model-credentials";
 import {
   renderTuiConversation,
   renderTuiSessionPicker,
+  renderTuiLanding,
   renderTuiConnecting,
   renderTuiConnectionRecovery,
   renderTuiServiceMismatch,
@@ -37,6 +38,7 @@ import {
   saveThemePreference,
 } from "./button/theme-preferences.js";
 import { runOneShot } from "./one-shot-run.js";
+import { readLandingSummary } from "./landing-summary.js";
 import { prepareClientExtensions } from "./client-extensions.js";
 import {
   openTerminalApplication,
@@ -109,6 +111,15 @@ const defaultDependencies: TuiCliDependencies = {
       onCancel,
       onSelect,
       sessions,
+    });
+  },
+  renderLanding: (root, sessions, folder, choose, theme) => {
+    renderTuiLanding(root, {
+      initialTheme: theme.initialTheme,
+      sessions,
+      folder,
+      loadSummary: readLandingSummary,
+      choose,
     });
   },
   enableKeymap: true,

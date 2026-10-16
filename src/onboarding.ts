@@ -2,10 +2,19 @@ import { mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
-import { Writable } from "node:stream";
+import { Writable, type Readable } from "node:stream";
 import { Cli, isCancel } from "@fungi.computer/lantern";
 import writeFileAtomic from "write-file-atomic";
 import { z } from "zod";
+import { chooseSignInDoor, type SignInDoor } from "./sign-in-choice.js";
+
+/** The stored door names predate the one-question setup; their meaning is fixed. */
+const savedDoor = {
+  later: "later",
+  subscription: "subscription",
+  api_key: "byok",
+  fungi: "hosted",
+} as const satisfies Record<SignInDoor | "later", string>;
 
 const setupSchema = z.strictObject({
   version: z.literal(1),
@@ -28,12 +37,14 @@ export type OnboardingOptions = {
   interactive: boolean;
   yes: boolean;
   path?: string;
+  /** Terminal input; defaults to this process's stdin. */
+  input?: Readable;
   write: (message: string) => void;
-  login: (authType?: "oauth" | "api_key") => Promise<void>;
-  signIn: (endpoint: string) => Promise<void>;
+  /** Run the chosen sign-in on this same screen; the banner is already shown. */
+  signIn: (door: SignInDoor, cli: Cli) => Promise<void>;
 };
 
-/** Return whether to open the ordinary first local Session. Cancel saves nothing. */
+/** Return whether to open the first local Session. Cancel saves nothing. */
 export async function runOnboarding(
   options: OnboardingOptions,
 ): Promise<boolean> {
@@ -50,6 +61,7 @@ export async function runOnboarding(
     brand: "fungi",
     interactive: options.interactive,
     columns: process.stdout.columns,
+    input: options.input ?? process.stdin,
     output: new Writable({
       write(chunk: string | Uint8Array, _encoding, callback) {
         options.write(chunk.toString());
@@ -58,54 +70,21 @@ export async function runOnboarding(
     }),
   });
   cli.welcome("Your ideas, growing.");
-  const account = await cli.select({
-    message: "Connect your Fungi Team?",
-    options: [
-      { value: "local", label: "Continue local-only" },
-      { value: "signin", label: "Sign in through your Team MCP endpoint" },
-    ],
+  const door = await chooseSignInDoor(cli, { allowSkip: true });
+  if (door === undefined) return cancelled(cli);
+  if (door !== "later") await options.signIn(door, cli);
+  const start = await cli.confirm({
+    message: "Open Fungi now?",
+    initialValue: true,
   });
-  if (isCancel(account)) return cancelled(cli);
-  if (account === "signin") {
-    const endpoint = await cli.text({
-      message: "Team MCP URL (leave blank to skip)",
-      defaultValue: "",
-      validate(value) {
-        if (!value) return;
-        if (URL.canParse(value) && new URL(value).protocol === "https:") return;
-        return "Enter an https:// Team MCP URL.";
-      },
-    });
-    if (isCancel(endpoint)) return cancelled(cli);
-    if (endpoint) await options.signIn(endpoint);
-  }
-  const door = await cli.select({
-    message: "How will your agent reach a model?",
-    options: [
-      { value: "later", label: "Choose later" },
-      { value: "subscription", label: "Use a provider subscription" },
-      { value: "byok", label: "Bring a provider API key" },
-      {
-        value: "hosted",
-        label: "Use Fungi hosted models",
-        hint: "Your selected Team pays for models",
-      },
-    ],
-  });
-  if (isCancel(door)) return cancelled(cli);
-  if (door === "subscription" || door === "byok")
-    await options.login(door === "subscription" ? "oauth" : "api_key");
-  if (door === "hosted") await options.login();
-  const first = await cli.confirm({
-    message: "Start your first local agent Session now?",
-    initialValue: false,
-  });
-  if (isCancel(first)) return cancelled(cli);
-  await saveSetup(options.path ?? setupPath(), door);
+  if (isCancel(start)) return cancelled(cli);
+  await saveSetup(options.path ?? setupPath(), savedDoor[door]);
   cli.outro(
-    "Ready to grow. Next: fungi · fungi login · fungi doctor · fungi --help",
+    start
+      ? "Ready to grow."
+      : "Ready to grow. Next: fungi · fungi login · fungi doctor · fungi --help",
   );
-  return first;
+  return start;
 }
 
 function cancelled(cli: Cli): false {

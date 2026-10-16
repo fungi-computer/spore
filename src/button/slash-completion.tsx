@@ -50,7 +50,13 @@ export function SlashCompletionList({
       onChoose={(index) => {
         slash.choose(index);
       }}
-      header={completion.kind === "arguments" ? completion.hint : undefined}
+      header={
+        completion.kind === "arguments"
+          ? completion.hint
+          : completion.kind === "commands" && completion.items.length > maxRows
+            ? "More… · ↑↓ to browse all commands"
+            : undefined
+      }
       maxRows={maxRows}
       width={width}
       colors={colors}

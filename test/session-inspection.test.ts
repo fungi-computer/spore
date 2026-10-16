@@ -379,3 +379,96 @@ test("status sanitizes a failed Session cause", () => {
     "Session session_fixture · error: safe end\n",
   );
 });
+
+test("plain inspection explains diagnostics while JSON keeps the exact status and inspection bytes", () => {
+  const diagnostic = "model:rejected: No model is signed in.";
+  const stopped = "extension:failed: Could not refresh the loop.";
+  const toolCause = "tool:failed: Old text was not found.";
+  const message: SessionSnapshot["messages"][number] = {
+    id: "tool-error",
+    sequence: 1,
+    commandId: "failed",
+    value: {
+      role: "toolResult",
+      toolCallId: "call",
+      toolName: "files.edit",
+      content: [{ type: "text", text: toolCause }],
+      isError: true,
+      details: { error: { kind: "not-found", message: toolCause } },
+      timestamp: 1,
+    },
+  };
+  const terminal: SessionSnapshot["terminals"][number] = {
+    commandId: "failed",
+    sequence: 2,
+    outcome: "failed",
+    diagnostic,
+  };
+  const value: SessionSnapshot = {
+    ...snapshot,
+    hasMore: false,
+    messages: [message],
+    terminals: [terminal],
+    extensions: {
+      loop: { status: "stopped", revision: "rev-1", reason: stopped },
+    },
+  };
+  const viewState = { kind: "error", cause: diagnostic };
+  expect(renderSessionStatus(value, 123, true)).toBe(
+    JSON.stringify({
+      schemaVersion: 2,
+      sessionId: value.sessionId,
+      state: "error",
+      label: "error: No model is signed in.",
+      viewState,
+      activity: value.activity,
+      lastTerminal: terminal,
+      lastActivityAt: 123,
+    }) + "\n",
+  );
+  expect(renderInspection(value, false, true)).toBe(
+    JSON.stringify({
+      sessionId: value.sessionId,
+      bounded: { limit: 100, hasMore: false },
+      activity: value.activity,
+      viewState,
+      messages: [
+        {
+          id: message.id,
+          sequence: message.sequence,
+          commandId: message.commandId,
+          role: "toolResult",
+          value: message.value,
+          error: { kind: "not-found", message: toolCause },
+        },
+      ],
+      errors: [
+        { kind: "session_error", message: diagnostic },
+        { kind: "extension_stopped", extensionId: "loop", message: stopped },
+      ],
+      terminals: [terminal],
+      sandboxFailures: [],
+      pending: value.pending,
+    }) + "\n",
+  );
+  for (const plain of [
+    renderSessionStatus(value, 123, false),
+    renderInspection(value, false, false),
+    renderInspection(value, true, false),
+  ]) {
+    expect(plain).not.toMatch(
+      /model:rejected:|extension:failed:|tool:failed:/u,
+    );
+    expect(plain).toContain("No model is signed in.");
+    expect(plain).not.toContain(JSON.stringify(terminal));
+  }
+  expect(renderInspection(value, false, false)).toContain(
+    "Run failed · failed: No model is signed in.",
+  );
+  expect(renderInspection(value, false, false)).toContain(
+    "Could not refresh the loop.",
+  );
+  expect(renderInspection(value, false, false)).toContain(
+    "Old text was not found.",
+  );
+});

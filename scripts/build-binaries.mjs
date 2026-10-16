@@ -38,8 +38,8 @@ for (const platform of target === "all" ? targets : [target]) {
   );
   const [os, arch] = platform.split("-");
   if (
-    manifest.name !== "@fungi.computer/cli" ||
-    !manifest.optionalDependencies?.[`@fungi.computer/cli-native-${platform}`]
+    manifest.name !== "@fungi.computer/spore" ||
+    !manifest.optionalDependencies?.[`@fungi.computer/spore-native-${platform}`]
   )
     throw new Error(
       `Stage the CLI and native assets on ${platform} first; package metadata does not match`,
@@ -51,7 +51,7 @@ for (const platform of target === "all" ? targets : [target]) {
   await access(
     resolve(
       source,
-      `node_modules/@fungi.computer/cli-native-${platform}/bin/fungi-apply-patch`,
+      `node_modules/@fungi.computer/spore-native-${platform}/bin/fungi-apply-patch`,
     ),
     constants.X_OK,
   );

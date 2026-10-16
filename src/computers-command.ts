@@ -4,7 +4,7 @@ import type { Cli } from "@fungi.computer/lantern";
 import {
   listPrivateTeamComputers,
   startPrivateTeamComputer,
-} from "@fungi.computer/local";
+} from "@fungi.computer/truffle";
 
 export const computersCommandHelp = `Usage: fungi computers [--fungi-mcp <url>]
        fungi computers start <name|id> [--fungi-mcp <url>]

@@ -29,7 +29,7 @@ if (destinationArgument === undefined || destinationArguments.length !== 1)
 
 const destination = resolve(process.cwd(), destinationArgument);
 const nativeRelative =
-  "node_modules/@fungi.computer/local/native/bin/fungi-apply-patch";
+  "node_modules/@fungi.computer/truffle/native/bin/fungi-apply-patch";
 const nativeSource = resolve(
   repositoryRoot,
   "runtimes/local/native/bin/fungi-apply-patch",
@@ -45,7 +45,7 @@ const bunSource = await realpath(
 await expectFileAccess(
   nativeSource,
   constants.X_OK,
-  "Local native patch engine is absent; run pnpm --filter @fungi.computer/local build:native before packaging fungi",
+  "Local native patch engine is absent; run pnpm --filter @fungi.computer/truffle build:native before packaging fungi",
 );
 await expectFileAccess(
   cliSource,
@@ -63,7 +63,7 @@ const deployed = spawnSync(
   "pnpm",
   [
     "--filter",
-    "@fungi.computer/tui",
+    "@fungi.computer/spore",
     "deploy",
     "--prod",
     "--legacy",
@@ -86,7 +86,7 @@ await expectFileAccess(
 // pnpm links Local's dependencies beside its real directory, not the symlink.
 const computerdInstalled = createRequire(
   await realpath(
-    resolve(destination, "node_modules/@fungi.computer/local/package.json"),
+    resolve(destination, "node_modules/@fungi.computer/truffle/package.json"),
   ),
 ).resolve("@fungi.computer/cordyceps/cli");
 await access(computerdInstalled, constants.R_OK);

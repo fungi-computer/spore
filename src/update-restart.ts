@@ -1,4 +1,6 @@
-import { realpath } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { basename, dirname, join } from "node:path";
+import { readFile, realpath } from "node:fs/promises";
 import { z } from "zod";
 
 export type UpdateRestartSession = Readonly<{
@@ -20,14 +22,34 @@ const statusSchema = z.object({
   }),
 });
 
+async function installedBuildId(launcher: string): Promise<string> {
+  return createHash("sha256")
+    .update(await readFile(join(dirname(launcher), "cli.js")))
+    .digest("hex");
+}
+
 /** Ask the installed build about activity; the old client cannot connect to its service. */
 export async function installedUpdateRestart(
   link: string,
   runningLauncher: string,
   sessions: readonly UpdateRestartSession[],
+  runningBuildId = process.env.FUNGI_BUNDLED_BUILD_ID,
 ): Promise<InstalledUpdateRestart | undefined> {
   const launcher = await realpath(link);
-  if (launcher === runningLauncher || sessions.length === 0) return undefined;
+  if (sessions.length === 0) return undefined;
+  // npm replaces the bundle in place; its launcher's path stays unchanged.
+  const buildId =
+    launcher === runningLauncher &&
+    runningBuildId !== undefined &&
+    basename(launcher) === "fungi.cjs" &&
+    basename(dirname(launcher)) === "dist"
+      ? await installedBuildId(launcher)
+      : undefined;
+  if (
+    launcher === runningLauncher &&
+    (buildId === undefined || buildId === runningBuildId)
+  )
+    return undefined;
   for (const session of sessions) {
     const child = Bun.spawn(
       [
@@ -59,6 +81,8 @@ export async function installedUpdateRestart(
     if (status.activity.queue.state !== "idle") return { kind: "waiting" };
   }
   if ((await realpath(link)) !== launcher) return { kind: "waiting" };
+  if (buildId !== undefined && (await installedBuildId(launcher)) !== buildId)
+    return { kind: "waiting" };
   const session = sessions[0];
   if (session === undefined) return undefined;
   return { kind: "restart", launcher, session };

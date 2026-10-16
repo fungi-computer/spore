@@ -4,7 +4,7 @@ import {
   detachPrivateLocalComputer,
   listPrivateLocalComputers,
   runPrivateLocalComputer,
-} from "@fungi.computer/local";
+} from "@fungi.computer/truffle";
 
 /** The Local owners `fungi computer` drives; tests replace them. */
 export type ComputerCommandOwners = Readonly<{
@@ -24,10 +24,11 @@ files and the folder sync both ways; commands routed to this machine run here,
 as you, in the folder. Re-run attach to reconnect. Run
 fungi login --fungi-mcp <url> first.
 
-      --fungi-mcp <url>  Team MCP endpoint, e.g. https://<hub>/api/teams/<team>/mcp
+      --fungi-mcp <url>          Team MCP endpoint, e.g.
+                                 https://<hub>/api/teams/<team>/mcp
       --host-label <label>
-                         Name shown for this machine (default: its hostname)
-      --yes              Accept the access notice without asking
+                                 Name for this machine (default: hostname)
+      --yes                      Accept the access notice without asking
 `;
 
 export type Write = Readonly<{ write: (text: string) => void }>;

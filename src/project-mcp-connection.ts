@@ -3,7 +3,7 @@ import { join } from "node:path";
 import {
   ensurePrivateLocalGitExclude,
   parseFungiMcpEndpoint,
-} from "@fungi.computer/local";
+} from "@fungi.computer/truffle";
 import writeFileAtomic from "write-file-atomic";
 import { z } from "zod";
 

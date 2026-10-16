@@ -12,11 +12,11 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { testRender } from "@opentui/react/test-utils";
 import { act } from "react";
 import { createWhistle } from "@fungi.computer/whistle";
-import { createPrivateModels } from "@fungi.computer/local";
+import { createPrivateModels } from "@fungi.computer/truffle";
 import {
   localLoginProviders,
   localPopularProviderIds,
-} from "@fungi.computer/local/login";
+} from "@fungi.computer/truffle/login";
 import {
   contributeAccountCommands,
   type AccountOwner,

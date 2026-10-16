@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
-import { createPrivateModels } from "@fungi.computer/local";
-import type { LocalAuthModels } from "@fungi.computer/local/auth";
+import { createPrivateModels } from "@fungi.computer/truffle";
+import type { LocalAuthModels } from "@fungi.computer/truffle/auth";
 import { runFungiCli, type TuiAuthCall } from "../src/cli.js";
 
 function models(): LocalAuthModels {
@@ -58,7 +58,9 @@ test("onboarding searches the shared provider groups and passes the selected ID 
   );
   const frame = t.initialFrame();
   expect(frame).toContain("SIGNED IN\n│  ▶ OpenAI  API key or Subscription");
-  expect(frame).toContain("POPULAR\n│    Fungi  Subscription");
+  // An API key never means the Fungi account.
+  expect(frame).not.toContain("Fungi account");
+  expect(frame).toContain("Which provider's API key?");
   expect(frame).toContain("More providers (");
   expect(frame).not.toContain("Amazon Bedrock");
   expect(frame).not.toContain("(openai)");
@@ -101,14 +103,14 @@ test("expanded providers use the actual terminal height", async () => {
     const text = stripVTControlCharacters(chunk.toString());
     if (!expanding && text.includes("More providers")) {
       expanding = true;
-      queueMicrotask(() => input.write("\u001b[B".repeat(6) + "\r"));
+      queueMicrotask(() => input.write("\u001b[B".repeat(5) + "\r"));
     } else if (text.includes("MORE PROVIDERS")) {
       expanded = text;
       queueMicrotask(() => input.write("\u0003"));
     }
   });
   await assert.rejects(
-    runFungiCli(["login", "--auth-type", "oauth"], {
+    runFungiCli(["login", "--auth-type", "api_key"], {
       interactive: true,
       stdin: input,
       stdout: output,

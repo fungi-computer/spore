@@ -15,9 +15,9 @@ import {
   fauxProvider,
   fauxToolCall,
 } from "@earendil-works/pi-ai/providers/faux";
-import { openPrivateLocalRuntimeHost } from "@fungi.computer/local";
-import { createPrivateLocalServiceManager } from "@fungi.computer/local/service";
-import { runPrivateLocalService } from "@fungi.computer/local/service-process";
+import { openPrivateLocalRuntimeHost } from "@fungi.computer/truffle";
+import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
+import { runPrivateLocalService } from "@fungi.computer/truffle/service-process";
 
 // The actual CLI bundle talks to a real persistent Local owner. Only inference
 // is deterministic here; the separate Zed witness uses the real Luna model.

@@ -1,9 +1,9 @@
-import type { PrivateLocalRuntimeHostOptions } from "@fungi.computer/local";
+import type { PrivateLocalRuntimeHostOptions } from "@fungi.computer/truffle";
 import {
   createPrivateLocalServiceManager,
   type PrivateLocalServiceConnection,
   type PrivateLocalServiceManager,
-} from "@fungi.computer/local/service";
+} from "@fungi.computer/truffle/service";
 import type { TuiCliDependencies } from "./cli-runtime.js";
 import { runOneShot, type OneShotRunOptions } from "./one-shot-run.js";
 import { asCliFailure, combinedCliFailure } from "./cli-failure.js";

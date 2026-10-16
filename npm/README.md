@@ -9,7 +9,7 @@ Team you choose at sign-in.
 Install with Node 22.13 or newer and npm:
 
 ```sh
-npm install -g @fungi.computer/cli
+npm install -g @fungi.computer/spore
 fungi --version
 ```
 

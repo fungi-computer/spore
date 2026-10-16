@@ -11,6 +11,7 @@ import type {
   SessionTerminal,
   ShiitakeSession,
 } from "@fungi.computer/shiitake";
+import { userFacingCause } from "./panes/conversation/user-facing-cause.js";
 import { runTuiEffect } from "./effect-boundary.js";
 import { reportFailure } from "./button/log-event.js";
 
@@ -235,7 +236,11 @@ async function consumeSessionSettlement(
     const terminal = state.terminal;
     if (terminal === undefined) continue;
     if (terminal.outcome !== "completed")
-      throw new Error(`fungi run terminal outcome: ${terminal.outcome}`);
+      throw new Error(
+        terminal.outcome === "failed"
+          ? userFacingCause(terminal.diagnostic)
+          : `fungi run ${terminal.outcome}`,
+      );
     if (state.finalAssistant === undefined)
       throw new Error("fungi run settled without a durable assistant result");
     return state.finalAssistant;

@@ -3,7 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { test } from "bun:test";
 import { createTestRenderer } from "@opentui/core/testing";
 import { act } from "react";
-import { runTuiCli } from "@fungi.computer/tui/cli-runtime";
+import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 
 test("Enter upgrades the shared service after a held turn and reopens the Session", async () => {

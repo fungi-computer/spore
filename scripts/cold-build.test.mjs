@@ -102,7 +102,7 @@ test("TUI builds and checks in a clean checkout after Parakeet cache restoration
     turbo(
       "restored-tui",
       ["build", "lint", "typecheck"],
-      "@fungi.computer/tui",
+      "@fungi.computer/spore",
     );
     assert.match(
       readFileSync(join(work, "restored-tui.log"), "utf8"),
@@ -124,7 +124,11 @@ test("TUI builds and checks in a clean checkout after Parakeet cache restoration
     // Cached consumers still need the installed runtime files. This catches a
     // sync task that was accidentally made cacheable or moved into TUI's script.
     rmSync(join(injected, "dist"), { recursive: true });
-    turbo("cached-tui", ["build", "lint", "typecheck"], "@fungi.computer/tui");
+    turbo(
+      "cached-tui",
+      ["build", "lint", "typecheck"],
+      "@fungi.computer/spore",
+    );
     assert.match(
       readFileSync(join(work, "cached-tui.log"), "utf8"),
       /@fungi\.computer\/tui:build: cache hit/,

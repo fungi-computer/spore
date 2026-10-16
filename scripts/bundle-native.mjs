@@ -19,6 +19,10 @@ const build = JSON.parse(
 if (build.platform !== platform)
   throw new Error("Native build does not match the package target");
 const output = resolve(repository, `.botanical/fungi-cli-native-${platform}`);
+// Native packages share the CLI's version (apps/tui/package.json).
+const { version } = JSON.parse(
+  await readFile(resolve(repository, "apps/tui/package.json"), "utf8"),
+);
 await rm(output, { recursive: true, force: true });
 await mkdir(resolve(output, "bin"), { recursive: true });
 await copyFile(
@@ -35,8 +39,8 @@ await writeFile(
   resolve(output, "package.json"),
   JSON.stringify(
     {
-      name: `@fungi.computer/cli-native-${platform}`,
-      version: "0.0.1",
+      name: `@fungi.computer/spore-native-${platform}`,
+      version,
       description: `Native patch engine for the Fungi CLI on ${platform}`,
       os: [os],
       cpu: [cpu],
@@ -63,7 +67,7 @@ await writeFile(
   `# Fungi CLI native engine (${platform})
 
 This optional dependency supplies the native patch engine for
-\`@fungi.computer/cli\`. Install the CLI to use it in a terminal or ACP editor.
+\`@fungi.computer/spore\`. Install the CLI to use it in a terminal or ACP editor.
 ${os === "linux" ? "Requires glibc 2.35 or newer." : `Requires ${cpu === "arm64" ? "Apple Silicon" : "an Intel Mac"} and macOS 13.5 or newer.`}
 
 The engine uses pinned Codex sources with Fungi's rooted invocation wrapper.

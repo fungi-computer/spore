@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
+import { stripVTControlCharacters } from "node:util";
 import { hasOnboarding, runOnboarding } from "../src/onboarding.js";
-import { linearAuthInteraction } from "@fungi.computer/local/auth";
+import { linearAuthInteraction } from "@fungi.computer/truffle/auth";
 import { runDoctor } from "../src/doctor.js";
 
 test("a pipe skips every setup step without persisting consent; --yes saves local-only", async () => {
@@ -23,7 +25,6 @@ test("a pipe skips every setup step without persisting consent; --yes saves loca
         write: (text) => {
           output += text;
         },
-        login: unexpected,
         signIn: unexpected,
       }),
     ).toBe(false);
@@ -37,7 +38,6 @@ test("a pipe skips every setup step without persisting consent; --yes saves loca
         write: (text) => {
           output += text;
         },
-        login: unexpected,
         signIn: unexpected,
       }),
     ).toBe(false);
@@ -51,10 +51,92 @@ test("a pipe skips every setup step without persisting consent; --yes saves loca
   }
 });
 
+/** Answer each prompt once it has drawn, the way a person would. */
+function keys(answers: readonly string[]) {
+  const input = new PassThrough();
+  let output = "";
+  let next = 0;
+  const prompts = [/How should Shiitake reach a model\?/u, /Open Fungi now\?/u];
+  return {
+    input,
+    output: () => output,
+    write(text: string) {
+      output += text;
+      const answer = answers[next];
+      const prompt = prompts[next];
+      if (answer !== undefined && prompt?.test(output)) {
+        next += 1;
+        setTimeout(() => input.write(answer), 10);
+      }
+    },
+  };
+}
+
+test("first run asks one question, signs in once, and opens fungi by default", async () => {
+  const root = await mkdtemp(join(tmpdir(), "fungi-onboarding-"));
+  const path = join(root, "onboarding.json");
+  const doors: string[] = [];
+  const terminal = keys(["\r", "\r"]);
+  try {
+    const start = await runOnboarding({
+      interactive: true,
+      yes: false,
+      path,
+      input: terminal.input,
+      write: (text) => {
+        terminal.write(text);
+      },
+      signIn: (door) => {
+        doors.push(door);
+        return Promise.resolve();
+      },
+    });
+    const screen = stripVTControlCharacters(terminal.output());
+    expect(start).toBe(true);
+    expect(doors).toEqual(["fungi"]);
+    expect(screen).toContain("Sign in to Fungi (recommended)");
+    expect(screen).toContain("Use my Claude or ChatGPT subscription");
+    expect(screen).toContain("Use an API key");
+    expect(screen).toContain("Skip for now");
+    expect(screen).not.toContain("Team MCP");
+    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+      version: 1,
+      door: "hosted",
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("skipping sign-in never starts a login", async () => {
+  const root = await mkdtemp(join(tmpdir(), "fungi-onboarding-"));
+  const path = join(root, "onboarding.json");
+  const terminal = keys(["\u001B[B\u001B[B\u001B[B\r", "\r"]);
+  try {
+    const start = await runOnboarding({
+      interactive: true,
+      yes: false,
+      path,
+      input: terminal.input,
+      write: (text) => {
+        terminal.write(text);
+      },
+      signIn: () => Promise.reject(new Error("Skip attempted a login")),
+    });
+    expect(start).toBe(true);
+    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+      version: 1,
+      door: "later",
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("non-interactive login rejects credential prompts instead of consuming stdin", async () => {
   await assert.rejects(
     linearAuthInteraction(false).prompt({ type: "secret", message: "API key" }),
-    /needs a terminal/u,
+    /needs an interactive terminal/u,
   );
 });
 

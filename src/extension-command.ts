@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { LocalExtensions } from "@fungi.computer/local/extensions";
+import type { LocalExtensions } from "@fungi.computer/truffle/extensions";
 import type { LocalProgram } from "./panes/terminal/index.js";
 
 export const extensionCommandHelp = `Usage: fungi extension add <git-url | npm-spec | path>

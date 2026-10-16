@@ -48,7 +48,7 @@ require("node:os").cpus = () => ${JSON.stringify(cpuModel === null ? [] : [{ mod
     if (native) {
       const nativeBin = join(
         root,
-        `node_modules/@fungi.computer/cli-native-${platform}-${arch}/bin`,
+        `node_modules/@fungi.computer/spore-native-${platform}-${arch}/bin`,
       );
       const bunBin = join(
         root,
@@ -121,12 +121,12 @@ test("a supported host missing optional packages retains the resolution failure"
   expect(child.status).toBe(1);
   expect(child.stdout).toBe("");
   expect(child.stderr).toContain(
-    "Fungi CLI could not load its native dependencies. Reinstall with npm install -g @fungi.computer/cli --include=optional.",
+    "Fungi CLI could not load its native dependencies. Reinstall with npm install -g @fungi.computer/spore --include=optional.",
   );
   expect(child.stderr).toContain("[cause]: Error: Cannot find module");
   expect(child.stderr).toContain("MODULE_NOT_FOUND");
   expect(child.stderr).toContain(
-    "@fungi.computer/cli-native-linux-x64/bin/fungi-apply-patch",
+    "@fungi.computer/spore-native-linux-x64/bin/fungi-apply-patch",
   );
 });
 
@@ -148,7 +148,7 @@ for (const arch of ["arm64", "x64"]) {
     );
     expect(child.stderr).toContain("MODULE_NOT_FOUND");
     expect(child.stderr).toContain(
-      `@fungi.computer/cli-native-darwin-${arch}/bin/fungi-apply-patch`,
+      `@fungi.computer/spore-native-darwin-${arch}/bin/fungi-apply-patch`,
     );
   });
 }

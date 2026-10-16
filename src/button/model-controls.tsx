@@ -6,6 +6,7 @@ import type {
 } from "@fungi.computer/whistle";
 import { sessionModelCommandDefinitions } from "@fungi.computer/parakeet/headless";
 import {
+  effectiveModelQuery,
   modelAccessQuery,
   useTuiModelSettings,
   type TuiModelSource,
@@ -83,5 +84,11 @@ export function useModelControls({
     effective === undefined
       ? undefined
       : { provider: effective.providerId, model: effective.modelId };
-  return { loginNotice, selectedModel, refresh };
+  // The same observation the footer's model selection reads; shares its cache.
+  const effectiveModel = useQuery(effectiveModelQuery(source));
+  const signInRequired =
+    selectedModel === undefined ||
+    effectiveModel.data?.credential.kind === "missing" ||
+    loginNotice !== undefined;
+  return { loginNotice, selectedModel, refresh, signInRequired };
 }

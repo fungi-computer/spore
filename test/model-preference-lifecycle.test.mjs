@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createWhistle } from "@fungi.computer/whistle";
-import { useTuiModelSettings } from "@fungi.computer/tui/button/model-query";
+import { useTuiModelSettings } from "@fungi.computer/spore/button/model-query";
 import { act, createElement } from "react";
 import { testRender } from "@opentui/react/test-utils";
-import { runTuiCli } from "@fungi.computer/tui/cli-runtime";
+import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
-import { localAccountOwner } from "@fungi.computer/local/login";
+import { localAccountOwner } from "@fungi.computer/truffle/login";
 import { configuredModelAccess } from "./model-access-fixture.js";
 
 const model = {

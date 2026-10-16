@@ -4,7 +4,7 @@ import type {
   SessionMessage,
   SessionSnapshot,
 } from "@fungi.computer/shiitake/client";
-import type { PrivateLocalServiceSelection } from "@fungi.computer/local/service";
+import type { PrivateLocalServiceSelection } from "@fungi.computer/truffle/service";
 import {
   mergeTerminals,
   sessionActivityStatus,
@@ -12,7 +12,8 @@ import {
 } from "@fungi.computer/parakeet/headless";
 import { z } from "zod";
 
-import { sessionStateLabel } from "./panes/conversation/session-state-label.js";
+import { userFacingCause } from "./panes/conversation/user-facing-cause.js";
+import { sessionDiagnosticLabel } from "./panes/conversation/session-state-label.js";
 
 const sessionInspectionLimit = 100;
 const inspectionTextLimit = 4_096;
@@ -158,16 +159,23 @@ export function renderInspection(
   for (const state of states)
     lines.push(
       state.extensionId === undefined
-        ? `[${state.kind}]: ${state.message}`
-        : `[${state.kind}:${state.extensionId}]: ${state.message}`,
+        ? `[${state.kind}]: ${userFacingCause(state.message)}`
+        : `[${state.kind}:${state.extensionId}]: ${userFacingCause(state.message)}`,
     );
   for (const row of rows) {
     const text = textContent(row.value).trim();
     lines.push(
       row.error === undefined
         ? `${String(row.sequence)} ${row.role}${text === "" ? "" : `: ${text}`}`
-        : `${String(row.sequence)} ${row.role} [${row.error.kind}]: ${row.error.message}`,
+        : `${String(row.sequence)} ${row.role} [${row.error.kind}]: ${userFacingCause(row.error.message)}`,
     );
+  }
+  for (const terminal of snapshot.terminals) {
+    const reason =
+      terminal.diagnostic === null
+        ? ""
+        : `: ${userFacingCause(terminal.diagnostic)}`;
+    lines.push(`Run ${terminal.commandId} · ${terminal.outcome}${reason}`);
   }
   return `${lines.map(terminalText).join("\n")}\n`;
 }
@@ -200,14 +208,14 @@ export function renderSessionStatus(
       schemaVersion: 2,
       sessionId: snapshot.sessionId,
       state: view.kind,
-      label: sessionStateLabel(view, now),
+      label: sessionDiagnosticLabel(view, now),
       viewState: view,
       activity: snapshot.activity,
       lastTerminal: newestTerminal(snapshot.terminals),
       lastActivityAt,
     })}\n`;
   const label = view.kind.replaceAll("_", " ");
-  const cause = view.kind === "error" ? `: ${view.cause}` : "";
+  const cause = view.kind === "error" ? `: ${userFacingCause(view.cause)}` : "";
   return `${terminalText(`Session ${snapshot.sessionId} · ${label}${cause}`)}\n`;
 }
 

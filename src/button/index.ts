@@ -138,6 +138,8 @@ export type PaneSession = ParakeetSession;
 
 export type PaneSessionContext = Readonly<{
   agentName?: string | undefined;
+  /** The Session's project folder as shown to the person. */
+  folder?: string | undefined;
   themeName?: import("./theme-preferences.js").ThemeName | undefined;
   saveTheme?:
     | ((theme: import("./theme-preferences.js").ThemeName) => Promise<void>)

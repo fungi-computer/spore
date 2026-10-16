@@ -6,7 +6,7 @@ import { testRender } from "@opentui/react/test-utils";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "@fungi.computer/agar/query";
 import { createWhistle } from "@fungi.computer/whistle";
-import { openLocalTeamApps } from "@fungi.computer/local/apps";
+import { openLocalTeamApps } from "@fungi.computer/truffle/apps";
 import { openTerminalApplication } from "../src/terminal-application.js";
 import { PaneWorkspace } from "../src/shell/workspace.js";
 import {

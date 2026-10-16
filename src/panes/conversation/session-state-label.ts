@@ -1,4 +1,5 @@
 import { terminalText } from "../../button/index.js";
+import { userFacingCause } from "./user-facing-cause.js";
 import {
   queuedSessionLabel,
   type ParakeetSessionViewState,
@@ -25,8 +26,8 @@ export function compactSessionStateLabel(
   }
 }
 
-/** Give typed owner state a concise terminal label. */
-export function sessionStateLabel(
+/** Diagnostic label retained verbatim by the structured Session status contract. */
+export function sessionDiagnosticLabel(
   state: ParakeetSessionViewState,
   now = Date.now(),
 ): string {
@@ -50,10 +51,29 @@ export function sessionStateLabel(
     case "waiting_for_you":
       return "idle";
     case "error":
-      return `error: ${state.cause}`;
+      return `error: ${userFacingCause(state.cause)}`;
     case "disconnected":
       return `disconnected: ${state.cause} · /reconnect`;
     default:
       return state.kind;
+  }
+}
+
+/** Footer text: the transcript carries the stopped reason once. */
+export function sessionStateLabel(
+  state: ParakeetSessionViewState,
+  now = Date.now(),
+): string {
+  switch (state.kind) {
+    case "error":
+      return "stopped";
+    case "retrying":
+    case "disconnected":
+      return sessionDiagnosticLabel(
+        { ...state, cause: userFacingCause(state.cause) },
+        now,
+      );
+    default:
+      return sessionDiagnosticLabel(state, now);
   }
 }

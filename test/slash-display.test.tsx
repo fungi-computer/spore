@@ -157,7 +157,9 @@ for (const width of [80, 160]) {
     try {
       await act(async () => setup.renderOnce());
       expect(setup.captureCharFrame()).toContain("/goal");
-      expect(setup.captureCharFrame()).not.toMatch(/\/(retry|session|model)/u);
+      // Common commands lead the idle list; unavailable ones never show.
+      expect(setup.captureCharFrame()).toContain("/model");
+      expect(setup.captureCharFrame()).not.toMatch(/\/(retry|session)/u);
     } finally {
       act(() => {
         setup.renderer.destroy();

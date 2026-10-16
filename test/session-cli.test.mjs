@@ -15,14 +15,14 @@ import { InputRenderable, KeyEvent, TextareaRenderable } from "@opentui/core";
 import { createWhistle } from "@fungi.computer/whistle";
 import { act } from "react";
 
-import { runTuiCli } from "@fungi.computer/tui/cli-runtime";
+import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 import { runFungiCli } from "../src/cli.js";
-import { runPrivateLocalWorkerServer } from "@fungi.computer/local/service";
+import { runPrivateLocalWorkerServer } from "@fungi.computer/truffle/service";
 import { createTuiFixture } from "./fixture.js";
 import {
   loadThemePreference,
   saveThemePreference,
-} from "@fungi.computer/tui/button/theme-preferences";
+} from "@fungi.computer/spore/button/theme-preferences";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 import { configuredModelAccess } from "./model-access-fixture.js";
 
@@ -1621,7 +1621,7 @@ test("rejected prompt keeps the native composer input", async () => {
         ),
       );
       assert.equal(input.plainText, "Keep this failed prompt");
-      assert.match(setup.captureCharFrame(), /error/u);
+      assert.match(setup.captureCharFrame(), /stopped/u);
       assert.match(
         setup.captureCharFrame(),
         /\/retry · or edit and submit the draft/u,
@@ -2223,7 +2223,7 @@ test("help and slash discovery follow live Whistle contributions", async () => {
 
 test("native startup recovery shows the error and Exit restores the terminal", async () => {
   const { renderTuiConnectionRecovery } =
-    await import("@fungi.computer/tui/frame-renderer");
+    await import("@fungi.computer/spore/frame-renderer");
   const shown = Promise.withResolvers();
   const setup = await createTestRenderer({
     width: 72,

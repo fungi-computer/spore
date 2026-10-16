@@ -15,12 +15,12 @@ import { setTimeout, clearTimeout } from "node:timers";
 import { fileURLToPath, URL } from "node:url";
 import { spawn } from "bun";
 import { mock } from "bun:test";
-import { createPrivateLocalServiceManager } from "@fungi.computer/local/service";
+import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
 
 const { capturePrivateLocalExecPath } = await import(
   new URL(
     "./private-local-exec-path.js",
-    import.meta.resolve("@fungi.computer/local"),
+    import.meta.resolve("@fungi.computer/truffle"),
   ).href
 );
 const clientPath = capturePrivateLocalExecPath(
@@ -184,7 +184,7 @@ try {
       content: [{ type: "text", text: answer }],
     };
   }
-  const localEntry = import.meta.resolve("@fungi.computer/local");
+  const localEntry = import.meta.resolve("@fungi.computer/truffle");
   await mock.module(new URL("./local-models.js", localEntry).href, () => ({
     listPrivateModels: () => [
       {

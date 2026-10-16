@@ -17,7 +17,7 @@ import {
   createParakeetInteractions,
   seedSessionQuery,
 } from "@fungi.computer/parakeet/headless";
-import { prepareClientExtensions } from "@fungi.computer/tui/client-extensions";
+import { prepareClientExtensions } from "@fungi.computer/spore/client-extensions";
 
 const root = await mkdtemp(join(tmpdir(), "fungi-client-extension-host-"));
 const socketPath = join(root, "herdr.sock");

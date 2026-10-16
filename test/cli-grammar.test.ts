@@ -1,9 +1,12 @@
 import { Readable } from "node:stream";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import { expect, test } from "bun:test";
-import { createPrivateModels } from "@fungi.computer/local";
-import type { LocalAuthCliOptions } from "@fungi.computer/local/auth";
-import { createPrivateLocalServiceManager } from "@fungi.computer/local/service";
+import { createPrivateModels } from "@fungi.computer/truffle";
+import type { LocalAuthCliOptions } from "@fungi.computer/truffle/auth";
+import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
 import { runFungiCli } from "../src/cli.js";
 
 test("--yes is accepted for the bare CLI and never mounts an unattended agent UI", async () => {
@@ -48,7 +51,11 @@ test("help describes the actual entry modes without opening a Session", async ()
       },
     });
     expect(output).toContain("fungi run [prompt]");
-    expect(output).toContain("fungi serve --workers");
+    // Internal and developer entry points stay out of public help.
+    expect(output).not.toContain("serve");
+    expect(output).not.toContain("git-credential");
+    expect(output).not.toContain("from-source");
+    expect(output).toContain("fungi update                   Update fungi");
     expect(output).toContain("fungi stop");
     expect(output).toContain("fungi login");
     expect(output).toContain("fungi status");
@@ -75,7 +82,7 @@ test("Anthropic login help explains the SSH paste-code path", async () => {
   );
   expect(output).toContain("over SSH");
   expect(output).toContain(
-    "paste the authorization code or final redirect URL",
+    "paste the authorization code or\nthe final redirect URL",
   );
 });
 
@@ -163,7 +170,7 @@ test("default top-level auth dispatch uses the maintained Models owner", async (
     { authModels, stdout: output },
     { createRenderer },
   );
-  expect(statusOutput).toContain("configured (oauth)");
+  expect(statusOutput).toContain("signed in (subscription)");
   expect(selectedMethod).toBe("device_code");
 });
 
@@ -568,12 +575,14 @@ test("per-command help works through --help and fungi help", async () => {
   ]) {
     const sink = capture();
     await runFungiCli(args, { stdout: sink.stdout });
-    expect(sink.text()).toContain("fungi login --fungi-mcp <url>");
-    expect(sink.text()).toContain("One browser sign-in serves models");
+    expect(sink.text()).toMatch(/--fungi-mcp <url>\s+Advanced/u);
+    expect(sink.text()).toContain(
+      "Signing in to Fungi opens your browser once",
+    );
   }
   const global = capture();
   await runFungiCli(["help"], { stdout: global.stdout });
-  expect(global.text()).toContain("Get started:");
+  expect(global.text()).toContain("Start here:");
   expect(global.text()).toContain("-V, --version");
   const logout = capture();
   await runFungiCli(["logout", "-h"], { stdout: logout.stdout });
@@ -592,6 +601,8 @@ test("fungi logout --fungi-mcp removes the Fungi MCP login for that origin", asy
     { stdout: sink.stdout },
     {
       signOutFungi: (endpoint) => {
+        if (endpoint === undefined)
+          throw new Error("Expected the explicit MCP endpoint");
         selected.push(endpoint);
         return Promise.resolve({
           kind: "removed",
@@ -623,9 +634,9 @@ test("fungi status includes the saved Fungi MCP login", async () => {
   for (const [login, expected] of [
     [
       { issuer: "https://hub.test", accessExpiresAt: new Date(0) },
-      "Fungi: https://hub.test",
+      "Fungi account: hub.test · no Team chosen",
     ],
-    [undefined, "Fungi: Sign in to Fungi"],
+    [undefined, "Fungi account: not signed in. Run fungi login."],
   ] as const) {
     const sink = capture();
     await runFungiCli(
@@ -1074,3 +1085,116 @@ test("Git credential operations bypass banners and never echo supplied credentia
     expect(output).toBe("");
   }
 });
+
+test("hidden commands still explain themselves when asked by name", async () => {
+  let output = "";
+  const stdout = {
+    write: (chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    },
+  };
+  await runFungiCli(["git-credential", "--help"], { stdout });
+  expect(output).toContain(
+    "Usage: fungi git-credential remote|get|store|erase",
+  );
+  output = "";
+  await runFungiCli(["update", "--help"], { stdout });
+  expect(output).toContain("latest release of @fungi.computer/spore on npm");
+  expect(output).not.toContain("integration");
+});
+
+test("resume with no saved conversations says so instead of a connection error", async () => {
+  let output = "";
+  await runFungiCli(
+    ["resume", "-C", "/tmp/fungi-empty-project"],
+    {
+      interactive: true,
+      stdout: {
+        write: (chunk) => {
+          output += String(chunk);
+          return true;
+        },
+      },
+    },
+    {
+      createServiceManager: () => ({
+        ...createPrivateLocalServiceManager(),
+        discover: () =>
+          Promise.resolve({ agentCount: 0, sessions: [], problems: [] }),
+      }),
+      createRenderer: () =>
+        Promise.reject(new Error("renderer must not open without Sessions")),
+    },
+  );
+  expect(output).toBe(
+    "No saved conversations in /tmp/fungi-empty-project yet. Run fungi to start one.\n",
+  );
+});
+
+test("fungi logout --provider fungi signs out through the shared Fungi account owner", async () => {
+  let signedOut = false;
+  let output = "";
+  await runFungiCli(
+    ["logout", "--provider", "fungi"],
+    {
+      stdout: {
+        write: (chunk) => {
+          output += String(chunk);
+          return true;
+        },
+      },
+    },
+    {
+      signOutFungi: () => {
+        signedOut = true;
+        return Promise.resolve({
+          kind: "revoked",
+          unconfirmedComputers: [],
+          message: "Signed out of Fungi.",
+        });
+      },
+      runAuth: () =>
+        Promise.reject(new Error("must use the Fungi account owner")),
+    },
+  );
+  expect(signedOut).toBe(true);
+  expect(output).toContain("Signed out of Fungi.");
+});
+
+test("the executable reports a missing model in plain text and exits 1 without a stack", async () => {
+  const executable = [
+    process.execPath,
+    new URL("../src/cli.tsx", import.meta.url).pathname,
+  ];
+  const cwd = await mkdtemp(join(tmpdir(), "fungi-cli-run-"));
+  try {
+    const child = Bun.spawn([...executable, "run", "hello"], {
+      cwd,
+      env: process.env,
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 10000,
+    });
+    const [stderr] = await Promise.all([
+      new Response(child.stderr).text(),
+      new Response(child.stdout).text(),
+    ]);
+    expect(await child.exited).toBe(1);
+    expect(stderr).toContain(
+      "fungi: No signed-in model provider is available.",
+    );
+    expect(stderr).not.toContain("model:rejected");
+    expect(stderr).not.toMatch(/\n\s+at |Error:|terminal outcome/u);
+  } finally {
+    const stop = Bun.spawn([...executable, "stop"], {
+      cwd,
+      env: process.env,
+      stdout: "ignore",
+      stderr: "ignore",
+      timeout: 5000,
+    });
+    await stop.exited;
+    await rm(cwd, { recursive: true, force: true });
+  }
+}, 20000);

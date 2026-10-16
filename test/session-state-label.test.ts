@@ -19,8 +19,9 @@ it("labels owner and disconnected Session states with useful detail", () => {
     sessionStateLabel({ kind: "running_tool", tool: "Local_Computer.exec" }),
   ).toBe("streaming");
   expect(sessionStateLabel({ kind: "waiting_for_you" })).toBe("idle");
+  // The transcript carries the stopped reason; the footer does not repeat it.
   expect(sessionStateLabel({ kind: "error", cause: "Provider refused" })).toBe(
-    "error: Provider refused",
+    "stopped",
   );
   expect(
     sessionStateLabel({

@@ -8,13 +8,13 @@ import { URL, pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 import { act } from "react";
 import { createTestRenderer } from "@opentui/core/testing";
-import { renderTuiConversation } from "@fungi.computer/tui/frame-renderer";
+import { renderTuiConversation } from "@fungi.computer/spore/frame-renderer";
 import { createWhistle } from "@fungi.computer/whistle";
-import { createPrivateLocalServiceManager } from "@fungi.computer/local/service";
+import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
 
 // Real service, Local store, HTTP/RPC client and renderer. Only provider auth is
 // injected; no credential store or inference request is used by this proof.
-const localEntry = import.meta.resolve("@fungi.computer/local");
+const localEntry = import.meta.resolve("@fungi.computer/truffle");
 const { runPrivateLocalService } = await import(
   new URL("./private-local-service-listener.js", localEntry).href
 );

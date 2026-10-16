@@ -1,5 +1,5 @@
 import type { SessionMessage } from "@fungi.computer/shiitake/client";
-import type { PrivateLocalServiceManager } from "@fungi.computer/local/service";
+import type { PrivateLocalServiceManager } from "@fungi.computer/truffle/service";
 import type { SessionModelChoice } from "@fungi.computer/parakeet/headless";
 
 /** Auth-status transport fixture for a catalog whose providers are configured. */

@@ -94,6 +94,7 @@ export const conversationPane: PaneKindEntry = {
             clients: details?.clients,
             interactionStore: details?.interactions,
             modelSource: details?.models,
+            folder: details?.folder,
             onTitled: async (saved: string | null) => {
               if (saved === null) await ownerTitle();
               else kit.setTitle(saved);

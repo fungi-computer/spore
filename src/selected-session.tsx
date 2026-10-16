@@ -5,8 +5,7 @@ import {
   type ParakeetInteractions,
   type ReloadSource,
 } from "@fungi.computer/parakeet/headless";
-import { defineIdFamily } from "@fungi.computer/cairn/id";
-import type { PrivateLocalServiceManager } from "@fungi.computer/local/service";
+import type { PrivateLocalServiceManager } from "@fungi.computer/truffle/service";
 import type { WhistleRuntime } from "@fungi.computer/whistle";
 import type { createRoot } from "@opentui/react";
 import type { QueryClient } from "@tanstack/query-core";
@@ -20,10 +19,12 @@ import { runTuiEffect } from "./effect-boundary.js";
 import type { prepareClientExtensions } from "./client-extensions.js";
 import {
   selectTuiSession,
+  sessionCreateRequests,
   type TuiSessionMount,
   type TuiSessionPickerRenderer,
 } from "./session-navigation.js";
 import type { TerminalApplication } from "./terminal-application.js";
+import { displayFolder, type LandingRenderer } from "./landing.js";
 import type {
   InstalledUpdateRestart,
   UpdateRestartSession,
@@ -52,6 +53,7 @@ export type SelectedSessionDependencies = Readonly<{
     controls: TuiFrameControls,
   ) => void;
   renderPicker: TuiSessionPickerRenderer;
+  renderLanding: LandingRenderer;
   renderConnecting: (root: ReturnType<typeof createRoot>) => void;
   renderRecovery: (
     root: ReturnType<typeof createRoot>,
@@ -107,12 +109,6 @@ const localReload: readonly ReloadSource[] = [
 
 const serviceMismatchNotice =
   "Client and shared Local service have different builds. Upgrade waits for active turns to finish, starts the installed service, and reopens this Session. Other clients may need to reconnect afterward.";
-
-const sessionCreateRequests = defineIdFamily({
-  family: "tui-session-create-request",
-  version: 1,
-  kinds: { request: { prefix: "request" } },
-});
 
 type Selection = {
   host: TuiSessionMount;
@@ -239,6 +235,10 @@ export async function runSessionApplication(
       renderPicker: (...args) => {
         terminal.inputHandoff?.pause();
         dependencies.renderPicker(...args);
+      },
+      renderLanding: (...args) => {
+        terminal.inputHandoff?.pause();
+        dependencies.renderLanding(...args);
       },
       root,
       theme: theme(),
@@ -427,6 +427,7 @@ export async function runSessionApplication(
       pendingCreateRequestId = undefined;
     };
     return {
+      folder: displayFolder(options.invocationRoot),
       acquireSession: acquireTarget,
       apps: appPanes.apps,
       paneKinds: options.paneKinds,
@@ -544,6 +545,7 @@ export async function runSessionApplication(
     const settings = theme();
     return {
       agentName: "Shiitake",
+      folder: controls.folder,
       clients: controls.clients,
       interactions: controls.interactionStore,
       models: controls.modelSource,

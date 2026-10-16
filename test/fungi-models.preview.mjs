@@ -36,9 +36,9 @@ import {
   signInFungiAccount,
   readFungiAccountStatus,
   openPrivateLocalRuntimeHost,
-} from "@fungi.computer/local";
-import { runFungiCli } from "@fungi.computer/tui/cli";
-import { TuiFrame } from "@fungi.computer/tui/frame";
+} from "@fungi.computer/truffle";
+import { runFungiCli } from "@fungi.computer/spore/cli";
+import { TuiFrame } from "@fungi.computer/spore/frame";
 import { QueryClient } from "@tanstack/query-core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { testRender } from "@opentui/react/test-utils";

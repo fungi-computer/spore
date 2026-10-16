@@ -19,8 +19,8 @@ import { createWhistleKeymapAdapter } from "@fungi.computer/whistle";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { TextareaRenderable, RGBA } from "@opentui/core";
 
-import { runTuiCli } from "@fungi.computer/tui/cli-runtime";
-import { TuiFrame } from "@fungi.computer/tui/frame";
+import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
+import { TuiFrame } from "@fungi.computer/spore/frame";
 import { createTuiFixture } from "./fixture.js";
 import { runThemeProof } from "./theme-native.proof.mjs";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
@@ -41,7 +41,7 @@ function boundedCompletion(promise, label) {
 
 const reactPaths = [
   import.meta.url,
-  import.meta.resolve("@fungi.computer/tui/frame"),
+  import.meta.resolve("@fungi.computer/spore/frame"),
   import.meta.resolve("@fungi.computer/parakeet/headless"),
   require.resolve("@tanstack/react-query"),
   require.resolve("@opentui/react"),

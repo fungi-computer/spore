@@ -2,8 +2,10 @@ import type {
   PrivateLocalServiceConnection,
   PrivateLocalServiceManager,
   PrivateLocalSessionChoice,
-} from "@fungi.computer/local/service";
+} from "@fungi.computer/truffle/service";
 import type { createRoot } from "@opentui/react";
+import { defineIdFamily } from "@fungi.computer/cairn/id";
+import type { LandingChoice, LandingRenderer } from "./landing.js";
 
 import type { ThemeFrameProps, TuiCliOptions } from "./tui-cli-contract.js";
 
@@ -24,6 +26,13 @@ export type TuiSessionPickerRenderer = (
   onCancel: () => void,
   theme: ThemeFrameProps,
 ) => void;
+
+/** Idempotency keys for creating a new Session through the Local service. */
+export const sessionCreateRequests = defineIdFamily({
+  family: "tui-session-create-request",
+  version: 1,
+  kinds: { request: { prefix: "request" } },
+});
 
 function discoveryProblemMessage(
   problems: readonly { kind: "corrupt" | "in_use" | "unreadable" }[],
@@ -63,6 +72,7 @@ export async function selectTuiSession(input: {
   serviceManager: PrivateLocalServiceManager;
   discoverSessions?: PrivateLocalServiceManager["discover"] | undefined;
   renderPicker: TuiSessionPickerRenderer;
+  renderLanding: LandingRenderer;
   root: ReturnType<typeof createRoot>;
   theme: ThemeFrameProps;
   signal: AbortSignal;
@@ -81,6 +91,64 @@ export async function selectTuiSession(input: {
   } = input;
   if (options.sessionChoice !== undefined)
     return options.sessionChoice.resume({ signal, fungiMcp: options.fungiMcp });
+  if (
+    (options.entry === "landing" || options.entry === "new") &&
+    !options.resume
+  ) {
+    const discovery = await (input.discoverSessions ?? serviceManager.discover)(
+      options.invocationRoot,
+      { signal },
+    );
+    if (discovery.problems.length > 0)
+      onNotice(discoveryProblemMessage(discovery.problems));
+    const newest = discovery.sessions[0];
+    const startNew = () =>
+      newest === undefined
+        ? serviceManager.connect(
+            {
+              invocationRoot: options.invocationRoot,
+              fungiMcp: options.fungiMcp,
+            },
+            { signal },
+          )
+        : serviceManager.createSession(
+            {
+              invocationRoot: options.invocationRoot,
+              databasePath: newest.databasePath,
+              requestId: sessionCreateRequests.request.generate(),
+              fungiMcp: options.fungiMcp,
+            },
+            { signal },
+          );
+    if (options.entry === "new") return startNew();
+    if (destroyed()) return undefined;
+    const choice = await new Promise<LandingChoice | undefined>((resolve) => {
+      const cancel = () => {
+        done(undefined);
+      };
+      const done = (picked: LandingChoice | undefined) => {
+        signal.removeEventListener("abort", cancel);
+        resolve(picked);
+      };
+      signal.addEventListener("abort", cancel, { once: true });
+      if (signal.aborted) {
+        cancel();
+        return;
+      }
+      input.renderLanding(
+        root,
+        discovery.sessions,
+        options.invocationRoot,
+        done,
+        theme,
+      );
+    });
+    if (choice === undefined || destroyed()) return undefined;
+    if (choice.kind === "new") return startNew();
+    const picked = discovery.sessions[choice.index];
+    if (picked === undefined) return undefined;
+    return picked.resume({ signal, fungiMcp: options.fungiMcp });
+  }
   const discovery =
     options.databasePath === undefined &&
     options.connect === undefined &&

@@ -6,8 +6,8 @@ import { test } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
 import { act, createElement } from "react";
 
-import { SessionPicker } from "@fungi.computer/tui/session-picker";
-import { runTuiCli } from "@fungi.computer/tui/cli-runtime";
+import { SessionPicker } from "@fungi.computer/spore/session-picker";
+import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 
 const serviceManager = {

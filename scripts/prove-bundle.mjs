@@ -28,7 +28,7 @@ const root = await mkdtemp(join(tmpdir(), "fungi-cli-proof-"));
 const install = join(root, "install");
 const installedCli = join(
   install,
-  "node_modules/@fungi.computer/cli/dist/cli.js",
+  "node_modules/@fungi.computer/spore/dist/cli.js",
 );
 const environment = {
   ...process.env,
@@ -61,21 +61,21 @@ try {
   await access(
     join(
       install,
-      "node_modules/@fungi.computer/cli/dist/internal/computerd.cjs",
+      "node_modules/@fungi.computer/spore/dist/internal/computerd.cjs",
     ),
   );
   const fungi = join(install, "node_modules/.bin/fungi");
-  const packageRoot = join(install, "node_modules/@fungi.computer/cli");
+  const packageRoot = join(install, "node_modules/@fungi.computer/spore");
   const manifest = JSON.parse(
     await readFile(join(packageRoot, "package.json"), "utf8"),
   );
-  assert.equal(manifest.name, "@fungi.computer/cli");
+  assert.equal(manifest.name, "@fungi.computer/spore");
   assert.equal(manifest.version, "0.0.1");
   assert.equal(manifest.bin.fungi, "dist/fungi.cjs");
   assert.equal(manifest.os, undefined);
   assert.equal(manifest.cpu, undefined);
   const nativeBinary = createRequire(join(packageRoot, "package.json")).resolve(
-    `@fungi.computer/cli-native-${process.platform}-${process.arch}/bin/fungi-apply-patch`,
+    `@fungi.computer/spore-native-${process.platform}-${process.arch}/bin/fungi-apply-patch`,
   );
   const nativeRoot = dirname(dirname(nativeBinary));
   const nativeManifest = JSON.parse(

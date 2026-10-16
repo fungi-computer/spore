@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
-import { readFungiAccountStatus } from "@fungi.computer/local";
+import { readFungiAccountStatus } from "@fungi.computer/truffle";
 import {
   openLocalTeamApps,
   type LocalTeamApps,
-} from "@fungi.computer/local/apps";
+} from "@fungi.computer/truffle/apps";
 import type { PaneApps } from "./button/index.js";
 
 /** Browser handoff remains in the shell; no pane receives a credential. */

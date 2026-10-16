@@ -43,19 +43,19 @@ if (!supported) {
   }
   console.error(
     translated
-      ? "Use arm64 Node on Apple Silicon and reinstall the CLI with npm install -g @fungi.computer/cli --include=optional. The Intel Bun runtime is not supported under Rosetta."
+      ? "Use arm64 Node on Apple Silicon and reinstall the CLI with npm install -g @fungi.computer/spore --include=optional. The Intel Bun runtime is not supported under Rosetta."
       : "Fungi CLI needs Linux x64/arm64 with glibc 2.35+, or macOS 13.5+ on Apple Silicon or Intel.",
   );
   process.exit(1);
 }
-const nativePackage = `@fungi.computer/cli-native-${platform}`;
+const nativePackage = `@fungi.computer/spore-native-${platform}`;
 let bun;
 try {
   require.resolve(`${nativePackage}/bin/fungi-apply-patch`);
   bun = require.resolve(runtimes[platform]);
 } catch (cause) {
   throw new Error(
-    "Fungi CLI could not load its native dependencies. Reinstall with npm install -g @fungi.computer/cli --include=optional.",
+    "Fungi CLI could not load its native dependencies. Reinstall with npm install -g @fungi.computer/spore --include=optional.",
     { cause },
   );
 }

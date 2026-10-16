@@ -1,6 +1,6 @@
 import { Picker } from "./button/picker.js";
 import { DialogSurface, useHostColors } from "./button/dialog-surface.js";
-import type { PrivateLocalSessionChoice } from "@fungi.computer/local/service";
+import type { PrivateLocalSessionChoice } from "@fungi.computer/truffle/service";
 import { useTerminalTheme } from "./button/terminal-theme.js";
 import type { ThemeName } from "./button/theme-preferences.js";
 

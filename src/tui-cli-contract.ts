@@ -2,8 +2,8 @@ import type { ClientEntryV1 } from "@fungi.computer/shiitake/client-entry";
 import type {
   PrivateLocalServiceSelection,
   PrivateLocalSessionChoice,
-} from "@fungi.computer/local/service";
-import type { PrivateLocalRuntimeHostOptions } from "@fungi.computer/local";
+} from "@fungi.computer/truffle/service";
+import type { PrivateLocalRuntimeHostOptions } from "@fungi.computer/truffle";
 
 import type { TuiFrameProps } from "./frame.js";
 
@@ -21,6 +21,8 @@ export type TuiCliOptions = Readonly<{
   modelId?: string | undefined;
   reasoning?: PrivateLocalRuntimeHostOptions["reasoning"];
   resume?: boolean | undefined;
+  /** Bare fungi opens the landing; fungi new starts a new Session. */
+  entry?: "landing" | "new" | undefined;
   last?: boolean | undefined;
   connect?: string | undefined;
   listen?: string | undefined;
@@ -33,6 +35,7 @@ export type ThemeFrameProps = Pick<
 >;
 
 export type TuiFrameControls = {
+  folder: string;
   setQuitGuard: NonNullable<TuiFrameProps["setQuitGuard"]>;
   acquireSession: NonNullable<TuiFrameProps["acquireSession"]>;
   apps?: TuiFrameProps["apps"];

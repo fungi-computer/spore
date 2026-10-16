@@ -7,7 +7,7 @@ import { act } from "react";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot } from "@opentui/react";
 import { createWhistle } from "@fungi.computer/whistle";
-import { runTuiCli } from "@fungi.computer/tui/cli-runtime";
+import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 import { createTuiFixture } from "./fixture.js";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 import { configuredModelAccess, modelHistory } from "./model-access-fixture.js";
@@ -159,6 +159,12 @@ test("slash model saves update one mounted frame without duplicate commands", as
       assert.equal(setup.renderer.isDestroyed, false);
       assert.equal(renders, 1);
     }
+    for (const alias of ["keys", "thinking"])
+      assert.equal(
+        observedCommands.snapshot().slash.find((row) => row.alias === alias)
+          ?.consumesDraft,
+        true,
+      );
     const ctrlC = observedCommands
       .snapshot()
       .bindings.find(

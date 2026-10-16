@@ -4,7 +4,7 @@ import type {
   ModelAccountContext,
 } from "@fungi.computer/parakeet/headless";
 import type { ModelPreference } from "@fungi.computer/shiitake/model-preference";
-import type { PrivateLocalEffectiveModel } from "@fungi.computer/local/service";
+import type { PrivateLocalEffectiveModel } from "@fungi.computer/truffle/service";
 
 /** The model catalog and saved preference one frame shows. */
 export type ModelSettings = Readonly<{

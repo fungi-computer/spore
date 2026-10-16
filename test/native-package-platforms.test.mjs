@@ -23,6 +23,7 @@ for (const cpu of ["arm64", "x64"]) {
     const root = await mkdtemp(join(tmpdir(), "fungi-native-package-"));
     try {
       for (const file of [
+        "apps/tui/package.json",
         "apps/tui/scripts/bundle-native.mjs",
         "apps/tui/scripts/package-notices.mjs",
         "packages/cordyceps/native/apply-patch/notices.mjs",
@@ -70,7 +71,7 @@ for (const cpu of ["arm64", "x64"]) {
       const output = join(root, `.botanical/fungi-cli-native-${platform}`);
       const manifestPath = join(output, "package.json");
       const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      assert.equal(manifest.name, `@fungi.computer/cli-native-${platform}`);
+      assert.equal(manifest.name, `@fungi.computer/spore-native-${platform}`);
       assert.deepEqual(manifest.os, ["darwin"]);
       assert.deepEqual(manifest.cpu, [cpu]);
       assert.equal(manifest.libc, undefined);

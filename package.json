@@ -1,12 +1,12 @@
 {
-  "name": "@fungi.computer/tui",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@fungi.computer/spore",
+  "version": "0.1.1",
+  "private": false,
   "type": "module",
   "bin": {
     "fungi": "./dist/cli.js"
   },
-  "description": "Private native React OpenTUI frame for a typed Shiitake Session",
+  "description": "Fungi's terminal client and the fungi command, published as one bundled npm package",
   "scripts": {
     "clean": "node --input-type=module --eval \"import { rm } from 'node:fs/promises'; await rm('dist', { recursive: true, force: true });\"",
     "lint": "eslint src test --max-warnings=0 && ../../node_modules/.bin/oxlint --config ../../oxlint.config.ts --deny-warnings src test",
@@ -17,7 +17,7 @@
     "test:merge": "node --test scripts/cold-build.test.mjs",
     "test:nightly": "bun test/cancel-local-wait.proof.mjs && TUI_CANCEL_DRAIN=1 bun test/cancel-local-wait.proof.mjs && TUI_CANCEL_FOREGROUND=1 bun test/cancel-local-wait.proof.mjs && TUI_CANCEL_FOREGROUND=1 TUI_CANCEL_KEY=ctrl-c bun test/cancel-local-wait.proof.mjs && bun test/design-native.proof.mjs && pnpm run test:goal-loop-rows && bun test/dialog-design.proof.tsx && bun test/files-edit-error-native.proof.mjs && bun test/memory-repro.proof.mjs && bun test/patch-mismatch-native.proof.mjs && pnpm run test:native-extensions && bun test/auth-native.proof.mjs && pnpm run test:native-frame && node --import tsx scripts/packed-proof.mjs",
     "test:native-extensions": "bun test/client-extension-host.proof.mjs && bun test/client-extension-lifetime.proof.mjs",
-    "test:native-frame": "BUN_BIN=\"$PWD/node_modules/.bin/bun\" && node --input-type=module --eval \"import { rm } from 'node:fs/promises'; await rm('../../.botanical/tui-first-frame/package-native-proof', { recursive: true, force: true });\" && pnpm --filter @fungi.computer/tui deploy --prod --legacy ../../.botanical/tui-first-frame/package-native-proof && cd ../../.botanical/tui-first-frame/package-native-proof && \"$BUN_BIN\" test/tool-progress-native.proof.mjs && \"$BUN_BIN\" test/native-frame.proof.mjs && \"$BUN_BIN\" test/installed-cli.proof.mjs",
+    "test:native-frame": "BUN_BIN=\"$PWD/node_modules/.bin/bun\" && node --input-type=module --eval \"import { rm } from 'node:fs/promises'; await rm('../../.botanical/tui-first-frame/package-native-proof', { recursive: true, force: true });\" && pnpm --filter @fungi.computer/spore deploy --legacy ../../.botanical/tui-first-frame/package-native-proof && cd ../../.botanical/tui-first-frame/package-native-proof && \"$BUN_BIN\" test/tool-progress-native.proof.mjs && \"$BUN_BIN\" test/native-frame.proof.mjs && \"$BUN_BIN\" test/installed-cli.proof.mjs",
     "package:local": "node scripts/package-local.mjs",
     "bundle:cli": "node scripts/bundle-cli.mjs",
     "build:binaries": "node scripts/build-binaries.mjs",
@@ -43,7 +43,6 @@
     "@fungi.computer/cairn": "workspace:*",
     "@fungi.computer/corral": "workspace:*",
     "@fungi.computer/lantern": "workspace:*",
-    "@fungi.computer/local": "workspace:*",
     "@fungi.computer/maosaico": "workspace:*",
     "@fungi.computer/parakeet": "workspace:*",
     "@fungi.computer/shiitake": "workspace:*",
@@ -89,9 +88,14 @@
     "sharp": "0.35.4",
     "esbuild": "0.28.2",
     "typescript": "5.9.3",
-    "@fungi.computer/sigils": "workspace:*"
+    "@fungi.computer/sigils": "workspace:*",
+    "@fungi.computer/truffle": "workspace:*"
   },
   "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "directory": "../../.botanical/fungi-cli-package"
+  },
   "botanical": {
     "role": "app",
     "operations": {
@@ -102,15 +106,15 @@
       "docs": "required",
       "pack": {
         "status": "not-applicable",
-        "reason": "Private terminal host is not published"
+        "reason": "npm publishes the bundled artifact from publishConfig.directory (scripts/bundle-cli.mjs), not this source package"
       },
       "smoke": {
         "status": "not-applicable",
-        "reason": "The native PTY proof exercises the private terminal host"
+        "reason": "The native PTY proof and the packed stranger install exercise the bundled artifact"
       },
       "stranger": {
         "status": "not-applicable",
-        "reason": "Private terminal host has no public artifact"
+        "reason": "The packed stranger install (proof:cli) proves the bundled artifact; the shared library stranger proof packs source packages"
       }
     }
   },

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { userFacingCause } from "./panes/conversation/user-facing-cause.js";
 import { displayText } from "./shell/display-text.js";
 import questionClient from "@fungi.computer/shiitake-extensions/question/client";
 import goalClient from "@fungi.computer/shiitake-extensions/goal/client";
@@ -9,7 +10,6 @@ import corralClient from "@fungi.computer/corral";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import {
-  computersCommandHelp,
   runComputersCommand,
   type ComputersCommandOwners,
 } from "./computers-command.js";
@@ -25,9 +25,9 @@ import {
 } from "@fungi.computer/veil/model-credentials";
 import type { OneShotRunOptions } from "./one-shot-run.js";
 import type { TuiCliDependencies } from "./cli-runtime.js";
-import type { LocalAcpStdioOptions } from "@fungi.computer/local/acp-stdio";
+import type { LocalAcpStdioOptions } from "@fungi.computer/truffle/acp-stdio";
 import { fungiModelLoginNotice } from "./button/login-notice.js";
-import type { LocalAuthCliOptions } from "@fungi.computer/local/auth";
+import type { LocalAuthCliOptions } from "@fungi.computer/truffle/auth";
 import {
   createPrivateModels,
   registerPrivateBundledModelOAuthFlows,
@@ -37,22 +37,28 @@ import {
   detachPrivateLocalComputer,
   listPrivateLocalComputers,
   signInFungiAccount,
+  launchPlatformBrowser,
   runTrackerGitCredential,
   signOutFungiAccount,
   runPrivateLocalComputer,
   readFungiAccountStatus,
   runFungiAccountCommand,
-  fungiAccountCommandHelp,
   parseFungiMcpEndpoint,
   type PrivateFungiAccountLoginOptions,
   type PrivateFungiAccountLogoutResult,
-} from "@fungi.computer/local";
+} from "@fungi.computer/truffle";
 import {
   createPrivateLocalServiceManager,
   runPrivateLocalWorkerServer,
-} from "@fungi.computer/local/service";
-import { linearAuthInteraction } from "@fungi.computer/local/auth";
+} from "@fungi.computer/truffle/service";
+import { linearAuthInteraction } from "@fungi.computer/truffle/auth";
 import { hasOnboarding, runOnboarding } from "./onboarding.js";
+import { helpFor } from "./cli-help.js";
+import {
+  chooseSignInDoor,
+  chooseSubscription,
+  type SignInDoor,
+} from "./sign-in-choice.js";
 import { runDoctor } from "./doctor.js";
 import { reportFailure } from "./button/log-event.js";
 import {
@@ -69,9 +75,8 @@ import { programPanes } from "./panes/terminal/index.js";
 import {
   localExtensions,
   type LocalExtensions,
-} from "@fungi.computer/local/extensions";
+} from "@fungi.computer/truffle/extensions";
 import {
-  computerCommandHelp,
   runComputerCommand,
   type ComputerCommandOwners,
 } from "./computer-command.js";
@@ -91,182 +96,6 @@ if (process.env.FUNGI_BUNDLED_CLI !== undefined)
 const fungiVersion = z
   .looseObject({ version: z.string().min(1) })
   .parse(createRequire(import.meta.url)("../package.json")).version;
-
-const help = `Usage: fungi [options]                  Start a local terminal Session
-       fungi resume [--last] [options] Reopen a saved Session
-       fungi sessions list [-C dir]   List saved Sessions in this project
-       fungi sessions resume <number|session-id|prefix> [-C dir]
-                                      Reopen a listed Session
-       fungi sessions show <id>|--last
-                                      Print bounded Session history
-       fungi sessions status [id] [--json]
-                                      Read the owner's current Session state
-       fungi sessions watch <id>|--last
-                                      Follow bounded live Session state
-       fungi run [prompt] [options]    Run one prompt (stdin when omitted)
-       fungi acp [-C dir]             Serve a local Agent to an ACP editor over stdio
-       fungi git-credential remote|get|store|erase --hub <origin> --team <id>
-                                      Git helper for the Team tracker
-       fungi login [options]           Sign in to Fungi or another model provider
-       fungi status                    Show model logins and the selected Fungi Team
-       fungi account [teams|use-team <id>|balance] [--json]
-                                      Read the Fungi account and choose its Team
-       fungi doctor                    Check platform, glibc, sign-in and model readiness
-       fungi logout [options]          Sign out of Fungi or another model provider
-       fungi computers [start <name>]
-       fungi computer attach|status|detach
-                                      Attach a folder here to a Team Computer
-       fungi extension add|list|remove|enable|disable
-                                      Install extensions and enable their programs or tools
-       fungi mcp show|use|forget       Manage this project's Team MCP address
-       fungi serve --workers <file> --listen <url>
-       fungi stop                      Stop the shared local background service
-       fungi update [source-checkout] [-C dir]
-                                       Build and safely activate current integration
-       fungi help [command]            Show help for one command
-
-Get started:
-  fungi login --provider fungi   Sign in and choose the Team that pays for models
-  fungi         Start a Session in this folder
-
-Choose models and thinking levels inside the TUI with /model and /thinking.
-Saved Sessions remain after fungi stop.
-
-  -h, --help             Show help; fungi <command> --help shows one command
-  -V, --version          Print the fungi version
-  -C, --cd <path>        Project directory for a local Session
-      --fungi-mcp <url>  Select and remember this project's Team MCP endpoint
-      --extension <entry>
-                         Enable an installed client extension (repeatable)
-      --yes              Skip setup prompts; continue local-only
-`;
-
-const sessionOptions = `  -C, --cd <path>        Project directory (default: current folder)
-      --fungi-mcp <url>  Select and remember a hosted Team Computer
-      --extension <entry>
-                         Enable an installed client extension (repeatable)`;
-
-const commandHelp = new Map<string, string>(
-  Object.entries({
-    acp: `Usage: fungi acp [-C dir]
-       fungi acp login [login options]
-
-Serve stable ACP over stdin/stdout for editors such as Zed. Sessions and work
-belong to the shared Local service and survive editor disconnects. Sign in with
-fungi login before prompting. Model selection belongs to the Local Agent.
-
-  -C, --cd <path>        Project directory (default: current folder)
-
-Editors launch fungi with args ["acp"]. Terminal authentication appends "login"
-and uses the ordinary Fungi login flow.
-`,
-    doctor:
-      "Usage: fungi doctor [-C dir]\n\nReport platform, glibc, saved sign-in, model availability, HTTP connectivity and installed version.\n",
-    resume: `Usage: fungi resume [--last] [options]
-
-Pick a saved Session in this project, or reopen the latest with --last.
-
-      --last             Resume the most recent local Session
-${sessionOptions}
-`,
-    sessions: `Usage: fungi sessions list [-C dir]
-       fungi sessions resume <number|session-id|prefix> [-C dir]
-       fungi sessions resume --last [-C dir]
-       fungi sessions show <id>|--last [-C dir] [--errors] [--json]
-       fungi sessions status [id|--last] [-C dir] [--json]
-       fungi sessions watch <id>|--last [-C dir] [--errors] [--json]
-
-List the same recent-first Sessions as the TUI picker. Resume by the number,
-full Session ID, or a unique ID prefix shown in the list; --last chooses the
-latest. Show and watch inspect at most 100 messages through the authenticated
-Local service. Status prints a stable schemaVersion 1 state for automation;
-without an ID it selects the latest Session in this project.
-`,
-    run: `Usage: fungi run [prompt] [options]
-
-Run one prompt in a local Session and print the answer. Reads the prompt from
-stdin when it is omitted.
-
-  -C, --cd <path>        Project directory (default: current folder)
-      --fungi-mcp <url>  Give the Agent tools on a hosted Team Computer
-`,
-    login: `Usage: fungi login [--provider fungi] [--hub <origin>]
-       fungi login --provider <id> [--auth-type oauth|api_key] [--method <id>]
-       fungi login --fungi-mcp <url>
-
-Fungi is the default model provider. One browser sign-in serves models and
-Team MCP tools. Choose the Team that pays during sign-in.
-Use --hub to sign in to another Fungi Hub. Other providers require an explicit choice.
-For Claude Pro/Max over SSH, run
-  fungi login --provider anthropic --auth-type oauth
-Open the link in a browser, then paste the authorization code or final redirect URL
-into Fungi. Anthropic does not offer device-code login to this client.
-
-With --fungi-mcp, connect Fungi Local to a hosted Team Computer MCP endpoint.
-Your browser opens the Fungi sign-in and approval pages. A login for another
-Fungi origin replaces the saved one after you confirm.
-
-      --provider <id>    Model provider (default: fungi)
-      --hub <origin>     Fungi Hub for sign-in (default: saved Hub or fungi.computer)
-      --auth-type <type> oauth or api_key
-      --method <id>      Provider login choice (e.g. browser or device-code)
-      --fungi-mcp <url>  Team MCP endpoint, e.g. https://<hub>/api/teams/<team>/mcp
-`,
-    status: `Usage: fungi status [--provider <id>]
-
-Show model logins and the selected Fungi Team that pays for models.
-
-      --provider <id>    Show one model provider only
-`,
-    logout: `Usage: fungi logout [--provider <id>]
-       fungi logout --fungi-mcp <url>
-
-Log out of a model provider, or remove the saved Fungi MCP login for the
-origin of <url> and ask that Fungi Hub to revoke it.
-
-      --provider <id>    Model provider to log out of
-      --fungi-mcp <url>  Team MCP endpoint or Fungi origin to log out of
-`,
-    serve: `Usage: fungi serve --workers <file> --listen <url>
-
-Run a foreground worker server for programmatic clients.
-
-      --workers <file>   Worker definitions
-      --listen <url>     Listen address
-`,
-    update: `Usage: fungi update [source-checkout] [-C project]
-
-Build origin/integration/parallel-work-tracking in an isolated checkout.
-Prove resume --last against a private copy of the project's Saved Sessions,
-then atomically swap the installed launcher with automatic rollback on failure.
-The source checkout defaults to the current directory. Requires Git, pnpm,
-npm and the Local native build tools. Run fungi resume --last after updating.
-`,
-    stop: `Usage: fungi stop
-
-Stop the shared local background service. Saved Sessions remain.
-`,
-    mcp: `Usage: fungi mcp show [-C <path>]
-       fungi mcp use <url> [-C <path>]
-       fungi mcp forget [-C <path>]
-
-Show, switch, or forget this project's Team MCP endpoint. The project stores
-only the address; fungi login owns credentials. A running Local service keeps
-its existing connection until fungi stop.
-`,
-    computer: computerCommandHelp,
-    extension: extensionCommandHelp,
-    computers: computersCommandHelp,
-    account: fungiAccountCommandHelp,
-  }),
-);
-
-function helpFor(command: string | undefined): string {
-  if (command === undefined || command === "help") return help;
-  const text = commandHelp.get(command);
-  if (text === undefined) throw new Error(`Unknown fungi command: ${command}`);
-  return text;
-}
 
 type ModelAuthCheck = Pick<
   NonNullable<LocalAuthCliOptions["models"]>,
@@ -294,6 +123,8 @@ export type FungiCliIo = Readonly<{
   authModels?: LocalAuthCliOptions["models"];
   /** Override terminal detection for the standalone login surface. */
   interactive?: boolean;
+  /** Another fungi screen already showed the banner on this terminal. */
+  quiet?: boolean;
 }>;
 
 export type TuiAuthCall = LocalAuthCliOptions & {
@@ -339,6 +170,7 @@ function validateFungiCommand(
   if (
     command !== undefined &&
     command !== "resume" &&
+    command !== "new" &&
     command !== "sessions" &&
     command !== "run" &&
     command !== "serve" &&
@@ -361,8 +193,8 @@ function validateFungiCommand(
     throw new Error("fungi help accepts at most one command");
   if (command === "run" && positionals.length > 1)
     throw new Error("fungi run accepts at most one prompt");
-  if (command === "update" && positionals.length > 1)
-    throw new Error("fungi update accepts at most one source checkout");
+  if (command === "update" && positionals.length > 0)
+    throw new Error("fungi update does not accept positional arguments");
   if (last && command !== "resume" && command !== "sessions")
     throw new Error(
       "--last is only valid with fungi resume or fungi sessions resume",
@@ -553,11 +385,11 @@ export async function runFungiCli(
       endpoint: string,
       options: Pick<
         PrivateFungiAccountLoginOptions,
-        "confirmReplace" | "chooseTeam"
+        "confirmReplace" | "chooseTeam" | "openBrowser"
       >,
     ) => Promise<void>;
     signOutFungi?: (
-      endpoint: string,
+      endpoint?: string,
     ) => Promise<PrivateFungiAccountLogoutResult>;
     computersOwners?: Partial<ComputersCommandOwners>;
     /** The installed-extension owner; tests point it at a disposable home. */
@@ -597,6 +429,8 @@ export async function runFungiCli(
       method: { type: "string" },
       errors: { type: "boolean" },
       json: { type: "boolean" },
+      // Hidden developer option: build fungi from a Botanical checkout.
+      "from-source": { type: "string" },
     },
     strict: true,
   });
@@ -688,7 +522,8 @@ export async function runFungiCli(
     }
     const runAcp =
       overrides.runAcp ??
-      (await import("@fungi.computer/local/acp-stdio")).runPrivateLocalAcpStdio;
+      (await import("@fungi.computer/truffle/acp-stdio"))
+        .runPrivateLocalAcpStdio;
     await runAcp({
       invocationRoot: resolve(
         io.cwd ?? process.cwd(),
@@ -702,6 +537,7 @@ export async function runFungiCli(
     (io.interactive ??
       (isInteractiveStream(io.stdin ?? process.stdin) &&
         isInteractiveStream(stdout)));
+  const hub = arguments_.values.hub;
   const linearCli = new Cli({
     brand: "fungi",
     interactive: interactiveTerminal(),
@@ -717,16 +553,27 @@ export async function runFungiCli(
             },
           }),
   });
+  if (command === "login" && io.quiet !== true && linearCli.interactive)
+    linearCli.welcome("fungi login");
   if (
-    command !== undefined &&
-    command !== "run" &&
-    command !== "resume" &&
-    command !== "serve" &&
-    !arguments_.values.json &&
-    linearCli.interactive
-  )
-    linearCli.welcome(`fungi ${command}`);
-  const hub = arguments_.values.hub;
+    command === "login" &&
+    linearCli.interactive &&
+    hub === undefined &&
+    arguments_.values.provider === undefined &&
+    arguments_.values["auth-type"] === undefined &&
+    arguments_.values.method === undefined &&
+    arguments_.values["fungi-mcp"] === undefined
+  ) {
+    const door = await chooseSignInDoor(linearCli, { allowSkip: false });
+    if (door === undefined || door === "later")
+      throw new Error("Login cancelled.");
+    await runFungiCli(
+      await signInArguments(door, linearCli),
+      { ...io, quiet: true },
+      overrides,
+    );
+    return;
+  }
   if (
     hub !== undefined &&
     (command !== "login" ||
@@ -812,21 +659,35 @@ export async function runFungiCli(
   if (
     arguments_.values.extension !== undefined &&
     command !== undefined &&
-    command !== "resume"
+    command !== "resume" &&
+    command !== "new"
   )
     throw new Error("--extension is only valid with the terminal client");
+  if (arguments_.values["from-source"] !== undefined && command !== "update")
+    throw new Error("--from-source is only valid with fungi update");
   if (command === "update") {
-    if (Object.keys(arguments_.values).some((key) => key !== "cd"))
-      throw new Error(
-        "fungi update accepts only a source checkout and -C project",
-      );
-    const { runFungiUpdate } = await import("./update.js");
-    await runFungiUpdate({
-      source: resolve(io.cwd ?? process.cwd(), positionals[0] ?? "."),
+    if (
+      Object.keys(arguments_.values).some(
+        (key) => key !== "cd" && key !== "from-source",
+      )
+    )
+      throw new Error("fungi update accepts no options");
+    const notify = (message: string) => {
+      linearCli.info(message);
+    };
+    const source = arguments_.values["from-source"];
+    if (source === undefined) {
+      if (arguments_.values.cd !== undefined)
+        throw new Error("-C is only valid with fungi update --from-source");
+      const { runFungiReleaseUpdate } = await import("./update.js");
+      await runFungiReleaseUpdate({ notify });
+      return;
+    }
+    const { runFungiSourceUpdate } = await import("./update.js");
+    await runFungiSourceUpdate({
+      source: resolve(io.cwd ?? process.cwd(), source),
       project: resolve(io.cwd ?? process.cwd(), arguments_.values.cd ?? "."),
-      notify: (message) => {
-        linearCli.info(message);
-      },
+      notify,
     });
     return;
   }
@@ -836,7 +697,7 @@ export async function runFungiCli(
     const manager =
       overrides.createServiceManager?.() ??
       (
-        await import("@fungi.computer/local/service")
+        await import("@fungi.computer/truffle/service")
       ).createPrivateLocalServiceManager();
     const stopped = await manager.stop();
     linearCli.info(
@@ -1153,8 +1014,16 @@ export async function runFungiCli(
       }
       const loginOptions: Pick<
         PrivateFungiAccountLoginOptions,
-        "confirmReplace" | "chooseTeam"
-      > = {};
+        "confirmReplace" | "chooseTeam" | "openBrowser"
+      > = {
+        openBrowser: (url) => {
+          linearCli.info("Sign in to Fungi");
+          linearCli.info(linearCli.link("Open sign-in page", url.href));
+          linearCli.url(url.href);
+          linearCli.info("Waiting for the browser… Finish signing in there.");
+          launchPlatformBrowser(url);
+        },
+      };
       if (interactiveTerminal())
         loginOptions.confirmReplace = (savedIssuer, nextIssuer) =>
           confirm(
@@ -1181,10 +1050,16 @@ export async function runFungiCli(
       );
       return;
     }
+    if (command === "logout" && arguments_.values.provider === "fungi") {
+      const result = await (overrides.signOutFungi ?? signOutFungiAccount)();
+      stdout.write(`${result.message}\n`);
+      return;
+    }
     const runAuth =
       overrides.runAuth ??
       (async (action: "status" | "login" | "logout", options) => {
-        const { runLocalAuthCli } = await import("@fungi.computer/local/auth");
+        const { runLocalAuthCli } =
+          await import("@fungi.computer/truffle/auth");
         const { method, providerId, authType, ...authOptions } = options ?? {};
         const args: string[] = [action];
         if (providerId !== undefined) args.push("--provider", providerId);
@@ -1217,9 +1092,11 @@ export async function runFungiCli(
         linearCli,
         models,
         io.signals,
+        authCall.authType === "oauth" || authCall.authType === "api_key"
+          ? authCall.authType
+          : undefined,
       );
     }
-    await runAuth(command, authCall);
     if (
       command === "status" &&
       (authCall.providerId === undefined || authCall.providerId === "fungi")
@@ -1229,10 +1106,11 @@ export async function runFungiCli(
       )();
       stdout.write(
         login === undefined
-          ? "Fungi: Sign in to Fungi with fungi login --provider fungi\n"
-          : `Fungi: ${parseFungiMcpEndpoint(login.issuer).origin} · ${login.team?.name ?? "Choose a Team with fungi login --provider fungi"} (${login.team?.handle ?? "no Team selected"})\n`,
+          ? "Fungi account: not signed in. Run fungi login.\n"
+          : `Fungi account: ${parseFungiMcpEndpoint(login.issuer).host} · ${login.team === undefined ? "no Team chosen; run fungi login --provider fungi" : `${login.team.name} (${login.team.handle})`}\n`,
       );
     }
+    await runAuth(command, authCall);
     return;
   }
   const { parseReasoning } = await import("./reasoning-option.js");
@@ -1304,26 +1182,18 @@ export async function runFungiCli(
     const start = await runOnboarding({
       interactive: interactiveTerminal(),
       yes: arguments_.values.yes ?? false,
+      input: io.stdin === undefined ? process.stdin : Readable.from(io.stdin),
       write: (message) => stdout.write(message),
-      login: async (authType) =>
+      signIn: async (door, cli) =>
         runFungiCli(
-          [
-            "login",
-            ...(authType === undefined ? [] : ["--auth-type", authType]),
-          ],
-          io,
+          await signInArguments(door, cli),
+          { ...io, quiet: true },
           overrides,
         ),
-      signIn: async (selected) => {
-        await runFungiCli(["login", "--fungi-mcp", selected], io, overrides);
-        fungiMcp = { endpoint: selected };
-        common.fungiMcp = fungiMcp;
-        await saveProjectMcpConnection(invocationRoot, selected);
-      },
     });
     if (!start) return;
   }
-  if (command === undefined && !interactiveTerminal()) {
+  if ((command === undefined || command === "new") && !interactiveTerminal()) {
     stdout.write(
       "A terminal is needed for the agent UI. Use fungi run <prompt> for automation.\n",
     );
@@ -1349,6 +1219,18 @@ export async function runFungiCli(
       throw cause;
     }
   } else {
+    if (command === "resume" && arguments_.values.connect === undefined) {
+      const manager =
+        overrides.createServiceManager?.() ??
+        createPrivateLocalServiceManager();
+      const { sessions } = await manager.discover(invocationRoot);
+      if (sessions.length === 0) {
+        stdout.write(
+          `No saved conversations in ${invocationRoot} yet. Run fungi to start one.\n`,
+        );
+        return;
+      }
+    }
     const { runTuiCli } = await import("./cli-runtime.js");
     await runTuiCli(
       {
@@ -1359,6 +1241,14 @@ export async function runFungiCli(
         )),
         clients: sessionClients,
         resume: command === "resume",
+        entry:
+          command === "new"
+            ? "new"
+            : command === undefined &&
+                arguments_.values.connect === undefined &&
+                arguments_.values.listen === undefined
+              ? "landing"
+              : undefined,
         last: arguments_.values.last,
         connect: arguments_.values.connect,
         listen: arguments_.values.listen,
@@ -1368,6 +1258,18 @@ export async function runFungiCli(
   }
   if (endpoint !== undefined)
     await saveProjectMcpConnection(invocationRoot, endpoint);
+}
+
+/** The `fungi login` arguments for one sign-in door. */
+async function signInArguments(
+  door: SignInDoor,
+  cli: Pick<Cli, "select">,
+): Promise<string[]> {
+  if (door === "fungi") return ["login", "--provider", "fungi"];
+  if (door === "api_key") return ["login", "--auth-type", "api_key"];
+  const provider = await chooseSubscription(cli);
+  if (provider === undefined) throw new Error("Login cancelled.");
+  return ["login", "--provider", provider, "--auth-type", "oauth"];
 }
 
 /** Ask one yes/no question on the command's own terminal streams. */
@@ -1408,7 +1310,7 @@ if (import.meta.main) {
   try {
     if (process.argv[2] === "--internal-service") {
       const { runPrivateLocalService } =
-        await import("@fungi.computer/local/service-process");
+        await import("@fungi.computer/truffle/service-process");
       const directory = process.argv[3];
       if (directory === undefined)
         throw new Error("Local service requires its private directory");
@@ -1418,7 +1320,7 @@ if (import.meta.main) {
     }
   } catch (cause) {
     process.stderr.write(
-      `fungi: ${cause instanceof Error ? cause.message : "Command failed"}\n`,
+      `fungi: ${cause instanceof Error ? userFacingCause(cause.message) : "Command failed"}\n`,
     );
     process.exitCode = 1;
   }

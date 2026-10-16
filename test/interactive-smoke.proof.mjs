@@ -47,7 +47,7 @@ async function run(command, cwd) {
 /** Build this checkout first (turbo-cached); the fixture reads its schema. */
 async function launcherCommand() {
   await run(
-    ["pnpm", "turbo:run", "run", "build", "--filter=@fungi.computer/tui"],
+    ["pnpm", "turbo:run", "run", "build", "--filter=@fungi.computer/spore"],
     repository,
   );
   const supplied = process.argv.slice(2).find((value) => value !== "--");

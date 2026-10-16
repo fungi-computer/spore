@@ -7,15 +7,20 @@ import {
 import {
   localLoginProviders,
   localPopularProviderIds,
-} from "@fungi.computer/local/login";
-import type { LocalAuthModels } from "@fungi.computer/local/auth";
+} from "@fungi.computer/truffle/login";
+import type { LocalAuthModels } from "@fungi.computer/truffle/auth";
 import type { OneShotRunOptions } from "./one-shot-run.js";
 
-/** Present the same provider catalog and groups as /login before Pi's auth flow. */
+/**
+ * Present the same provider catalog and groups as /login before Pi's auth
+ * flow. With an auth type, offer only providers with that kind of sign-in;
+ * an API key never means the Fungi account.
+ */
 export async function chooseLoginProvider(
   cli: Pick<Cli, "search">,
   models: Pick<LocalAuthModels, "getProviders" | "checkAuth">,
   signals: OneShotRunOptions["signals"] = process,
+  authType?: "oauth" | "api_key",
 ): Promise<string> {
   const controller = new AbortController();
   const stop = () => {
@@ -24,7 +29,13 @@ export async function chooseLoginProvider(
   signals.on("SIGINT", stop);
   signals.on("SIGTERM", stop);
   try {
-    const providers = localLoginProviders(models.getProviders());
+    const kind = authType === "oauth" ? "subscription" : authType;
+    const providers = localLoginProviders(models.getProviders()).filter(
+      (provider) =>
+        kind === undefined ||
+        (provider.methods.some((method) => method.kind === kind) &&
+          !(kind === "api_key" && provider.id === "fungi")),
+    );
     const access: ProviderAccess[] = [];
     for (const provider of providers) {
       controller.signal.throwIfAborted();
@@ -40,7 +51,10 @@ export async function chooseLoginProvider(
     }
     controller.signal.throwIfAborted();
     const selected = await cli.search({
-      message: "Choose a provider",
+      message:
+        authType === "api_key"
+          ? "Which provider's API key?"
+          : "Choose a provider",
       choices: providerChoices(
         providers,
         access,

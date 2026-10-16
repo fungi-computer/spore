@@ -7,7 +7,7 @@ import {
   type PrivateLocalShiitakeWorkerInput,
   type PrivateLocalShiitakeHost,
   type PrivateLocalShiitakeServer,
-} from "@fungi.computer/local";
+} from "@fungi.computer/truffle";
 import type { ShiitakeAgent, ShiitakeSession } from "@fungi.computer/shiitake";
 
 type PrivateLoopbackUrl = Readonly<{
@@ -107,7 +107,7 @@ export async function openPrivateLocalBunShiitakeHost(
   listenAddress?: string,
 ): Promise<PrivateLocalShiitakeHost> {
   const { openPrivateLocalShiitakeHost } =
-    await import("@fungi.computer/local");
+    await import("@fungi.computer/truffle");
   return openPrivateLocalShiitakeHost(
     input,
     (fetch) => openPrivateBunServer(fetch, listenAddress),
@@ -150,7 +150,7 @@ export async function openPrivateLocalBunShiitakeWorkerBatch(
   // Validate the listener before Local owners acquire stores and leases.
   parseLoopbackUrl(listenAddress, true);
   const { openPrivateLocalShiitakeWorkerBatch } =
-    await import("@fungi.computer/local");
+    await import("@fungi.computer/truffle");
   return openPrivateLocalShiitakeWorkerBatch(inputs, (fetch) =>
     openPrivateBunServer(fetch, listenAddress),
   );

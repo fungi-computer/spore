@@ -138,6 +138,7 @@ for (const width of [80, 160]) {
         setup.mockInput.pressEnter();
       });
       await waitForFrame(setup, (frame) => frame.includes("Key bindings"));
+      expect(setup.captureCharFrame()).not.toContain("/keys");
       const openBinding = setup
         .captureCharFrame()
         .split("\n")
@@ -151,9 +152,6 @@ for (const width of [80, 160]) {
       expect(openBinding?.trimEnd()).toEndWith("Ctrl K o");
       await pressDecodedKey(setup, () => {
         setup.mockInput.pressEscape();
-      });
-      await act(async () => {
-        await setup.mockInput.pressKeys(Array.from("/keys", () => "BACKSPACE"));
       });
       await waitForFrame(setup, (frame) => frame.includes("Ask anything"));
       await pressDecodedKey(setup, () => {

@@ -3,7 +3,7 @@ import { createWhistleInteractionHost } from "@fungi.computer/whistle/interactio
 import { setImmediate } from "node:timers/promises";
 import assert from "node:assert/strict";
 import { test } from "bun:test";
-import { runTuiCli } from "@fungi.computer/tui/cli-runtime";
+import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 
 // Dispatch/cleanup coverage only; auth-native.proof.mjs owns physical rendering.

@@ -4,7 +4,7 @@ import { setTimeout } from "node:timers";
 import { createWhistle } from "@fungi.computer/whistle";
 import assert from "node:assert/strict";
 import { test } from "bun:test";
-import { runTuiCli } from "@fungi.computer/tui/cli-runtime";
+import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 
 test("external renderer destruction closes the client without destroying twice", async () => {
   let destroys = 0;
