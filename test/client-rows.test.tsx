@@ -68,7 +68,7 @@ const entry = defineClientEntry(
   },
 );
 
-test("keyboard row picker dispatches the owning catalog prompt and typed open target", async () => {
+test("keyboard row picker dispatches the owning catalog prompt and opens its target beside", async () => {
   notifyManager.setScheduler(queueMicrotask);
   const fixture = createTuiFixture();
   const slots: SessionExtensionSlots = {
@@ -211,9 +211,9 @@ test("keyboard row picker dispatches the owning catalog prompt and typed open ta
       { agentId: "other-agent", sessionId: "other-session" },
     ]);
     expect(peer.watchCalls()).toBe(1);
-    await fixture.waitForClose();
-    expect(fixture.closeCalls()).toBe(1);
-    expect(setup.captureCharFrame()).not.toContain("Probe panel");
+    // The row's conversation opens beside this one; the parent stays open.
+    expect(fixture.closeCalls()).toBe(0);
+    expect(setup.captureCharFrame()).toContain("Probe panel");
     expect(fixture.watchCalls()).toBe(1);
   } finally {
     act(() => {

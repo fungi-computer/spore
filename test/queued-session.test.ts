@@ -139,7 +139,6 @@ test("one conversation awaits its host without claiming another conversation blo
     );
     expect(frame).toContain("queued for host");
     expect(frame.split("Reply once.")).toHaveLength(2);
-    expect(frame).toContain("queued");
     expect(frame).not.toContain("PgUp/PgDn scroll");
     expect(frame).not.toContain("another conversation");
     expect((await session.read()).activity.queue).toEqual({
@@ -203,7 +202,6 @@ test("a queued conversation identifies the actual Session holding the Agent", as
     );
     expect(frame).toContain("waiting for Session conversation-a");
     expect(frame.split("Second")).toHaveLength(2);
-    expect(frame).toContain("queued");
     expect(frame).not.toContain("PgUp/PgDn scroll");
     expect((await second.read()).activity.queue).toEqual({
       state: "queued",
@@ -236,7 +234,7 @@ test("shows queued prompts once as dimmed scrollable messages without Esc withdr
       "\u001b]52;c;Y21k\u0007\u001b]0;spoof\u0007\u001b]8;;https://evil.test\u001b\\First task\u001b]8;;\u001b\\\u001b[2J\u009b2J\u202e\u2060",
       "Second task",
       "Third task",
-      "Fourth task",
+      "queued",
     ].entries())
       await session.send(text, {
         delivery: "followUp",
@@ -250,21 +248,21 @@ test("shows queued prompts once as dimmed scrollable messages without Esc withdr
         const frame = setup.captureCharFrame();
         expect(frame).not.toContain("4 queued messages");
         expect(frame).not.toContain("+1 more");
-        expect(
-          setup
-            .captureSpans()
-            .lines.flatMap((line) => line.spans)
-            .some(
-              (span) =>
-                span.text.trim() === "queued" && (span.attributes & 2) === 2,
-            ),
-        ).toBe(true);
         expect(frame.split("Second task")).toHaveLength(2);
+        // This cue's row has only its caption, not a trailing status badge.
+        expect(
+          frame
+            .split("\n")
+            .find((line) => line.includes("Second task"))
+            ?.trim(),
+        ).toBe("Second task");
         expect(frame).not.toContain("PgUp/PgDn scroll");
         expect(frame).toContain("First task");
         expect(frame).toContain("Second task");
         expect(frame).toContain("Third task");
-        expect(frame).toContain("Fourth task");
+        expect(
+          frame.split("\n").filter((line) => line.trim() === "queued"),
+        ).toHaveLength(1);
         const queued = setup
           .captureSpans()
           .lines.flatMap((line) => line.spans)
@@ -279,13 +277,6 @@ test("shows queued prompts once as dimmed scrollable messages without Esc withdr
         expect(queued?.fg.toInts().slice(0, 3)).not.toEqual(normalForeground);
         for (const [index, channel] of normalForeground.entries())
           expect(queued?.fg.toInts()[index]).toBeLessThan(channel);
-        const marker = setup
-          .captureSpans()
-          .lines.flatMap((line) => line.spans)
-          .find((span) => span.text.trim() === "queued");
-        expect(marker?.fg.toInts().slice(0, 3)).toEqual(
-          queued?.fg.toInts().slice(0, 3),
-        );
         for (const control of [
           "\u001b",
           "\u0007",
@@ -377,7 +368,6 @@ test("Esc stops only the current run and the next queued message runs", async ()
       },
     );
     expect(frame).not.toContain("3 queued messages");
-    expect(frame).toContain("queued");
     expect(frame).toContain("Active task");
     expect(frame).not.toContain("PgUp/PgDn scroll");
     expect(frame).toContain("Next task");
@@ -405,7 +395,6 @@ test("Esc stops only the current run and the next queued message runs", async ()
         expect((running?.attributes ?? 0) & 1).toBe(1);
         expect((running?.attributes ?? 0) & 2).toBe(0);
         expect(frame.split("Another task")).toHaveLength(2);
-        expect(frame).toContain("queued");
       },
     );
     expect(startedFrame).not.toContain("2 queued messages");

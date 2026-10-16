@@ -181,7 +181,15 @@ for (const { width, height } of [
             .split("\n")
             .filter((line) => line.includes("Loop ·"));
           expect(loopRows).toHaveLength(1);
-          expect(loopRows[0]).toContain("Next 2026-10-09 12:00 UTC");
+          const due = new Intl.DateTimeFormat(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+            timeZoneName: "short",
+          }).format(Date.parse("2026-10-09T12:00:00Z"));
+          expect(loopRows[0]).toContain(`Next ${due}`);
           expect(frame).not.toContain("Esc stop loop");
         }
         if (state === "plan") {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -11,17 +12,14 @@ for (const scenario of ["preparation", "attachment"])
   test(`extension ${scenario} failure stays in-frame, redacted in the log and off the raw terminal`, async () => {
     const home = await mkdtemp(join(tmpdir(), "fungi-tui-diagnostics-"));
     const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+    const output = [];
+    const drained = Promise.withResolvers();
     let child;
     try {
-      // util-linux script gives this fixture its own TTY. The memory renderer
+      // Bun gives this fixture its own TTY. The memory renderer
       // captures all legitimate frame output, leaving only rogue writes on it.
       child = spawn(
-        [
-          "script",
-          "-qefc",
-          "bun ./test/terminal-diagnostics.fixture.mjs",
-          "/dev/null",
-        ],
+        [process.execPath, "./test/terminal-diagnostics.fixture.mjs"],
         {
           cwd: packageRoot,
           env: {
@@ -31,19 +29,17 @@ for (const scenario of ["preparation", "attachment"])
             TUI_DIAGNOSTICS_SCENARIO: scenario,
             PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}`,
           },
-          stdin: "ignore",
-          stdout: "pipe",
-          stderr: "pipe",
+          terminal: {
+            data: (_terminal, bytes) => output.push(Buffer.from(bytes)),
+            exit: () => drained.resolve(),
+          },
         },
       );
-      const [stdout, stderr, status] = await Promise.all([
-        new globalThis.Response(child.stdout).text(),
-        new globalThis.Response(child.stderr).text(),
-        child.exited,
-      ]);
-      assert.equal(status, 0, stderr || stdout);
+      const [status] = await Promise.all([child.exited, drained.promise]);
+      const rawOutput = Buffer.concat(output).toString("utf8");
+      assert.equal(status, 0, rawOutput);
       assert.equal(
-        stdout + stderr,
+        rawOutput,
         "",
         "no raw TTY writes during rendering or shutdown",
       );
@@ -66,6 +62,7 @@ for (const scenario of ["preparation", "attachment"])
         child.kill();
         await child.exited;
       }
+      child?.terminal.close();
       await rm(home, { recursive: true, force: true });
     }
   }, 10_000);

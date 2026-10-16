@@ -41,8 +41,8 @@
   "dependencies": {
     "@fungi.computer/agar": "workspace:*",
     "@fungi.computer/cairn": "workspace:*",
-    "@fungi.computer/lantern": "workspace:*",
     "@fungi.computer/corral": "workspace:*",
+    "@fungi.computer/lantern": "workspace:*",
     "@fungi.computer/local": "workspace:*",
     "@fungi.computer/maosaico": "workspace:*",
     "@fungi.computer/parakeet": "workspace:*",
@@ -51,6 +51,7 @@
     "@fungi.computer/stipe": "workspace:*",
     "@fungi.computer/veil": "workspace:*",
     "@fungi.computer/whistle": "workspace:*",
+    "@opencode-ai/pty": "0.3.0",
     "@opentui/core": "0.5.10",
     "@opentui/keymap": "0.5.10",
     "@opentui/react": "0.5.10",
@@ -85,10 +86,10 @@
     "@types/write-file-atomic": "4.0.3",
     "bun": "1.4.2",
     "bun-types": "1.4.1",
-    "typescript": "5.9.3",
-    "@fungi.computer/sigils": "workspace:*",
     "sharp": "0.35.4",
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3",
+    "@fungi.computer/sigils": "workspace:*"
   },
   "license": "MIT",
   "botanical": {

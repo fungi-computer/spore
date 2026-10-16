@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL, URL } from "node:url";
 import { test } from "bun:test";
-import { nativeNotices } from "../../../runtimes/local/scripts/native-notices.mjs";
+import { nativeNotices } from "../../../packages/cordyceps/native/apply-patch/notices.mjs";
 import { writeCliNotices } from "../scripts/package-notices.mjs";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));

@@ -70,7 +70,7 @@ const launcherVariables = new Set([
 ]);
 
 /** What the PTY session runs: an installed program, or an interactive login shell. */
-async function terminalLaunch(
+export async function terminalLaunch(
   program:
     | Readonly<{
         command: readonly string[];

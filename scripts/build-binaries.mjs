@@ -69,6 +69,7 @@ for (const platform of target === "all" ? targets : [target]) {
   try {
     const staged = resolve(temporary, "package");
     await cp(source, staged, { recursive: true, dereference: true });
+    await mkdir(resolve(staged, "native/bin"), { recursive: true });
     // Standalone Bun cannot currently resolve the extracted package's bare
     // imports (oven-sh/bun#27058). Reuse the npm launcher's pinned runtime.
     const bunTarget = `${os}-${arch === "arm64" ? "aarch64" : "x64"}`;

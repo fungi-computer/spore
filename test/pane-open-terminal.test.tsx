@@ -60,7 +60,9 @@ async function frameFor(
     host.dispose();
     client.clear();
   };
-  return { setup, shows, run, type, close };
+  const terminalReady = () =>
+    host.active().palette.some((row) => row.title === "Send Ctrl K to shell");
+  return { setup, shows, run, type, close, terminalReady };
 }
 
 function frame(apps?: Parameters<typeof TuiFrame>[0]["apps"]) {
@@ -90,7 +92,8 @@ test("Open pane lists the Local terminal first; Enter opens a shell that takes t
     await pressDecodedKey(view.setup, () => {
       view.setup.mockInput.pressEnter();
     });
-    await view.shows((text) => text.includes("Local machine"));
+    await view.shows(view.terminalReady);
+    expect(view.setup.captureCharFrame()).not.toContain("Local machine");
     expect(view.setup.captureCharFrame()).not.toContain("Open pane");
     await view.shows((text) => text.includes("$"));
     await view.type("echo typed-$((40+2))");
@@ -118,7 +121,7 @@ test("signed out, Open pane lists only choices that work", async () => {
     await pressDecodedKey(view.setup, () => {
       view.setup.mockInput.pressEnter();
     });
-    await view.shows((text) => text.includes("Local machine"));
+    await view.shows(view.terminalReady);
     await view.type("echo signed-out-$((3+3))");
     await view.shows((text) => text.includes("signed-out-6"));
   } finally {
@@ -152,7 +155,7 @@ test("an App choice that fails reports a notice and the terminal still takes inp
     await pressDecodedKey(view.setup, () => {
       view.setup.mockInput.pressEnter();
     });
-    await view.shows((text) => text.includes("Local machine"));
+    await view.shows(view.terminalReady);
     await view.type("echo after-$((1+1))");
     await view.shows((text) => text.includes("after-2"));
     expect(view.setup.captureCharFrame()).not.toContain(signedOut);

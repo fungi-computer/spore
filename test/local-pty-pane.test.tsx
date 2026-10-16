@@ -17,9 +17,42 @@ import { captureFrame } from "./frame-capture.js";
 import { createTuiFixture } from "./fixture.js";
 import { pressDecodedKey, waitForLiveFrame } from "./native-readiness.js";
 import { once } from "node:events";
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { openSync } from "node:fs";
 import { WriteStream } from "node:tty";
+
+// The pane runs the person's login shell (that is the product). The test must
+// not depend on whose: a hermetic HOME and /bin/sh keep rc files, prompt
+// frameworks and slow shell startup out of the expected frames. The profile
+// pins a short prompt: macOS's default (host:dir user$) is wider than half of
+// the 80x24 pane and wraps the markers the frames wait for.
+const ambient = { home: process.env.HOME, shell: process.env.SHELL };
+let hermeticHome: string | undefined;
+beforeAll(async () => {
+  hermeticHome = await mkdtemp(join(tmpdir(), "pty-pane-home-"));
+  await writeFile(join(hermeticHome, ".profile"), "PS1='$ '\n");
+  process.env.HOME = hermeticHome;
+  process.env.SHELL = "/bin/sh";
+});
+afterAll(async () => {
+  if (ambient.home === undefined) delete process.env.HOME;
+  else process.env.HOME = ambient.home;
+  if (ambient.shell === undefined) delete process.env.SHELL;
+  else process.env.SHELL = ambient.shell;
+  if (hermeticHome !== undefined)
+    await rm(hermeticHome, { recursive: true, force: true });
+});
+
+function terminalFocused(
+  app: NonNullable<Awaited<ReturnType<typeof openTerminalApplication>>>,
+) {
+  return app.commandHost
+    .active()
+    .palette.some((row) => row.title === "Send Ctrl K to shell");
+}
+
 async function openConversationTerminal(width: number, height: number) {
   const setup = await testRender(<box />, { width, height });
   const app = await openTerminalApplication({
@@ -66,12 +99,47 @@ async function openConversationTerminal(width: number, height: number) {
     await frame((text) => text.includes("Local terminal"));
     await key("ARROW_DOWN");
     await key("RETURN");
-    await frame((text) => text.includes("Local machine"));
+    await frame(() => terminalFocused(app));
     return { setup, app, frame, key };
   } catch (cause) {
     await app.close();
     throw cause;
   }
+}
+
+type ObservedTerminal = {
+  close: () => Promise<void>;
+  hasRunningJobs: () => Promise<boolean>;
+};
+
+function spyOnSelectedTerminal(
+  observe: (terminal: ObservedTerminal) => void,
+): () => void {
+  if (process.platform === "darwin") {
+    const open = paneKit.openMacTerminal;
+    const opening = spyOn(paneKit, "openMacTerminal").mockImplementation(
+      async (options) => {
+        const terminal = await open(options);
+        observe(terminal);
+        return terminal;
+      },
+    );
+    return () => {
+      opening.mockRestore();
+    };
+  }
+
+  const open = paneKit.openLocalTerminal;
+  const opening = spyOn(paneKit, "openLocalTerminal").mockImplementation(
+    async (options) => {
+      const terminal = await open(options);
+      observe(terminal);
+      return terminal;
+    },
+  );
+  return () => {
+    opening.mockRestore();
+  };
 }
 
 for (const [width, height] of [
@@ -100,26 +168,54 @@ for (const [width, height] of [
       }
       return true;
     });
-    const setup = await testRender(<box />, {
-      width,
-      height,
-      kittyKeyboard: width === 160,
-      stdout: output,
-    });
-    setup.renderer.stdin.isTTY = true;
-    input.resolve(setup.renderer.stdin);
-    const application = await openTerminalApplication({
-      signals: { on: () => undefined, off: () => undefined },
-      createQueryClient,
-      createRenderer: () => Promise.resolve(setup.renderer),
-      createRoot,
-      createWhistle,
-      enableKeymap: true,
-    });
-    if (application === undefined) throw new Error("Terminal did not open");
+    let setupForCleanup: Awaited<ReturnType<typeof testRender>> | undefined;
+    let appForCleanup:
+      | Exclude<Awaited<ReturnType<typeof openTerminalApplication>>, undefined>
+      | undefined;
+    const setupState = await (async () => {
+      try {
+        const setup = await testRender(<box />, {
+          width,
+          height,
+          kittyKeyboard: width === 160,
+          stdout: output,
+          useThread: false,
+        });
+        setupForCleanup = setup;
+        setup.renderer.stdin.isTTY = true;
+        input.resolve(setup.renderer.stdin);
+        const application = await openTerminalApplication({
+          signals: { on: () => undefined, off: () => undefined },
+          createQueryClient,
+          createRenderer: () => Promise.resolve(setup.renderer),
+          createRoot,
+          createWhistle,
+          enableKeymap: true,
+        });
+        if (application === undefined) throw new Error("Terminal did not open");
+        appForCleanup = application;
+        application.inputHandoff?.pause();
+        const fixture = createTuiFixture();
+        return { setup, application, fixture };
+      } catch (cause) {
+        try {
+          if (appForCleanup !== undefined)
+            await act(async () => {
+              await appForCleanup?.close();
+            });
+          else if (setupForCleanup !== undefined)
+            act(() => {
+              setupForCleanup?.renderer.destroy();
+            });
+        } finally {
+          writes.mockRestore();
+          output.destroy();
+        }
+        throw cause;
+      }
+    })();
+    const { setup, application, fixture } = setupState;
     const app = application;
-    app.inputHandoff?.pause();
-    const fixture = createTuiFixture();
     let registry: ReturnType<typeof createPaneRegistry> | undefined;
     const ready = (value: ReturnType<typeof createPaneRegistry>) => {
       registry = value;
@@ -160,7 +256,6 @@ for (const [width, height] of [
         await setup.renderOnce();
       });
     const captures = process.env.PANE_CAPTURE_DIR;
-    if (captures !== undefined) await mkdir(captures, { recursive: true });
     const capture = (name: string) =>
       captureFrame(
         setup,
@@ -193,6 +288,7 @@ for (const [width, height] of [
         expect(prompt?.bg.toInts()).toEqual(RGBA.fromHex(background).toInts());
       });
     try {
+      if (captures !== undefined) await mkdir(captures, { recursive: true });
       await act(async () => {
         application.root.render(<Shell />);
         await setup.renderOnce();
@@ -235,7 +331,7 @@ for (const [width, height] of [
         if (opened.kind === "refused") throw new Error(opened.reason);
         terminalId = opened.paneId;
       });
-      await frame((text) => text.includes("Local machine"));
+      await frame(() => terminalFocused(app));
       await palette();
       await type("printf 'LOCAL_%s\\n' READY");
       await key("RETURN");
@@ -298,10 +394,8 @@ for (const [width, height] of [
       });
       await type("stty size");
       await key("RETURN");
-      await frame(
-        (text) =>
-          text.includes(`${String(height - 3)} ${String(width)}`) ||
-          text.includes(`${String(height - 2)} ${String(width)}`),
+      await frame((text) =>
+        text.includes(`${String(height)} ${String(width)}`),
       );
       await capture("zoomed");
       await type(
@@ -341,7 +435,9 @@ for (const [width, height] of [
       await act(async () => {
         await closing;
       });
-      await frame((text) => !text.includes("Local machine"));
+      await frame(
+        () => !panes.read().some((pane) => pane.paneId === terminalId),
+      );
       await palette();
       expect(panes.read()).toHaveLength(1);
       expect(fixture.cancelCalls()).toHaveLength(0);
@@ -350,7 +446,7 @@ for (const [width, height] of [
       await act(async () => {
         await panes.open({ kind: "terminal" });
       });
-      await frame((text) => text.includes("Local machine"));
+      await frame(() => terminalFocused(app));
       expect(await panes.canQuit()).toBe(true);
       expect(setup.captureCharFrame()).not.toContain("Quit and terminate");
       const exited = once(app.signal, "abort");
@@ -361,13 +457,16 @@ for (const [width, height] of [
       });
       expect(app.destroyed()).toBe(true);
     } finally {
-      await act(async () => {
-        await application.close();
+      try {
+        await act(async () => {
+          await application.close();
+        });
+      } finally {
         writes.mockRestore();
         output.destroy();
-      });
+      }
     }
-  });
+  }, 30_000);
 }
 
 for (const [width, height] of [
@@ -382,32 +481,37 @@ for (const [width, height] of [
     let pid: string | undefined;
 
     beforeAll(async () => {
-      const openTerminal = paneKit.openLocalTerminal;
-      const opening = spyOn(paneKit, "openLocalTerminal").mockImplementation(
-        async (options) => {
-          const terminal = await openTerminal(options);
-          const close = terminal.close.bind(terminal);
-          terminal.close = () => {
-            closeCompletion = close();
-            return closeCompletion;
-          };
-          return terminal;
-        },
-      );
-      restoreOpening = () => {
-        opening.mockRestore();
-      };
-      active = await openConversationTerminal(width, height);
-      const { setup, frame, key } = active;
-      await act(async () => {
-        await setup.mockInput.pasteBracketedText(
-          "sleep 60 & printf 'QUIT_JOB:%s\\n' $!",
-        );
+      restoreOpening = spyOnSelectedTerminal((terminal) => {
+        const close = terminal.close.bind(terminal);
+        terminal.close = () => {
+          closeCompletion = close();
+          return closeCompletion;
+        };
       });
-      await key("RETURN");
-      await frame((text) => /QUIT_JOB:[0-9]+/u.test(text));
-      pid = /QUIT_JOB:([0-9]+)/u.exec(setup.captureCharFrame())?.[1];
-      if (pid === undefined) throw new Error("Quit job identity missing");
+      try {
+        active = await openConversationTerminal(width, height);
+        const { setup, frame, key } = active;
+        await act(async () => {
+          await setup.mockInput.pasteBracketedText(
+            "sleep 60 & printf 'QUIT_JOB:%s\\n' $!",
+          );
+        });
+        await key("RETURN");
+        await frame((text) => /QUIT_JOB:[0-9]+/u.test(text));
+        pid = /QUIT_JOB:([0-9]+)/u.exec(setup.captureCharFrame())?.[1];
+        if (pid === undefined) throw new Error("Quit job identity missing");
+      } catch (cause) {
+        try {
+          await act(async () => {
+            await active?.app.close();
+          });
+          await closeCompletion;
+        } finally {
+          restoreOpening();
+          restoreOpening = undefined;
+        }
+        throw cause;
+      }
     }, 30_000);
 
     afterAll(async () => {
@@ -418,6 +522,7 @@ for (const [width, height] of [
         await closeCompletion;
       } finally {
         restoreOpening?.();
+        restoreOpening = undefined;
       }
     });
 
@@ -447,7 +552,7 @@ for (const [width, height] of [
       });
       expect(closeCompletion).toBeDefined();
       await closeCompletion;
-      const probe = Bun.spawn(["/usr/bin/ps", "-o", "stat=", "-p", pid], {
+      const probe = Bun.spawn(["/bin/ps", "-o", "stat=", "-p", pid], {
         stdout: "pipe",
         stderr: "pipe",
       });
@@ -465,22 +570,21 @@ for (const [width, height] of [
 ] as const) {
   test(`the real conversation composition root guards quit and reports failed inspection (${String(width)}x${String(height)})`, async () => {
     let failInspection = false;
-    const open = paneKit.openLocalTerminal;
-    const opening = spyOn(paneKit, "openLocalTerminal").mockImplementation(
-      async (options) => {
-        const terminal = await open(options);
-        const inspect = terminal.hasRunningJobs.bind(terminal);
-        terminal.hasRunningJobs = () =>
-          failInspection
-            ? Promise.reject(new Error("Job inspection fixture failed"))
-            : inspect();
-        return terminal;
-      },
-    );
-    const { setup, app, frame, key } = await openConversationTerminal(
-      width,
-      height,
-    );
+    const restoreOpening = spyOnSelectedTerminal((terminal) => {
+      const inspect = terminal.hasRunningJobs.bind(terminal);
+      terminal.hasRunningJobs = () =>
+        failInspection
+          ? Promise.reject(new Error("Job inspection fixture failed"))
+          : inspect();
+    });
+    let active: Awaited<ReturnType<typeof openConversationTerminal>>;
+    try {
+      active = await openConversationTerminal(width, height);
+    } catch (cause) {
+      restoreOpening();
+      throw cause;
+    }
+    const { setup, app, frame, key } = active;
     try {
       await act(async () => {
         await setup.mockInput.pasteBracketedText(
@@ -531,10 +635,13 @@ for (const [width, height] of [
       });
       expect(app.destroyed()).toBe(true);
     } finally {
-      await act(async () => {
-        await app.close();
-      });
-      opening.mockRestore();
+      try {
+        await act(async () => {
+          await app.close();
+        });
+      } finally {
+        restoreOpening();
+      }
     }
   });
 }
@@ -542,7 +649,8 @@ for (const [width, height] of [
 test("closing an idle local shell closes at once, without asking to terminate jobs", async () => {
   const { setup, app, frame } = await openConversationTerminal(80, 24);
   try {
-    // Footers carry no key hints, in the terminal pane too.
+    // Programs get the pane, without host titles or persistent key hints.
+    expect(setup.captureCharFrame()).not.toContain("Local machine");
     expect(setup.captureCharFrame()).not.toContain("Ctrl C interrupt");
     expect(setup.captureCharFrame()).not.toContain("pane commands");
     const close = app.commandHost
@@ -552,7 +660,7 @@ test("closing an idle local shell closes at once, without asking to terminate jo
     await act(async () => {
       await app.commandHost.execute(close.commandId, { origin: "menu" });
     });
-    await frame((text) => !text.includes("Local machine"));
+    await frame(() => !terminalFocused(app));
     expect(setup.captureCharFrame()).not.toContain("terminate its jobs");
   } finally {
     await app.close();

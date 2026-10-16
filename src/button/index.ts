@@ -228,6 +228,8 @@ export type PaneKit = Readonly<{
   status: PaneStatus;
   /** Replace this pane’s content in place; preserves its layout and identity. */
   replace: (target: PaneTarget) => Promise<PaneOpenOutcome>;
+  /** Open a target in a new pane beside this one; an open target is focused. */
+  open: (target: PaneTarget) => Promise<PaneOpenOutcome>;
   notify: (notice: PaneNotice) => void;
   sessions: PaneSessions;
   apps?: PaneApps | undefined;
@@ -303,6 +305,7 @@ export function definePaneKind<Target extends PaneTarget>(
 }
 
 export type { TuiPresentation } from "./presentation.js";
+export { applyNativeTerminalDefaults } from "./presentation.js";
 export { reportFailure } from "./log-event.js";
 export { footerLayout, fitFooterCaption } from "./footer-layout.js";
 export { useThemeControls, useTerminalTheme } from "./terminal-theme.js";
@@ -353,6 +356,8 @@ export { terminalText } from "./terminal-text.js";
 
 export { openLocalTerminal } from "./local-terminal.js";
 export type { LocalTerminalFrame } from "./local-terminal.js";
+export { openMacTerminal } from "./local-terminal-mac.js";
+export { EmbeddedTerminalRenderable } from "./native-terminal.js";
 
 export { stringWidth as terminalCellWidth } from "bun";
 export { ToolSigilContext, useToolSigils } from "./tool-sigils.js";

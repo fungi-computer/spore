@@ -26,7 +26,7 @@ await copyFile(
   resolve(output, "bin/fungi-apply-patch"),
 );
 await copyFile(
-  resolve(repository, "runtimes/local/native/apply-patch/LICENSE.codex"),
+  resolve(repository, "packages/cordyceps/native/apply-patch/LICENSE.codex"),
   resolve(output, "LICENSE.codex"),
 );
 await writeCliNotices({ repository, output, nativeBuilds: [build] });
@@ -41,6 +41,7 @@ await writeFile(
       os: [os],
       cpu: [cpu],
       libc: os === "linux" ? ["glibc"] : undefined,
+      bin: { "fungi-apply-patch": "./bin/fungi-apply-patch" },
       exports: { "./bin/fungi-apply-patch": "./bin/fungi-apply-patch" },
       files: [
         "bin/fungi-apply-patch",

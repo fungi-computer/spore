@@ -25,8 +25,8 @@ for (const cpu of ["arm64", "x64"]) {
       for (const file of [
         "apps/tui/scripts/bundle-native.mjs",
         "apps/tui/scripts/package-notices.mjs",
-        "runtimes/local/scripts/native-notices.mjs",
-        "runtimes/local/native/apply-patch/LICENSE.codex",
+        "packages/cordyceps/native/apply-patch/notices.mjs",
+        "packages/cordyceps/native/apply-patch/LICENSE.codex",
       ]) {
         const target = join(root, file);
         await mkdir(dirname(target), { recursive: true });
@@ -74,6 +74,10 @@ for (const cpu of ["arm64", "x64"]) {
       assert.deepEqual(manifest.os, ["darwin"]);
       assert.deepEqual(manifest.cpu, [cpu]);
       assert.equal(manifest.libc, undefined);
+      assert.equal(
+        manifest.bin["fungi-apply-patch"],
+        "./bin/fungi-apply-patch",
+      );
       const resolved = createRequire(manifestPath).resolve(
         `${manifest.name}/bin/fungi-apply-patch`,
       );

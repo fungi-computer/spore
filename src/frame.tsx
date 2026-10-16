@@ -194,7 +194,10 @@ function WorkspaceHost({
 }>) {
   const pickerRequest = useRef<AbortController | undefined>(undefined);
   useEffect(() => () => pickerRequest.current?.abort(), []);
-  const presentation = useTerminalTheme(initial.initialTheme ?? "terminal");
+  const [themeName, setThemeName] = useState(
+    initial.initialTheme ?? "terminal",
+  );
+  const presentation = useTerminalTheme(themeName);
   const current = useRef(entries);
   current.current = entries;
   const [commandHost] = useState(
@@ -216,6 +219,15 @@ function WorkspaceHost({
     retired: new WeakSet<PaneSession>(),
     contexts: new WeakMap<PaneSession, PaneSessionContext>(),
   }));
+  const withThemeConfirmation = (
+    context: PaneSessionContext,
+  ): PaneSessionContext => ({
+    ...context,
+    saveTheme: async (theme) => {
+      await context.saveTheme?.(theme);
+      setThemeName(theme);
+    },
+  });
   const [sessions] = useState(() => ({
     acquire: async (
       target: PaneSessionTarget,
@@ -257,13 +269,13 @@ function WorkspaceHost({
     },
     describe: (session: PaneSession) => {
       const acquired = owned.contexts.get(session);
-      if (acquired !== undefined) return acquired;
+      if (acquired !== undefined) return withThemeConfirmation(acquired);
       const props = current.current.find(
         (entry) => entry.props.session === session,
       )?.props;
       if (props === undefined)
         throw new Error("Session observation was retired");
-      return describe(props);
+      return withThemeConfirmation(describe(props));
     },
   }));
   useEffect(() => {
@@ -445,7 +457,7 @@ function WorkspaceHost({
           sessions={sessions}
           apps={initial.apps}
           additionalKinds={initial.paneKinds}
-          theme={initial.initialTheme ?? "terminal"}
+          theme={themeName}
           exit={() => initial.onExit?.()}
           onRegistry={onRegistry}
           dialog={dialog}

@@ -378,10 +378,10 @@ for these container builds; installed users do not need Docker or Rust.
 After building the workspace, build the native patch engine and bundle:
 
 ```sh
-pnpm --dir runtimes/local build:native
-node runtimes/local/scripts/build-apply-patch.mjs --target darwin-arm64
-node runtimes/local/scripts/build-apply-patch.mjs --target darwin-x64
-node runtimes/local/scripts/build-apply-patch.mjs --target linux-arm64
+pnpm --filter @fungi.computer/local build:native
+for target in darwin-arm64 darwin-x64 linux-arm64; do
+  node packages/cordyceps/native/apply-patch/build.mjs --target "$target" --out ".botanical/native-build/$target/bin"
+done
 pnpm --dir apps/tui bundle:cli
 node apps/tui/scripts/bundle-native.mjs linux-x64
 node apps/tui/scripts/bundle-native.mjs darwin-arm64
@@ -480,8 +480,13 @@ shell in this CLI's working directory: `$SHELL`, else your account's passwd
 shell, else `/bin/sh`, each only when it is an absolute path to an executable.
 It starts as an interactive login shell, so your profile and rc files load. This
 is a shell on your machine, with your user account's filesystem and OS access.
-It is not a Team Computer or a sandbox. The launch implementation is qualified
-on Linux with Bun 1.4.2, `setsid`, `ps` and `pkill`.
+It is not a Team Computer or a sandbox. Linux uses the existing Bun 1.4.2
+`setsid`, `ps` and `pkill` path. On macOS the pane owns an `@opencode-ai/pty`
+0.3.0 daemon and its controlling PTY; the React pane mounts OpenTUI 0.5.10's
+`EmbeddedTerminalRenderable` directly instead of projecting another cell grid.
+The authenticated protocol-7 transport is retained from OpenCode revision
+`165cd2e832574ccdea3b311fe1a0f9db2e5c883e` with its license in
+`src/button/opencode-pty-transport.LICENSE`.
 
 Like any terminal, the shell inherits the environment the TUI was started with,
 including `SSH_AUTH_SOCK` and your PATH, less only the variables Fungi's
@@ -496,21 +501,48 @@ shared pane commands; Ctrl K again opens the command list. **Send Ctrl K to
 shell** sends Ctrl K to a program that needs it. Resizing a pane resizes its
 PTY. Closing a shell with running jobs asks for confirmation and terminates its
 PTY session's jobs; an idle shell closes at once. Exiting the shell leaves its
-final grid and exit status visible. Like every footer, the pane's carries no key
-hints. Programs that deliberately detach into another OS session remain ordinary
-user-owned processes, outside that terminal session. If the TUI is killed with
-SIGKILL (`kill -9`), cleanup cannot run and background jobs can be orphaned.
-Human quit asks when a shell has child jobs, with **Keep shells running**
-selected by default; **Quit and terminate** exits and cleans up the sessions. An
-idle shell does not prompt. SIGTERM, SIGHUP and Team retirement still terminate
-sessions without an interactive confirmation.
+final grid visible with an exit-status overlay. Panes have no host title row;
+terminal programs use every row, without a location header or reserved footer.
+Only a divider between neighbouring panes takes a column. A program's own UI is
+unchanged. Programs that deliberately detach into another OS session remain
+ordinary user-owned processes, outside that terminal session. If the TUI is
+killed with SIGKILL (`kill -9`), cleanup cannot run and background jobs can be
+orphaned. Human quit asks when a shell has child jobs, with **Keep shells
+running** selected by default; **Quit and terminate** exits and cleans up the
+sessions. An idle shell does not prompt. SIGTERM, SIGHUP and Team retirement
+still terminate sessions without an interactive confirmation.
 
-PTY output passes through `@xterm/headless`; only decoded cells reach OpenTUI.
-Terminal title, clipboard and hyperlink programs do not run in the outer
-terminal. The launch pane has no persisted process, scrollback or remote PTY
-connection. Process output and keystrokes are not written to diagnostic logs.
-Paste removes terminal programs and control characters before sending text to
-the child, so pasted text cannot end bracketed paste early or send Ctrl-C.
+On Linux PTY output passes through `@xterm/headless`; only decoded cells reach
+OpenTUI. On macOS raw PTY output goes to the native OpenTUI terminal, while
+Ghostty inside the PTY daemon answers terminal queries. The pane sends native
+input and paste to the PTY but does not send OpenTUI's duplicate query
+responses. Terminal title, clipboard and hyperlink programs do not run in the
+outer terminal. The launch pane has no persisted process, scrollback or remote
+PTY connection. Closing it shuts down the daemon rather than detaching or
+handing it off. Process output and keystrokes are not written to diagnostic
+logs. Linux paste uses `terminalText`; macOS uses OpenTUI's native paste
+encoder. Both remove terminal programs and control characters before sending
+text to the child, so pasted text cannot end bracketed paste early or send
+Ctrl-C. An input larger than the Mac PTY's bounded pending capacity is refused
+with a pane notice; it does not silently terminate a healthy program.
+
+The Mac-native check in `test/local-mac-pty.test.ts` exercises controlling
+`/dev/tty`, display, paste, resize, a background job, close and queued-input
+teardown. `test/fairy-ring-program-mac.test.tsx` installs a frozen extension
+fixture and opens its real launcher through **Open pane**, with only the
+underlying `fairy-ring` executable replaced by a synthetic shell. Given an exact
+frozen Rust binary and matching extension source, it runs the same install →
+Open → PaneKit path against the actual read-only dashboard, a synthetic Claude
+sign-in file and a rejecting/shadowed `fungi account --json` executable:
+
+```sh
+FAIRY_RING_BIN=/path/to/fairy-ring \
+  FAIRY_RING_EXTENSION=/path/to/fungi-extension \
+  pnpm --dir apps/tui run test:unit -- ./test/fairy-ring-program-mac.test.tsx
+```
+
+The joined proof creates its own HOME, file-only synthetic account and shadow
+`fungi` executable; it neither reads live accounts nor installs a program.
 
 ## Update the installed local CLI
 

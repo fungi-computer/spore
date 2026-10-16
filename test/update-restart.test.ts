@@ -1,5 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
-import { chmod, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdtemp,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { installedUpdateRestart } from "../src/update-restart.js";
@@ -11,7 +18,10 @@ afterEach(async () => {
   );
 });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "fungi-update-restart-"));
+  // Match the running launcher's canonical path, including macOS /private/tmp.
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "fungi-update-restart-")),
+  );
   roots.push(root);
   const old = join(root, "old");
   const next = join(root, "next");

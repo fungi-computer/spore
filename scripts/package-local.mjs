@@ -12,7 +12,7 @@ import {
 import { constants } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { createRequire } from "node:module";
-import { fileURLToPath, URL } from "node:url";
+import { fileURLToPath, pathToFileURL, URL } from "node:url";
 import process from "node:process";
 import { expectFileAccess, isMissingFileError } from "./file-probe.mjs";
 
@@ -83,10 +83,24 @@ await expectFileAccess(
 );
 // computerd runs under the user's Node for `fungi computer attach`; the
 // deployed bundle, a dependency of Local, is self-contained and native-free.
+// pnpm links Local's dependencies beside its real directory, not the symlink.
 const computerdInstalled = createRequire(
-  resolve(destination, "node_modules/@fungi.computer/local/package.json"),
+  await realpath(
+    resolve(destination, "node_modules/@fungi.computer/local/package.json"),
+  ),
 ).resolve("@fungi.computer/cordyceps/cli");
 await access(computerdInstalled, constants.R_OK);
+let ptyBinary;
+if (process.platform === "darwin") {
+  const ptyBinding = resolve(
+    destination,
+    "node_modules/@opencode-ai/pty/index.js",
+  );
+  ({ binaryPath: ptyBinary } = await import(pathToFileURL(ptyBinding).href));
+  if (ptyBinary === undefined)
+    throw new Error("Deployed fungi has no Mac PTY binary");
+  await access(ptyBinary, constants.X_OK);
+}
 const bunInstalled = resolve(destination, ".runtime/bun");
 await mkdir(dirname(bunInstalled), { recursive: true });
 await copyFile(bunSource, bunInstalled);
@@ -96,16 +110,12 @@ const sha256 = async (path) =>
   createHash("sha256")
     .update(await readFile(path))
     .digest("hex");
-console.log(
-  JSON.stringify(
-    {
-      destination,
-      nativePatchSha256: await sha256(nativeInstalled),
-      bunSha256: await sha256(bunInstalled),
-      cliSha256: await sha256(resolve(destination, "dist/cli.js")),
-      computerdSha256: await sha256(computerdInstalled),
-    },
-    undefined,
-    2,
-  ),
-);
+const evidence = {
+  destination,
+  nativePatchSha256: await sha256(nativeInstalled),
+  bunSha256: await sha256(bunInstalled),
+  cliSha256: await sha256(resolve(destination, "dist/cli.js")),
+  computerdSha256: await sha256(computerdInstalled),
+};
+if (ptyBinary !== undefined) evidence.ptySha256 = await sha256(ptyBinary);
+console.log(JSON.stringify(evidence, undefined, 2));

@@ -130,6 +130,7 @@ function fakeKit() {
       replaced.push(target);
       return Promise.resolve({ kind: "opened", paneId: "probe-1" });
     },
+    open: () => Promise.reject(new Error("not used by the probe")),
     notify: () => undefined,
     sessions: {
       acquire: () => Promise.reject(new Error("not used by the probe")),
@@ -150,6 +151,7 @@ function fakeKit() {
           error: colors,
         },
         true,
+        { foreground: colors, background: colors },
       ),
     ).store,
     signal: abort.signal,

@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { z } from "zod";
 
 const sourceBinary = resolve(
   process.argv[2] ?? "../../.botanical/dist/fungi/fungi-linux-x64",
@@ -62,11 +63,24 @@ try {
     await new Promise((resolveClose) => server.close(resolveClose));
   }
   const version = run(["--version"]);
-  assert.match(version, /fungi 0\.1\.0/u);
+  const builds = await readdir(join(root, ".fungi/runtime"));
+  assert.equal(builds.length, 1, "The binary extracts one runtime");
+  // Qualify the supplied artifact, not an unrelated local bundler output.
+  const manifest = z
+    .object({ name: z.literal("@fungi.computer/cli"), version: z.string() })
+    .parse(
+      JSON.parse(
+        await readFile(
+          join(root, ".fungi/runtime", builds[0], "package.json"),
+          "utf8",
+        ),
+      ),
+    );
+  assert.equal(version.trim(), `fungi ${manifest.version}`);
   console.log("$ fungi --version\n" + version);
   assert.match(run([]), /Welcome to fungi/u);
   const firstRun = run(["--yes"]);
-  assert.match(firstRun, /Local-only is ready/u);
+  assert.match(firstRun, /Welcome to fungi\. Sign in to Fungi to use models/u);
   console.log("$ fungi --yes\n" + firstRun);
   const setup = JSON.parse(
     await readFile(join(root, ".fungi/onboarding.json"), "utf8"),
@@ -80,10 +94,9 @@ try {
     `${record.baseUrl}/service/${record.serviceId}/status`,
   );
   assert.equal(status.status, 200);
-  const builds = await readdir(join(root, ".fungi/runtime"));
-  assert.equal(
-    builds.length,
-    1,
+  assert.deepEqual(
+    await readdir(join(root, ".fungi/runtime")),
+    builds,
     "Concurrent/repeated launches share one extracted runtime",
   );
   const node = join(root, ".fungi/runtime", builds[0], "native/bin/node");

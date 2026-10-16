@@ -105,8 +105,18 @@ test("the footer shows compacting live with a real window, then the divider's pl
     await session.send("One more short thing to check.", {
       requestId: "capture-history-recent",
     });
-    await host.settle(sessionId);
-    await act(async () => setup.renderOnce());
+    const settledBefore = await host.settle(sessionId);
+    expect(settledBefore.activity.queue.state).toBe("idle");
+    // Host settlement is not acknowledgement by the streamed Query/React
+    // projection. Observe its idle footer before capturing, just as we observe
+    // the later compacting state; one render can still show "queued for host".
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        await setup.renderOnce();
+      });
+      if (footerRow(setup.captureCharFrame(), "idle") !== undefined) break;
+    }
     await captureFrame(setup, output, "compaction-capture-idle");
     const idleFrame = setup.captureCharFrame();
     const idleRow = footerRow(idleFrame, "idle");

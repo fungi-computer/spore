@@ -784,6 +784,23 @@ function stacksOnNext(
   );
 }
 
+/** Pending delivery is presentation-only; confirmed history keeps its theme. */
+function userMessageAppearance(
+  item: Extract<ParakeetTimelineItem, { kind: "user_message" }>,
+  presentation: TuiPresentation,
+) {
+  const pending = ["pending", "accepted", "queued"].includes(item.status);
+  const cue = pending && item.delivery === "followUp";
+  return {
+    cue,
+    foreground: pending
+      ? cue
+        ? presentation.dimForeground
+        : presentation.colors.accent
+      : presentation.colors.foreground,
+  };
+}
+
 function TimelineRowView({
   item,
   disclosure,
@@ -839,6 +856,7 @@ function TimelineRowView({
       />
     );
   if (item.kind === "user_message") {
+    const { cue, foreground } = userMessageAppearance(item, presentation);
     if (!userBlock(item, notePromptOwners))
       return (
         <box
@@ -877,30 +895,19 @@ function TimelineRowView({
           marginLeft={sigilGutterTotalWidth}
           flexGrow={1}
           flexShrink={1}
-          fg={
-            item.status === "queued"
-              ? presentation.dimForeground
-              : colors.foreground
-          }
+          fg={foreground}
           attributes={item.status === "confirmed" ? 1 : 2}
+          {...(cue ? { wrapMode: "none" as const } : {})}
           selectionBg={colors.selection}
           selectionFg={colors.selectionForeground}
         >
-          {terminalText(item.text)}
+          {cue
+            ? fitFooterCaption(
+                terminalText(item.text),
+                Math.max(0, terminalWidth - 2 * inset - sigilGutterTotalWidth),
+              )
+            : terminalText(item.text)}
         </text>
-        {item.status === "queued" ? (
-          <text
-            fg={presentation.dimForeground}
-            attributes={2}
-            width={6}
-            height={1}
-            flexShrink={0}
-            wrapMode="none"
-            marginLeft={1}
-          >
-            queued
-          </text>
-        ) : null}
       </box>
     );
   }

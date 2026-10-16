@@ -736,6 +736,17 @@ function TuiFrameConversation({
               compactWidth={width - 2 * inset}
               expandedRowId={selected?.id}
               focusedRowId={showingAttention ? selected?.id : undefined}
+              onOpen={
+                onOpen === undefined
+                  ? undefined
+                  : (target) => {
+                      void Promise.resolve(onOpen(target)).catch(
+                        (cause: unknown) => {
+                          reportFailure("client-row-open", cause);
+                        },
+                      );
+                    }
+              }
             />
           );
         })}

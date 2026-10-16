@@ -37,8 +37,11 @@ export function TerminalClientRows({
   compactWidth,
   focusedRowId,
   expandedRowId,
+  onOpen,
 }: Readonly<{
   id?: string;
+  /** A click on a row with an open target opens it, as Row actions → Open does. */
+  onOpen?: ((target: NonNullable<RowV1["open"]>) => void) | undefined;
   compactWidth?: number;
   focusedRowId?: string | undefined;
   expandedRowId?: string | undefined;
@@ -52,7 +55,17 @@ export function TerminalClientRows({
       marginX={1}
     >
       {rows.map((row) => (
-        <box key={row.id} flexDirection="column">
+        <box
+          key={row.id}
+          flexDirection="column"
+          {...(row.open === undefined || onOpen === undefined
+            ? {}
+            : {
+                onMouseDown: () => {
+                  if (row.open !== undefined) onOpen(row.open);
+                },
+              })}
+        >
           <text
             {...(compactWidth === undefined || row.id === expandedRowId
               ? {}

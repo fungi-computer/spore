@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { test, expect } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { copyUpdateStores } from "../src/update-proof.js";
@@ -21,17 +21,24 @@ test("copied-store proof includes committed WAL data and ignores folders without
     const result = await copyUpdateStores(source, copy);
     expect(result.baseline.get("botanical-session-goal")).toBe(4);
     expect(result.copied).toHaveLength(1);
-    const copied = new Database(
-      join(copy, ".fungi/agents/saved/agent.sqlite"),
-      { readonly: true },
-    );
+    const copiedDirectory = join(copy, ".fungi/agents/saved");
+    const copiedPath = join(copiedDirectory, "agent.sqlite");
+    expect((await stat(copiedDirectory)).mode & 0o777).toBe(0o700);
+    expect((await stat(copiedPath)).mode & 0o777).toBe(0o600);
+    const copied = new Database(copiedPath, { readonly: true });
     try {
+      expect(copied.query("PRAGMA journal_mode").get()).toEqual({
+        journal_mode: "delete",
+      });
       expect(copied.query("SELECT id FROM sessions").get()).toEqual({
         id: "saved-session",
       });
     } finally {
       copied.close();
     }
+    expect(database.query("PRAGMA journal_mode").get()).toEqual({
+      journal_mode: "wal",
+    });
     expect(database.query("SELECT id FROM sessions").get()).toEqual({
       id: "saved-session",
     });

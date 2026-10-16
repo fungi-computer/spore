@@ -47,7 +47,7 @@ await copyFile(
   resolve(output, "computerd-loopback.cjs"),
 );
 await copyFile(
-  resolve(repository, "runtimes/local/native/apply-patch/LICENSE.codex"),
+  resolve(repository, "packages/cordyceps/native/apply-patch/LICENSE.codex"),
   resolve(output, "native/apply-patch/LICENSE.codex"),
 );
 await copyFile(resolve(root, "npm/README.md"), resolve(output, "README.md"));
@@ -87,6 +87,7 @@ await writeFile(
       dependencies: {
         miniflare: "5.20260828.0-alpha",
         "@opentui/core": "0.5.10",
+        "@opencode-ai/pty": "0.3.0",
       },
       optionalDependencies: {
         "@fungi.computer/cli-native-linux-x64": "0.0.1",

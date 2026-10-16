@@ -61,7 +61,7 @@ export const conversationPane: PaneKindEntry = {
           name === undefined || name.length === 0 ? "Agent" : name;
         const untitled = `${agentName} · New conversation`;
         kit.setTitle(title ?? untitled);
-        // The pane header follows the owner's title: the user's, else the
+        // The pane's metadata follows the owner's title: the user's, else the
         // first prompt's. A bounded owner read restores it after /name clears.
         const ownerTitle = async () => {
           const read = await details?.sessionTitle?.(kit.signal);
@@ -133,9 +133,10 @@ export const conversationPane: PaneKindEntry = {
                           throw new Error(outcome.reason);
                       })
                 : (sessionId) => forked(sessionId, kit.paneId),
+            // A row's conversation opens beside this one, never over it.
             onOpen: (open) =>
               kit
-                .replace({
+                .open({
                   kind: "conversation",
                   ...conversationNavigation(open),
                 })

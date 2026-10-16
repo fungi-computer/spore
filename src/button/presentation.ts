@@ -1,4 +1,8 @@
-import { RGBA, SyntaxStyle } from "@opentui/core";
+import {
+  RGBA,
+  SyntaxStyle,
+  type EmbeddedTerminalRenderable,
+} from "@opentui/core";
 import { format } from "prettier/standalone";
 import * as typescript from "prettier/plugins/typescript";
 import * as estree from "prettier/plugins/estree";
@@ -22,7 +26,42 @@ export type ThemeColors = Readonly<
 
 export type TuiPresentation = ReturnType<typeof createPresentation>;
 
-export function createPresentation(colors: ThemeColors, terminal: boolean) {
+/** Keep missing outer palette values explicit until the native boundary. */
+export type NativeTerminalDefaults = Readonly<{
+  foreground: RGBA | undefined;
+  background: RGBA | undefined;
+}>;
+
+function nativeDefaultColor(slot: 10 | 11, value: RGBA | undefined): string {
+  // These maintained fallbacks restore OpenTUI's native defaults; they do not
+  // claim to be the outer terminal's colors when its palette was unavailable.
+  const color =
+    value ??
+    (slot === 10 ? RGBA.defaultForeground() : RGBA.defaultBackground());
+  const [red, green, blue] = color.toInts();
+  const hex = [red, green, blue]
+    .map((channel) => channel.toString(16).padStart(2, "0"))
+    .join("");
+  return `\x1b]${String(slot)};#${hex}\x07`;
+}
+
+/** Set only the embedded terminal's native defaults, then redraw stored cells. */
+export function applyNativeTerminalDefaults(
+  terminal: Pick<EmbeddedTerminalRenderable, "write" | "invalidate">,
+  defaults: NativeTerminalDefaults,
+): void {
+  terminal.write(
+    nativeDefaultColor(10, defaults.foreground) +
+      nativeDefaultColor(11, defaults.background),
+  );
+  terminal.invalidate();
+}
+
+export function createPresentation(
+  colors: ThemeColors,
+  terminal: boolean,
+  nativeDefaults: NativeTerminalDefaults,
+) {
   // Alpha is resolved against the current terminal snapshot by the renderer.
   const surface = RGBA.clone(colors.surface);
   surface.a = terminal ? 0.08 : 0.25;
@@ -47,7 +86,7 @@ export function createPresentation(colors: ThemeColors, terminal: boolean) {
     type: { fg: colors.warning },
     operator: { fg: colors.accent },
   });
-  return { colors, surface, syntax, dimForeground };
+  return { colors, surface, syntax, dimForeground, nativeDefaults };
 }
 
 export type ToolCodeDisplay =

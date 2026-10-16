@@ -104,8 +104,9 @@ function createPaletteOwner(renderer: ReturnType<typeof useRenderer>) {
   const mode = (value: "dark" | "light" | null) => {
     publish({ ...snapshot, mode: value });
   };
-  const refresh = () => {
-    requested = true;
+  let scheduled = false;
+  const query = () => {
+    scheduled = false;
     renderer.clearPaletteCache();
     void renderer.getPalette({ size: 16 }).then(update, () => {
       publish({
@@ -113,6 +114,14 @@ function createPaletteOwner(renderer: ReturnType<typeof useRenderer>) {
         error: "Terminal palette unavailable; using terminal color defaults.",
       });
     });
+  };
+  // Every pane workspace observing the same theme change asks in one commit;
+  // the terminal is queried once for all of them.
+  const refresh = () => {
+    requested = true;
+    if (scheduled) return;
+    scheduled = true;
+    queueMicrotask(query);
   };
   return {
     read: () => snapshot,
@@ -159,14 +168,28 @@ export function useTerminalTheme(theme: ThemeName) {
     }
     previousTheme.current = theme;
   }, [theme, ensure, refresh]);
-  const presentation = useMemo(
-    () =>
-      createPresentation(
-        resolveColors(theme, palette, mode),
-        theme === "terminal",
-      ),
-    [theme, palette, mode],
-  );
+  const presentation = useMemo(() => {
+    const colors = resolveColors(theme, palette, mode);
+    const nativeDefaults =
+      theme === "terminal"
+        ? {
+            foreground:
+              palette?.defaultForeground === null ||
+              palette?.defaultForeground === undefined
+                ? undefined
+                : colors.foreground,
+            background:
+              palette?.defaultBackground === null ||
+              palette?.defaultBackground === undefined
+                ? undefined
+                : colors.background,
+          }
+        : {
+            foreground: colors.foreground,
+            background: colors.background,
+          };
+    return createPresentation(colors, theme === "terminal", nativeDefaults);
+  }, [theme, palette, mode]);
   useEffect(
     () => () => {
       presentation.syntax.destroy();

@@ -50,6 +50,7 @@ function workspace(
       error: color,
     },
     true,
+    { foreground: color, background: color },
   );
   const kits = new Map<string, PaneKit>();
   const received: string[] = [];
@@ -154,6 +155,44 @@ function workspace(
     },
   };
 }
+
+test("pane viewports use every row and reserve only a visible divider column", async () => {
+  const host = workspace();
+  try {
+    await host.registry.open({ kind: "fixture", name: "alpha" });
+    expect(host.kits.get("alpha")?.viewport.read()).toEqual({
+      width: 160,
+      height: 48,
+    });
+    const beta = await host.registry.open({ kind: "fixture", name: "beta" });
+    if (beta.kind === "refused") throw new Error(beta.reason);
+    const checkTiled = () => {
+      for (const pane of host.registry.read()) {
+        expect(host.kits.get(pane.title)?.viewport.read()).toEqual({
+          width:
+            pane.frame.width - (pane.frame.x + pane.frame.width < 160 ? 1 : 0),
+          height: pane.frame.height,
+        });
+      }
+    };
+    checkTiled();
+    host.registry.toggleZoom(beta.paneId);
+    expect(host.kits.get("beta")?.viewport.read()).toEqual({
+      width: 160,
+      height: 48,
+    });
+    host.registry.toggleZoom(beta.paneId);
+    host.registry.split("y");
+    checkTiled();
+    await host.registry.close(beta.paneId);
+    expect(host.kits.get("alpha")?.viewport.read()).toEqual({
+      width: 160,
+      height: 48,
+    });
+  } finally {
+    await host.dispose();
+  }
+});
 
 test("same-kind panes coexist, focus input exclusively and close independently", async () => {
   const host = workspace();

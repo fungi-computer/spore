@@ -137,7 +137,7 @@ for (const [width, height] of [
         (node) => node instanceof ScrollBoxRenderable,
       );
       expect(viewports).toHaveLength(2);
-      for (const viewport of viewports) expect(viewport.viewport.y).toBe(2);
+      for (const viewport of viewports) expect(viewport.viewport.y).toBe(1);
       const emptyViewport = viewports.find(
         (viewport) => viewport.x >= secondPane.frame.x,
       );
@@ -337,7 +337,7 @@ test("real pane keymap cancels only the focused conversation", async () => {
   }
 });
 
-test("the native shell renders only bounded plain titles, status and notices", async () => {
+test("the native shell omits pane chrome and bounds visible notices and metadata", async () => {
   const commands = createWhistle();
   const { createAppSurfaceCommandHost } =
     await import("@fungi.computer/oyster/shell/command-host");
@@ -396,7 +396,14 @@ test("the native shell renders only bounded plain titles, status and notices", a
       setup.captureCharFrame().includes("Notice"),
     );
     const text = setup.captureCharFrame();
-    expect(text).toContain("Title");
+    expect(text.startsWith("Ready")).toBe(true);
+    expect(text).not.toContain("Title");
+    expect(text).not.toContain("Status");
+    expect(panes.read().map((pane) => pane.title)).toEqual(["Title", "Title"]);
+    expect(panes.read().map((pane) => pane.status[0]?.text)).toEqual([
+      "Status",
+      "Status",
+    ]);
     expect(text).not.toContain("[2J");
     expect(text).toContain("Notice");
     expect(text).not.toContain("]0;unsafe");

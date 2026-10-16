@@ -1,0 +1,4 @@
+#!/bin/sh
+# The program pane runs the same dashboard as the terminal. The pane's
+# environment keeps PATH and HOME, so the core is found the usual way.
+exec fairy-ring tui --read-only

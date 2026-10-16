@@ -62,12 +62,14 @@ export function PaneWorkspace(props: PaneWorkspaceProps) {
       surface: presentation.surface,
       syntax: presentation.syntax,
       dimForeground: presentation.dimForeground,
+      nativeDefaults: presentation.nativeDefaults,
     }),
     [
       presentation.colors,
       presentation.surface,
       presentation.syntax,
       presentation.dimForeground,
+      presentation.nativeDefaults,
     ],
   );
   const [notice, setNotice] = useState<PaneNotice>();
@@ -198,16 +200,6 @@ export function PaneWorkspace(props: PaneWorkspaceProps) {
               registry.focus(pane.paneId);
             }}
           >
-            {multiple ? (
-              <text
-                height={1}
-                fg={
-                  pane.focused ? chrome.colors.accent : chrome.colors.foreground
-                }
-              >
-                {`${pane.focused ? "▸ " : "  "}${pane.title}${pane.zoomed ? " · zoomed" : ""}`}
-              </text>
-            ) : null}
             {pane.state === "loading" ? (
               <Placeholder
                 state="loading"

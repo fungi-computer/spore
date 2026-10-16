@@ -4,6 +4,7 @@ import questionClient from "@fungi.computer/shiitake-extensions/question/client"
 import goalClient from "@fungi.computer/shiitake-extensions/goal/client";
 import loopClient from "@fungi.computer/shiitake-extensions/loop/client";
 import planClient from "@fungi.computer/shiitake-extensions/plan/client";
+import subagentsClient from "@fungi.computer/shiitake-extensions/subagents/client";
 import corralClient from "@fungi.computer/corral";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
@@ -81,6 +82,7 @@ const sessionClients = [
   planClient,
   corralClient,
   questionClient,
+  subagentsClient,
 ];
 
 if (process.env.FUNGI_BUNDLED_CLI !== undefined)

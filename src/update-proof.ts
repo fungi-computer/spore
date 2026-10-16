@@ -71,6 +71,18 @@ export async function copyUpdateStores(project: string, destination: string) {
     } finally {
       database.close();
     }
+    // A serialized WAL image has committed content but no WAL/SHM companions.
+    // Normalize only this private copy before opening it read-only.
+    const snapshot = new Database(target);
+    try {
+      const mode = snapshot
+        .query<{ journal_mode: string }, []>("PRAGMA journal_mode=DELETE")
+        .get();
+      if (mode?.journal_mode !== "delete")
+        throw new Error("Copied Agent store could not leave WAL mode");
+    } finally {
+      snapshot.close();
+    }
     for (const [id, version] of readStoreVersions(target))
       baseline.set(id, Math.max(baseline.get(id) ?? 0, version));
     copied.push(target);

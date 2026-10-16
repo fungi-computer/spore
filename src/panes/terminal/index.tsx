@@ -3,6 +3,7 @@ import {
   useEffect,
   useState,
   useSyncExternalStore,
+  useRef,
 } from "react";
 import {
   PaneProvider,
@@ -12,8 +13,11 @@ import {
   defineIdFamily,
   z,
   openLocalTerminal,
-  terminalText,
+  openMacTerminal,
+  EmbeddedTerminalRenderable,
+  applyNativeTerminalDefaults,
   reportFailure,
+  type PaneKit,
   type LocalTerminalFrame,
   type PaneKindEntry,
 } from "../../button/index.js";
@@ -26,6 +30,95 @@ const openings = defineIdFamily({
   kinds: { request: { prefix: "terminal_open" } },
 });
 const human = new Set(["keyboard", "menu", "palette", "slash"]);
+
+function contributeTerminalCommands(
+  kit: PaneKit,
+  send: (text: string) => void,
+) {
+  const humanInput = (origin: string, text: string) => {
+    if (!human.has(origin))
+      throw new WhistleActionError(
+        "human_required",
+        "Only local keyboard input can control this terminal",
+      );
+    send(text);
+  };
+  return kit.commands.contribute([
+    {
+      id: "interrupt",
+      title: "Interrupt local process",
+      category: "Advanced",
+      projections: { bindings: { values: ["ctrl+c"], order: -1 } },
+      handler: ({ origin }) => {
+        humanInput(origin, "\x03");
+      },
+    },
+    {
+      id: "literal-leader",
+      title: "Send Ctrl K to shell",
+      category: "Advanced",
+      projections: { palette: { order: 0 } },
+      handler: ({ origin }) => {
+        humanInput(origin, "\x0b");
+      },
+    },
+  ]);
+}
+
+function confirmTerminalTermination(
+  kit: PaneKit,
+  colors: ReturnType<PaneKit["theme"]["read"]>["colors"],
+  quitting: boolean,
+  accept: () => Promise<boolean>,
+) {
+  return new Promise<boolean>((resolve) => {
+    let answered = false;
+    kit.dialogs.show(
+      (handle) => (
+        <Picker
+          title={
+            quitting
+              ? "Quit and terminate running shell jobs?"
+              : "Close local shell and terminate its jobs?"
+          }
+          colors={colors}
+          choices={[
+            {
+              name: quitting ? "Keep shells running" : "Keep local shell open",
+            },
+            { name: quitting ? "Quit and terminate" : "Terminate and close" },
+          ]}
+          onCancel={handle.dismiss}
+          onSelect={(index) => {
+            if (answered) return;
+            answered = true;
+            if (index !== 1) {
+              resolve(false);
+              handle.dismiss();
+              return;
+            }
+            void accept().then(
+              (allowed) => {
+                resolve(allowed);
+                handle.dismiss();
+              },
+              (cause: unknown) => {
+                reportFailure("local-terminal-confirm", cause);
+                resolve(false);
+                handle.dismiss();
+              },
+            );
+          }}
+        />
+      ),
+      {
+        onDismiss: () => {
+          if (!answered) resolve(false);
+        },
+      },
+    );
+  });
+}
 
 function TerminalPane({
   terminal,
@@ -60,42 +153,15 @@ function TerminalPane({
   useEffect(() => {
     const resize = () => {
       const viewport = kit.viewport.read();
-      terminal.resize(viewport.width, Math.max(1, viewport.height - 2));
+      terminal.resize(viewport.width, viewport.height);
     };
     resize();
     return kit.viewport.subscribe(resize);
   }, [kit, terminal]);
   useEffect(() => {
-    const lease = kit.commands.contribute([
-      {
-        id: "interrupt",
-        title: "Interrupt local process",
-        category: "Advanced",
-        projections: { bindings: { values: ["ctrl+c"], order: -1 } },
-        handler: ({ origin }) => {
-          if (!human.has(origin))
-            throw new WhistleActionError(
-              "human_required",
-              "Only local keyboard input can control this terminal",
-            );
-          terminal.write("\x03");
-        },
-      },
-      {
-        id: "literal-leader",
-        title: "Send Ctrl K to shell",
-        category: "Advanced",
-        projections: { palette: { order: 0 } },
-        handler: ({ origin }) => {
-          if (!human.has(origin))
-            throw new WhistleActionError(
-              "human_required",
-              "Only local keyboard input can control this terminal",
-            );
-          terminal.write("\x0b");
-        },
-      },
-    ]);
+    const lease = contributeTerminalCommands(kit, (text) => {
+      terminal.write(text);
+    });
     const keys = kit.input.onKey((key) => {
       if (key.eventType === "release") return true;
       if (key.source === "raw") terminal.write(key.raw);
@@ -129,68 +195,21 @@ function TerminalPane({
     const paste = kit.input.onPaste((event) => {
       terminal.paste(new TextDecoder().decode(event.bytes));
     });
-    const confirm = (quitting: boolean) => {
-      return new Promise<boolean>((resolve) => {
-        let answered = false;
-        kit.dialogs.show(
-          (handle) => (
-            <Picker
-              title={
-                quitting
-                  ? "Quit and terminate running shell jobs?"
-                  : "Close local shell and terminate its jobs?"
-              }
-              colors={colors}
-              choices={[
-                {
-                  name: quitting
-                    ? "Keep shells running"
-                    : "Keep local shell open",
-                },
-                {
-                  name: quitting ? "Quit and terminate" : "Terminate and close",
-                },
-              ]}
-              onCancel={handle.dismiss}
-              onSelect={(index) => {
-                if (answered) return;
-                answered = true;
-                if (index !== 1) {
-                  resolve(false);
-                  handle.dismiss();
-                  return;
-                }
-                if (quitting) {
-                  resolve(true);
-                  handle.dismiss();
-                  return;
-                }
-                void terminal.close().then(
-                  () => {
-                    resolve(true);
-                    handle.dismiss();
-                  },
-                  (cause: unknown) => {
-                    kit.notify({
-                      tone: "error",
-                      message: "The local shell could not be closed cleanly",
-                    });
-                    resolve(false);
-                    handle.dismiss();
-                    return reportFailure("local-terminal-confirm-close", cause);
-                  },
-                );
-              }}
-            />
-          ),
-          {
-            onDismiss: () => {
-              if (!answered) resolve(false);
-            },
-          },
-        );
+    const confirm = (quitting: boolean) =>
+      confirmTerminalTermination(kit, colors, quitting, async () => {
+        if (quitting) return true;
+        try {
+          await terminal.close();
+          return true;
+        } catch (cause) {
+          kit.notify({
+            tone: "error",
+            message: "The local shell could not be closed cleanly",
+          });
+          reportFailure("local-terminal-confirm-close", cause);
+          return false;
+        }
       });
-    };
     // An idle shell closes at once; only running jobs ask first.
     const guard = kit.guardClose(() =>
       admitTerminalTermination(
@@ -215,10 +234,7 @@ function TerminalPane({
     };
   }, [kit, terminal, colors]);
   return (
-    <box flexDirection="column" width="100%" height="100%">
-      <text height={1} fg={colors.info}>
-        Local machine · {terminalText(frame.cwd)}
-      </text>
+    <box flexDirection="column" width="100%" height="100%" position="relative">
       <box flexGrow={1} overflow="hidden">
         {frame.rows.map((row, y) => (
           <text key={y} height={1} wrapMode="none">
@@ -250,10 +266,184 @@ function TerminalPane({
           </text>
         ))}
       </box>
-      {/* Footers carry no key hints; this row reports only a finished shell. */}
-      <text height={1} fg={colors.warning}>
-        {frame.live ? "" : `${label} exited (${String(frame.exitCode ?? 0)})`}
-      </text>
+      {!frame.live ? (
+        <TerminalExit label={label} exitCode={frame.exitCode} />
+      ) : null}
+    </box>
+  );
+}
+
+/** An ended program gets an overlay, never a reserved row in a live PTY. */
+function TerminalExit({
+  label,
+  exitCode,
+  failure,
+}: Readonly<{
+  label: string;
+  exitCode: number | undefined;
+  failure?: string | undefined;
+}>) {
+  const kit = usePaneKit();
+  const colors = useSyncExternalStore(
+    kit.theme.subscribe,
+    kit.theme.read,
+  ).colors;
+  return (
+    <text
+      position="absolute"
+      bottom={0}
+      left={0}
+      height={1}
+      fg={colors.warning}
+      bg={colors.background}
+    >
+      {failure !== undefined
+        ? `${label} connection lost: ${failure}`
+        : exitCode === undefined
+          ? `${label} ended without a known exit status`
+          : `${label} exited (${String(exitCode)})`}
+    </text>
+  );
+}
+
+function MacTerminalPane({
+  terminal,
+  label,
+}: Readonly<{
+  terminal: Awaited<ReturnType<typeof openMacTerminal>>;
+  label: string;
+}>) {
+  const kit = usePaneKit();
+  const focused = usePaneFocused();
+  const [live, setLive] = useState(terminal.live);
+  const [exitCode, setExitCode] = useState(terminal.exitCode);
+  const [failure, setFailure] = useState(terminal.failure);
+  const native = useRef<EmbeddedTerminalRenderable>(null);
+  const presentation = useSyncExternalStore(
+    kit.theme.subscribe,
+    kit.theme.read,
+  );
+  const { colors, nativeDefaults } = presentation;
+  useEffect(
+    () =>
+      terminal.subscribe(() => {
+        setLive(terminal.live);
+        setExitCode(terminal.exitCode);
+        setFailure(terminal.failure);
+      }),
+    [terminal],
+  );
+  useEffect(() => {
+    const renderable = native.current;
+    if (renderable === null) return;
+    applyNativeTerminalDefaults(renderable, nativeDefaults);
+  }, [nativeDefaults]);
+  useEffect(() => {
+    const attach = () => {
+      if (!native.current) return;
+      return terminal.onBytes((data) => native.current?.write(data));
+    };
+    return attach();
+  }, [terminal]);
+  useEffect(() => {
+    const item = kit.status.contribute({
+      slot: "state",
+      order: 0,
+      text: `${label} · ${terminal.cwd}`,
+      tone: "info",
+    });
+    return item.dispose;
+  }, [kit, terminal, label]);
+  useEffect(() => {
+    const keys = kit.input.onKey((key) => {
+      if (key.eventType === "release") return true;
+      native.current?.handleKeyPress(key);
+      return true;
+    });
+    const paste = kit.input.onPaste((event) => {
+      native.current?.handlePaste(event);
+    });
+    const lease = contributeTerminalCommands(kit, (text) => {
+      if (!terminal.input(new TextEncoder().encode(text)))
+        kit.notify({
+          tone: "error",
+          message: "Local terminal input was not sent",
+        });
+    });
+    const confirm = (quitting: boolean) =>
+      confirmTerminalTermination(kit, colors, quitting, () =>
+        Promise.resolve(true),
+      );
+    const guardedClose = async () => {
+      const admitted = await admitTerminalTermination(
+        () => terminal.hasRunningJobs(),
+        () => confirm(false),
+        kit.notify,
+      );
+      if (!admitted) return false;
+      try {
+        await terminal.close();
+        return true;
+      } catch (cause) {
+        kit.notify({
+          tone: "error",
+          message: "The local shell could not be closed cleanly",
+        });
+        reportFailure("mac-terminal-guard-close", cause);
+        return false;
+      }
+    };
+    const guard = kit.guardClose(guardedClose);
+    // A later pane can still veto global quit. Only accepted workspace
+    // disposal terminates this PTY; admission cannot kill it early.
+    const quit = kit.guardQuit(() =>
+      admitTerminalTermination(
+        () => terminal.hasRunningJobs(),
+        () => confirm(true),
+        kit.notify,
+      ),
+    );
+    return () => {
+      keys();
+      paste();
+      lease.dispose();
+      guard();
+      quit();
+    };
+  }, [kit, terminal, colors]);
+  // PaneKit, not the renderer's global focused renderable, exclusively routes
+  // keyboard/paste. Focusing the native cell would install a competing listener.
+  return (
+    <box flexDirection="column" width="100%" height="100%" position="relative">
+      <box flexGrow={1} overflow="hidden">
+        <fungiTerminal
+          ref={native}
+          width="100%"
+          height="100%"
+          selectable={focused}
+          onData={(data, source) => {
+            if (source === "input" && !terminal.input(data))
+              kit.notify({
+                tone: "error",
+                message: terminal.live
+                  ? "Local terminal input was not sent; retry with a smaller paste"
+                  : "Local terminal input was not sent; the program has ended",
+              });
+            // opencode-pty's Ghostty actor answers terminal queries; passing
+            // OpenTUI responses back would duplicate them.
+          }}
+          onTerminalResize={(cols, rows) => {
+            if (!terminal.resize(cols, rows))
+              kit.notify({
+                tone: "error",
+                message: "Local terminal resize was not sent",
+              });
+          }}
+        />
+      </box>
+      {!live ? (
+        <TerminalExit label={label} exitCode={exitCode} failure={failure} />
+      ) : null}
     </box>
   );
 }
@@ -286,9 +476,30 @@ function localTerminalKind(
         title: name,
         render: async (kit) => {
           const viewport = kit.viewport.read();
+          if (process.platform === "darwin") {
+            const terminal = await openMacTerminal({
+              columns: viewport.width,
+              rows: viewport.height,
+              program,
+            });
+            kit.onDispose(() => {
+              void terminal.close().catch((cause: unknown) => {
+                reportFailure("mac-terminal-close", cause);
+              });
+            });
+            if (kit.signal.aborted) {
+              await terminal.close();
+              return null;
+            }
+            return createElement(
+              PaneProvider,
+              { kit },
+              createElement(MacTerminalPane, { terminal, label }),
+            );
+          }
           const terminal = await openLocalTerminal({
             columns: viewport.width,
-            rows: Math.max(1, viewport.height - 2),
+            rows: viewport.height,
             program,
           });
           const close = () => {

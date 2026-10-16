@@ -191,7 +191,11 @@ test("shared-shell-leader uses the same declarations and focused rows on both ho
 });
 
 test("the native TUI keymap projects only globals and the focused pane", async () => {
-  const setup = await testRender(<box />, { width: 20, height: 4 });
+  const setup = await testRender(<box />, {
+    width: 20,
+    height: 4,
+    kittyKeyboard: true,
+  });
   const application = await openTerminalApplication({
     signals: { on: () => undefined, off: () => undefined },
     createQueryClient,
@@ -250,7 +254,11 @@ test("the native TUI keymap projects only globals and the focused pane", async (
       setup.mockInput.pressKey("x", { ctrl: true });
     });
     await act(async () => {
-      setup.mockInput.pressKey("k", { ctrl: true });
+      // OpenTUI's mod binding is Super on macOS and Control elsewhere.
+      setup.mockInput.pressKey(
+        "k",
+        process.platform === "darwin" ? { super: true } : { ctrl: true },
+      );
       await setup.renderOnce();
     });
     expect(paletteKeys).toBe(1);

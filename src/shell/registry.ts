@@ -130,12 +130,12 @@ export function createPaneRegistry(options: PaneRegistryOptions) {
       const viewport = {
         width:
           Math.floor(frame.width) -
-          (windows.read().windows.length > 1 && layout.zoomed === null ? 1 : 0),
-        height: Math.max(
-          1,
-          Math.floor(frame.height) -
-            (windows.read().windows.length > 1 ? 1 : 0),
-        ),
+          (windows.read().windows.length > 1 &&
+          layout.zoomed === null &&
+          frame.x + frame.width < bounds.width
+            ? 1
+            : 0),
+        height: Math.max(1, Math.floor(frame.height)),
       };
       if (
         viewport.width !== pane.viewport.value.read().width ||
@@ -312,6 +312,10 @@ export function createPaneRegistry(options: PaneRegistryOptions) {
       replace: (target) =>
         live
           ? replace(paneId, target)
+          : Promise.resolve({ kind: "refused", reason: "Pane has closed" }),
+      open: (target) =>
+        live
+          ? open(target)
           : Promise.resolve({ kind: "refused", reason: "Pane has closed" }),
       notify: (notice) => {
         if (live)

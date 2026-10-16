@@ -3,7 +3,10 @@ import { expect, test } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createWhistle } from "@fungi.computer/whistle";
-import type { SessionSnapshot } from "@fungi.computer/shiitake/client";
+import type {
+  SessionPendingPrompt,
+  SessionSnapshot,
+} from "@fungi.computer/shiitake/client";
 import { act } from "react";
 import { TuiFrame } from "../src/frame.js";
 import { createDesignTuiFixture } from "./design-fixture.js";
@@ -53,9 +56,12 @@ function assistant(id: string, sequence: number, text: string): Message {
   };
 }
 
-function snapshot(messages: Message[]): SessionSnapshot {
+function snapshot(
+  messages: Message[],
+  prompts: SessionPendingPrompt[] = [],
+): SessionSnapshot {
   return {
-    pending: { total: 0, prompts: [], hasMore: false },
+    pending: { total: prompts.length, prompts, hasMore: false },
     sessionId: "tui-user-stack",
     cursor: "user-stack-cursor",
     hasMore: false,
@@ -70,8 +76,14 @@ function snapshot(messages: Message[]): SessionSnapshot {
   };
 }
 
-async function render(messages: Message[], height: number) {
-  const fixture = createDesignTuiFixture({ snapshot: snapshot(messages) });
+async function render(
+  messages: Message[],
+  height: number,
+  prompts: SessionPendingPrompt[] = [],
+) {
+  const fixture = createDesignTuiFixture({
+    snapshot: snapshot(messages, prompts),
+  });
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -107,6 +119,38 @@ async function render(messages: Message[], height: number) {
     commands.close();
   }
 }
+
+test("pending interrupts precede compact cues with distinct theme colours", async () => {
+  const view = await render(
+    [
+      user("first", 1, "first user message"),
+      user("second", 2, "second user message"),
+    ],
+    35,
+    [
+      {
+        commandId: "cue",
+        delivery: "followUp",
+        text: "Cue pending text\ncontinued with a very long ending that must not wrap onto another row",
+      },
+      { commandId: "interrupt", delivery: "steer", text: "Interrupt pending" },
+    ],
+  );
+  const interrupt = view.rowOf("Interrupt pending");
+  const cue = view.rowOf("Cue pending text");
+  expect(interrupt).toBeGreaterThan(view.rowOf("second user message"));
+  expect(cue).toBeGreaterThan(interrupt);
+  expect(view.lines[cue]).not.toContain("queued");
+  expect(view.lines[cue]).toContain("…");
+  expect(view.lines[cue]).not.toContain("must not wrap");
+  expect(view.lines[cue + 1]).not.toContain("must not wrap");
+  const foreground = (text: string, y: number) =>
+    view.frame.cells
+      .find((cell) => cell.y === y && cell.text === text)
+      ?.fg.join(",");
+  expect(foreground("I", interrupt)).toBeDefined();
+  expect(foreground("I", interrupt)).not.toBe(foreground("C", cue));
+});
 
 test("consecutive user messages stack as one continuous surface", async () => {
   const view = await render(

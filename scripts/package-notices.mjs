@@ -2,7 +2,7 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { createHash } from "node:crypto";
 
-import { noticeFiles } from "../../../runtimes/local/scripts/native-notices.mjs";
+import { noticeFiles } from "../../../packages/cordyceps/native/apply-patch/notices.mjs";
 
 async function exists(path) {
   try {
@@ -129,6 +129,17 @@ export async function writeCliNotices({
     );
   for (const [content, names] of texts) {
     sections.push(`${[...names].sort().join(", ")}\n\n${content.trim()}`);
+  }
+  if (metafile !== undefined) {
+    // The retained OpenCode transport is part of the bundled TUI source, not
+    // an npm-installed package whose own LICENSE would be carried along.
+    const retained = await readFile(
+      resolve(repository, "apps/tui/src/button/opencode-pty-transport.LICENSE"),
+      "utf8",
+    );
+    sections.push(
+      `anomalyco/opencode persistent-pty/daemon.ts 165cd2e832574ccdea3b311fe1a0f9db2e5c883e\n\n${retained.trim()}`,
+    );
   }
   await writeFile(
     resolve(output, "THIRD_PARTY_NOTICES"),

@@ -1,0 +1,27 @@
+{
+  "name": "fairy-ring-fungi",
+  "version": "0.1.0",
+  "description": "Fairy Ring inside Fungi: the dashboard as a program pane and read-only account tools for the Agent",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./host": "./host.mjs"
+  },
+  "fungi": {
+    "id": "fairy-ring",
+    "capabilities": [
+      "run_tools"
+    ],
+    "terminals": [
+      {
+        "id": "dashboard",
+        "name": "Fairy Ring",
+        "description": "Accounts, usage and auto-rotation",
+        "command": [
+          "./bin/fairy-ring-tui"
+        ]
+      }
+    ]
+  }
+}

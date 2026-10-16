@@ -75,7 +75,15 @@ test("renders a checklist and waiting-loop footer at 80 and 120 columns", async 
           .split("\n")
           .filter((line) => line.includes("Loop · active · self-paced"));
         expect(loopRows).toHaveLength(1);
-        expect(loopRows[0]).toContain("Next 1970-01-01 00:00:01.000Z");
+        const due = new Intl.DateTimeFormat(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+          timeZoneName: "short",
+        }).format(1000);
+        expect(loopRows[0]).toContain(`Next ${due}`);
         expect(frame).not.toContain("Read the source");
         await act(async () => setup.mockInput.typeText("/plan"));
         act(() => {
