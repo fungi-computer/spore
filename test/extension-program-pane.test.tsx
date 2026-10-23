@@ -1,24 +1,26 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "@fungi.computer/agar/query";
-import { createAppSurfaceCommandHost } from "@fungi.computer/oyster/shell/command-host";
+import { createAppSurfaceCommandHost } from "@fungi.computer/nacre/command-host";
 import { createWhistle } from "@fungi.computer/whistle";
 import {
   localExtensions,
   type LocalExtensions,
 } from "@fungi.computer/truffle/extensions";
+import { createLocalSkillSource } from "@fungi.computer/truffle/skills";
 import { runFungiCli } from "../src/cli.js";
 import { projectExtensionParts } from "../src/extension-command.js";
 import { TuiFrame } from "../src/frame.js";
 import { programPanes } from "../src/panes/terminal/index.js";
 import { createTuiFixture } from "./fixture.js";
 import { pressDecodedKey } from "./native-readiness.js";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 
 /**
  * One real installed extension, end to end in disposable custody: a Git
@@ -46,7 +48,15 @@ beforeAll(async () => {
     mkdir(home, { recursive: true }),
     mkdir(agentA, { recursive: true }),
     mkdir(agentB, { recursive: true }),
+    // This synthetic project owns discovery even when TMPDIR is in a checkout.
+    mkdir(join(project, ".git"), { recursive: true }),
   ]);
+  const ambient = join(scratch, ".agents", "skills", "ambient-fixture");
+  await mkdir(ambient, { recursive: true });
+  await writeFile(
+    join(ambient, "SKILL.md"),
+    "---\nname: ambient-fixture\ndescription: Must not enter the fixture project\n---\nOutside the test project.\n",
+  );
   const work = join(scratch, "work");
   source = join(scratch, "counter.git");
   await cp(fixture, work, { recursive: true });
@@ -108,6 +118,13 @@ async function executeAs(store: string, code: string) {
   return stdout;
 }
 
+test("the fixture project does not inherit parent-directory skills", async () => {
+  const catalog = await createLocalSkillSource({ cwd: project, home }).catalog(
+    new AbortController().signal,
+  );
+  expect(catalog.skills).toEqual([]);
+});
+
 test("an installed program opens from Open pane and only the granted Agent's tools drive it", async () => {
   expect(await fungi("extension", "add", `git+file://${source}#main`)).toMatch(
     /Installed counter 1\.0\.0 \([0-9a-f]{40}\)/u,
@@ -127,16 +144,18 @@ test("an installed program opens from Open pane and only the granted Agent's too
   const commands = createWhistle();
   const host = createAppSurfaceCommandHost(commands);
   const client = createQueryClient();
-  const setup = await testRender(
-    <QueryClientProvider client={client}>
-      <TuiFrame
-        session={fixtureSession.session}
-        commands={commands}
-        commandHost={host}
-        paneKinds={programPanes(parts.programs)}
-      />
-    </QueryClientProvider>,
-    { width: 100, height: 30 },
+  const setup = await act(async () =>
+    testRender(
+      <QueryClientProvider client={client}>
+        <TuiFrame
+          session={fixtureSession.session}
+          commands={commands}
+          commandHost={host}
+          paneKinds={programPanes(parts.programs)}
+        />
+      </QueryClientProvider>,
+      { width: 100, height: 30 },
+    ),
   );
   const frame = async (check: (text: string) => boolean) => {
     for (let attempt = 0; attempt < 500; attempt += 1) {
@@ -144,7 +163,7 @@ test("an installed program opens from Open pane and only the granted Agent's too
         await setup.renderOnce();
       });
       if (check(setup.captureCharFrame())) return;
-      await Bun.sleep(10);
+      await act(async () => Bun.sleep(10));
     }
     throw new Error(`Frame never matched:\n${setup.captureCharFrame()}`);
   };
@@ -172,7 +191,11 @@ test("an installed program opens from Open pane and only the granted Agent's too
     await frame((text) => text.includes("count: 0"));
 
     expect(
-      JSON.parse(await executeAs(agentA, "return await counter.increment({})")),
+      JSON.parse(
+        await act(async () =>
+          executeAs(agentA, "return await counter.increment({})"),
+        ),
+      ),
     ).toEqual({ running: true, count: 1 });
     await frame((text) => text.includes("count: 1"));
     expect(await executeAs(agentB, "return typeof counter")).toBe(
@@ -208,10 +231,9 @@ test("an installed program opens from Open pane and only the granted Agent's too
       JSON.parse(await executeAs(agentA, "return await counter.read({})")),
     ).toEqual({ running: false });
   } finally {
-    act(() => {
-      setup.renderer.destroy();
+    await destroyTestRenderer(setup, () => {
+      host.dispose();
     });
-    host.dispose();
     client.clear();
   }
 }, 120_000);

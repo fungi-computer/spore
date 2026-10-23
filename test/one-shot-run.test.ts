@@ -120,6 +120,7 @@ function fakeSession(
           terminals: [],
           activity:
             initialStatus === "streaming" ? runningActivity() : idleActivity,
+          toolOutput: [],
           progress: null,
           extensions: {},
           attention: [],
@@ -291,7 +292,12 @@ function serviceManager(
     );
   }
   const session: ShiitakeSession = {
+    withdraw: () => Promise.resolve({ status: "unknown" }),
     address: "fixture://main",
+    latestPending: () =>
+      Promise.reject(
+        new Error("pending lookup is unused in this one-shot fixture"),
+      ),
     command,
     abort: oneShot.abort,
     watch: oneShot.watch,
@@ -321,15 +327,30 @@ function serviceManager(
     },
   };
   const host: PrivateLocalServiceConnection = {
+    stopAll: () =>
+      Promise.reject(new Error("stopAll is unused in this one-shot fixture")),
     agentId: "fixture-agent",
     databasePath: "/tmp/one-shot.sqlite",
     sessionId: "main",
-    service: { serviceId: "fixture", baseUrl: "http://fixture" },
+    service: {
+      protocol: 3,
+      diagnostics: { state: "active" },
+      version: "source",
+      serviceId: "fixture",
+      pid: 1,
+      baseUrl: "http://fixture",
+    },
     session,
+    sandboxStatus: () =>
+      Promise.reject(
+        new Error("sandboxStatus is unused in this one-shot fixture"),
+      ),
     effectiveModel: () =>
       Promise.reject(
         new Error("effectiveModel is unused in this one-shot fixture"),
       ),
+    rebind: () =>
+      Promise.reject(new Error("rebind is unused in this one-shot fixture")),
     client: {
       session: () => session,
       createSession: () =>
@@ -364,6 +385,8 @@ function serviceManager(
   };
   return {
     connect: () => Promise.resolve(host),
+    reload: () =>
+      Promise.reject(new Error("reload is unused in this one-shot fixture")),
     status: () =>
       Promise.reject(new Error("status is unused in this one-shot fixture")),
     start: () =>
@@ -374,6 +397,8 @@ function serviceManager(
       ),
     discover: () =>
       Promise.reject(new Error("discover is unused in this one-shot fixture")),
+    archive: () =>
+      Promise.reject(new Error("archive is unused in this one-shot fixture")),
     inspect: () =>
       Promise.reject(new Error("inspect is unused in this one-shot fixture")),
     auth: () =>
@@ -384,6 +409,35 @@ function serviceManager(
       Promise.reject(new Error("stop is unused in this one-shot fixture")),
   };
 }
+
+test("fungi reload prints the service result and sends the selected project without starting or stopping", async () => {
+  const fake = fakeSession();
+  const output: string[] = [];
+  const roots: string[] = [];
+  await runFungiCli(
+    ["reload", "-C", "project"],
+    {
+      cwd: "/workspace",
+      stdout: outputSink(output),
+    },
+    {
+      createServiceManager: () => ({
+        ...serviceManager(fake.session),
+        reload: (root) => {
+          roots.push(root);
+          return Promise.resolve(
+            "Configuration reloaded; applies from the next turn",
+          );
+        },
+      }),
+    },
+  );
+  assert.deepEqual(roots, ["/workspace/project"]);
+  assert.match(
+    output.join(""),
+    /Configuration reloaded; applies from the next turn/u,
+  );
+});
 
 test("dispatcher follows the owner command ID and closes its Session watch", async () => {
   const fake = fakeSession();
@@ -676,6 +730,7 @@ test("two one-shot clients correlate their own results while a TUI watch stays a
           messages: [],
           terminals: [],
           activity: idleActivity,
+          toolOutput: [],
           progress: null,
           extensions: {},
           attention: [],

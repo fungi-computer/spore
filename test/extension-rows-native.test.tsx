@@ -13,8 +13,13 @@ import {
 } from "@tanstack/react-query";
 import { sigilGutterText } from "../src/button/index.js";
 import { TuiFrame } from "../src/frame.js";
-import { createTuiFixture, fixtureClients } from "./fixture.js";
+import {
+  createTuiFixture,
+  fixtureClients,
+  fixtureGoalStartedAt,
+} from "./fixture.js";
 import { captureFrame } from "./frame-capture.js";
+import { enterReactActEnvironment } from "./native-renderer-cleanup.js";
 
 const idleStatus = `${sigilGutterText("●")}idle`;
 
@@ -31,7 +36,8 @@ for (const { width, height } of [
               revision: "footer-goal",
               objective: "Keep the menus tidy",
               state: "active",
-              stopReason: null,
+              startedAt: fixtureGoalStartedAt,
+              pauseCause: null,
             }
           : null,
         loop: active
@@ -84,19 +90,20 @@ for (const { width, height } of [
       };
       setup.renderer.getPalette = () => Promise.resolve(palette);
       const root = createRoot(setup.renderer);
-      act(() => {
-        root.render(
-          <QueryClientProvider client={query}>
-            <TuiFrame
-              initialTheme="terminal"
-              session={fixture.session}
-              commands={commands}
-              clients={fixtureClients}
-            />
-          </QueryClientProvider>,
-        );
-      });
+      const restoreActEnvironment = enterReactActEnvironment();
       try {
+        act(() => {
+          root.render(
+            <QueryClientProvider client={query}>
+              <TuiFrame
+                initialTheme="terminal"
+                session={fixture.session}
+                commands={commands}
+                clients={fixtureClients}
+              />
+            </QueryClientProvider>,
+          );
+        });
         await act(async () =>
           setup.waitForFrame((frame) =>
             active
@@ -125,27 +132,33 @@ for (const { width, height } of [
         const frame = setup.captureCharFrame();
         const goalRows = frame
           .split("\n")
-          .filter((line) => line.includes("Goal · active"));
+          .filter((line) => line.includes("Pursuing goal since"));
         const loopRows = frame
           .split("\n")
           .filter((line) => line.includes("Loop · active"));
         expect(goalRows).toHaveLength(active ? 1 : 0);
         expect(loopRows).toHaveLength(active ? 1 : 0);
         if (active) {
-          expect(frame.indexOf("Goal · active")).toBeGreaterThan(
+          expect(frame.indexOf("Pursuing goal since")).toBeGreaterThan(
             frame.indexOf(idleStatus),
           );
           expect(footer).not.toContain("Esc");
         }
       } finally {
-        act(() => {
-          root.unmount();
+        try {
+          await act(() =>
+            Promise.resolve().then(() => {
+              root.unmount();
+            }),
+          );
           setup.renderer.destroy();
-        });
-        commands.close();
-        query.clear();
-        await fixture.waitForClose();
-        notifyManager.setScheduler(defaultScheduler);
+          commands.close();
+          query.clear();
+          await fixture.waitForClose();
+        } finally {
+          restoreActEnvironment();
+          notifyManager.setScheduler(defaultScheduler);
+        }
       }
     });
   }

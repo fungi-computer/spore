@@ -31,6 +31,7 @@ export type SessionInspectionRow = Readonly<{
   sequence: number;
   role: string;
   value: SessionMessage["value"];
+  data?: SessionMessage["data"];
   error?: Readonly<{ kind: string; message: string }> | undefined;
 }>;
 
@@ -43,7 +44,7 @@ export type SessionInspectionStateCause = Readonly<{
 function typedCause(message: SessionMessage) {
   if (message.value.role !== "toolResult" || !message.value.isError)
     return undefined;
-  const decoded = typedCauseSchema.safeParse(message.value.details);
+  const decoded = typedCauseSchema.safeParse(message.data);
   if (decoded.success) return decoded.data.error;
   const content = message.value.content.find(
     (part): part is Extract<typeof part, { type: "text" }> =>
@@ -68,6 +69,7 @@ export function inspectionRows(
       commandId: message.commandId,
       role: message.value.role,
       value: message.value,
+      data: message.data,
     };
     return error === undefined ? [row] : [{ ...row, error }];
   });
@@ -224,6 +226,12 @@ function applyFrame(
   frame: SessionFrame,
 ): SessionSnapshot {
   if (frame.kind === "reset") return frame.baseline;
+  if (frame.kind === "tool_output")
+    return {
+      ...snapshot,
+      activity: frame.activity,
+      toolOutput: frame.toolOutput,
+    };
   if (frame.kind === "progress")
     return {
       ...snapshot,

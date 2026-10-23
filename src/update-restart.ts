@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
-import { basename, dirname, join } from "node:path";
-import { readFile, realpath } from "node:fs/promises";
+import { basename, dirname } from "node:path";
+import { realpath } from "node:fs/promises";
+import { readInstalledLocalClientBuildId } from "@fungi.computer/truffle/service";
 import { z } from "zod";
+import type { ParakeetDraftCheckpoint } from "@fungi.computer/parakeet/headless";
 
 export type UpdateRestartSession = Readonly<{
   invocationRoot: string;
@@ -22,12 +23,6 @@ const statusSchema = z.object({
   }),
 });
 
-async function installedBuildId(launcher: string): Promise<string> {
-  return createHash("sha256")
-    .update(await readFile(join(dirname(launcher), "cli.js")))
-    .digest("hex");
-}
-
 /** Ask the installed build about activity; the old client cannot connect to its service. */
 export async function installedUpdateRestart(
   link: string,
@@ -43,7 +38,7 @@ export async function installedUpdateRestart(
     runningBuildId !== undefined &&
     basename(launcher) === "fungi.cjs" &&
     basename(dirname(launcher)) === "dist"
-      ? await installedBuildId(launcher)
+      ? await readInstalledLocalClientBuildId(launcher)
       : undefined;
   if (
     launcher === runningLauncher &&
@@ -81,7 +76,10 @@ export async function installedUpdateRestart(
     if (status.activity.queue.state !== "idle") return { kind: "waiting" };
   }
   if ((await realpath(link)) !== launcher) return { kind: "waiting" };
-  if (buildId !== undefined && (await installedBuildId(launcher)) !== buildId)
+  if (
+    buildId !== undefined &&
+    (await readInstalledLocalClientBuildId(launcher)) !== buildId
+  )
     return { kind: "waiting" };
   const session = sessions[0];
   if (session === undefined) return undefined;
@@ -108,4 +106,43 @@ export async function resumeInstalledUpdate(
     throw new Error(
       `Updated Fungi exited with status ${String(code)}; run fungi sessions resume ${update.session.sessionId} -C ${update.session.invocationRoot}`,
     );
+}
+export type UpdateDraftCheckpoint = () => ParakeetDraftCheckpoint;
+type RegisteredCheckpoint = Readonly<{ checkpoint: UpdateDraftCheckpoint }>;
+
+/** Only live callback registrations, never draft text or journal state. */
+export function createUpdateDraftCheckpointBarrier() {
+  const mounted = new Map<string, Set<RegisteredCheckpoint>>();
+  return {
+    register: (
+      address: string,
+      checkpoint: UpdateDraftCheckpoint,
+    ): (() => void) => {
+      const active = mounted.get(address) ?? new Set<RegisteredCheckpoint>();
+      const registration = { checkpoint };
+      active.add(registration);
+      mounted.set(address, active);
+      return () => {
+        if (!active.delete(registration)) return;
+        if (active.size === 0) mounted.delete(address);
+      };
+    },
+    checkpoint: (addresses: readonly string[]): void => {
+      if (addresses.length === 0)
+        throw new Error("No selected Session is ready to checkpoint");
+      for (const address of addresses)
+        if (!mounted.has(address))
+          throw new Error(
+            "A selected conversation is not ready to save its draft",
+          );
+      // Save other mounted panes too. The caller must hand off synchronously
+      // after this returns; Parakeet owns all journal writes and later hydration.
+      for (const active of mounted.values())
+        for (const { checkpoint } of active) {
+          const result = checkpoint();
+          if (result.status === "failed")
+            throw new Error(`Restart cancelled: ${result.reason}`);
+        }
+    },
+  };
 }

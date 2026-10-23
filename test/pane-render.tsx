@@ -1,9 +1,10 @@
-import { useEffect, type ReactNode } from "react";
+import { act, useEffect, type ReactNode } from "react";
 import { testRender } from "@opentui/react/test-utils";
-import { createAppSurfaceCommandHost } from "@fungi.computer/oyster/shell/command-host";
+import { createAppSurfaceCommandHost } from "@fungi.computer/nacre/command-host";
 import { PaneWorkspace } from "../src/shell/workspace.js";
 import { PaneProvider, useDialog, reportFailure } from "../src/button/index.js";
 import type { createPaneRegistry } from "../src/shell/registry.js";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 
 /** Component tests run inside the same pane renderer/input owner as the CLI. */
 export async function testPaneRender(
@@ -51,13 +52,15 @@ export async function testPaneRender(
       />
     );
   }
-  const setup = await testRender(<Host />, options);
+  const setup = await act(async () => testRender(<Host />, options));
   if (opened === undefined) throw new Error("Component pane did not open");
   try {
-    await opened;
-    await setup.renderOnce();
+    await act(async () => {
+      await opened;
+      await setup.renderOnce();
+    });
   } catch (cause) {
-    setup.renderer.destroy();
+    await destroyTestRenderer(setup);
     reportFailure("component-pane-test", cause);
     throw cause;
   }

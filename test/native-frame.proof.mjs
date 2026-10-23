@@ -1,5 +1,6 @@
 import { captureFrame } from "./frame-capture.js";
 import { waitForFrame, pressDecodedKey } from "./native-readiness.js";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -16,8 +17,16 @@ import { testRender } from "@opentui/react/test-utils";
 import { act, createElement } from "react";
 import { createWhistle } from "@fungi.computer/whistle";
 import { createWhistleKeymapAdapter } from "@fungi.computer/whistle";
+import { createAppSurfaceCommandHost } from "@fungi.computer/nacre/command-host";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
+import {
+  registerModBindings,
+  registerLeader,
+  registerEscapeClearsPendingSequence,
+  registerBackspacePopsPendingSequence,
+} from "@opentui/keymap/addons";
 import { TextareaRenderable, RGBA } from "@opentui/core";
+import { terminalPalette } from "@fungi.computer/stipe";
 
 import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 import { TuiFrame } from "@fungi.computer/spore/frame";
@@ -104,6 +113,10 @@ await assert.rejects(
       prepareClientExtensions: noOpClientExtensions,
       createServiceManager: () => ({
         connect: async () => ({
+          sandboxStatus: async () => ({
+            state: "available",
+            requireSandbox: false,
+          }),
           agentId: "agent-fixture",
           sessionId: "session-fixture",
           databasePath: "/fixture/cleanup.sqlite",
@@ -171,6 +184,7 @@ assert.deepEqual(
 );
 
 const whistle = createWhistle();
+const slashCommandHost = createAppSurfaceCommandHost(whistle);
 const slashCalls = [];
 let slashHandlerCompleted = false;
 const releaseSlashHandler = Promise.withResolvers();
@@ -201,13 +215,6 @@ whistle.contribute({
     },
   ],
 });
-const slashCommands = {
-  contribute: whistle.contribute,
-  snapshot: whistle.snapshot,
-  subscribe: whistle.subscribe,
-  execute: whistle.execute,
-  present: whistle.present,
-};
 const slashFixture = createTuiFixture();
 const slashQueryClient = new QueryClient({
   defaultOptions: { queries: { retry: false } },
@@ -217,7 +224,8 @@ const slashSetup = await testRender(
     QueryClientProvider,
     { client: slashQueryClient },
     createElement(TuiFrame, {
-      commands: slashCommands,
+      commands: whistle,
+      commandHost: slashCommandHost,
       session: slashFixture.session,
     }),
   ),
@@ -293,119 +301,167 @@ try {
   assert.match(slashSetup.captureCharFrame(), /\/unknown/u);
   assert.equal(slashCalls.length, 2);
 } finally {
-  await act(async () => {
-    slashSetup.renderer.destroy();
-  });
+  await destroyTestRenderer(slashSetup);
   assert.deepEqual(
     whistle.snapshot().slash.map((row) => row.alias),
     ["inspect"],
     "unmount disposes only the frame's command contribution",
   );
   slashQueryClient.clear();
-  whistle.close();
+  slashCommandHost.dispose();
 }
 await slashFixture.waitForClose();
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-const ctrlFixture = createTuiFixture();
-const ctrlSession = {
-  ...ctrlFixture.session,
-  modelPreference: {
-    read: async () => null,
-    set: async () => undefined,
-  },
-};
-const ctrlCommands = createWhistle();
-const ctrlQueryClient = new QueryClient({
-  defaultOptions: { queries: { retry: false } },
-});
-const ctrlReady = Promise.withResolvers();
-let ctrlSetup;
-let ctrlHostCloses = 0;
-const ctrlRunning = runTuiCli(
-  { invocationRoot: "/tmp" },
-  {
-    prepareClientExtensions: noOpClientExtensions,
-    loadThemePreference: async () => ({ theme: "terminal" }),
-    createServiceManager: () => ({
-      status: async () => undefined,
-      start: async () => ({ serviceId: "fixture", baseUrl: "http://fixture" }),
-      stop: async () => undefined,
-      discover: async () => ({ agentCount: 1, sessions: [], problems: [] }),
-      models: async () => [],
-      auth: async () => undefined,
-      createSession: async () => ({
-        agentId: "agent-fixture",
-        databasePath: "/fixture/main.sqlite",
-        sessionId: "main",
-        session: ctrlSession,
-        close: async () => {
-          ctrlHostCloses += 1;
-        },
-      }),
-      connect: async () => ({
-        agentId: "agent-fixture",
-        databasePath: "/fixture/main.sqlite",
-        sessionId: "main",
-        session: ctrlSession,
-        close: async () => {
-          ctrlHostCloses += 1;
-        },
-      }),
-    }),
-    createWhistle: () => ctrlCommands,
-    createQueryClient: () => ctrlQueryClient,
-    enableKeymap: true,
-    createRenderer: async (options) => {
-      ctrlSetup = await createTestRenderer({
-        ...options,
-        height: 10,
-        width: 48,
-        useKittyKeyboard: null,
-      });
-      ctrlReady.resolve();
-      return ctrlSetup.renderer;
+// The application, not an isolated pane frame, owns /exit.
+for (const exitGesture of ["ctrl+c", "/exit"]) {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const ctrlFixture = createTuiFixture();
+  const ctrlSession = {
+    ...ctrlFixture.session,
+    modelPreference: {
+      read: async () => null,
+      set: async () => undefined,
     },
-    createRoot,
-  },
-);
-try {
-  await ctrlReady.promise;
-  await ctrlSetup.renderOnce();
-  await waitForFrame(ctrlSetup, (frame) =>
-    frame.includes("Start a conversation."),
-  );
-  await act(async () => {
-    ctrlSetup.mockInput.pressKey("c", { ctrl: true });
-    await boundedCompletion(ctrlRunning, "Ctrl+C frame exit");
+  };
+  const ctrlCommands = createWhistle();
+  const ctrlQueryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
   });
-  assert.equal(ctrlHostCloses, 1, "Ctrl+C closes the Local host");
-  assert.equal(ctrlSetup.renderer.isDestroyed, true);
-} finally {
-  if (!ctrlSetup?.renderer.isDestroyed)
-    await ctrlCommands.execute("tui:exit", { origin: "slash" });
-  await ctrlRunning;
-  globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+  const ctrlReady = Promise.withResolvers();
+  let ctrlSetup;
+  let ctrlHostCloses = 0;
+  const ctrlRunning = runTuiCli(
+    { invocationRoot: "/tmp" },
+    {
+      prepareClientExtensions: noOpClientExtensions,
+      loadThemePreference: async () => ({ theme: "terminal" }),
+      createServiceManager: () => ({
+        status: async () => undefined,
+        start: async () => ({
+          serviceId: "fixture",
+          baseUrl: "http://fixture",
+        }),
+        stop: async () => undefined,
+        discover: async () => ({
+          agents: [
+            {
+              agentId: "one",
+              databasePath: "/project/one/agent.sqlite",
+              sessionCount: 1,
+            },
+          ],
+          sessions: [],
+          problems: [],
+        }),
+        models: async () => [],
+        auth: async () => undefined,
+        createSession: async () => ({
+          sandboxStatus: async () => ({
+            state: "available",
+            requireSandbox: false,
+          }),
+          agentId: "agent-fixture",
+          databasePath: "/fixture/main.sqlite",
+          sessionId: "main",
+          session: ctrlSession,
+          close: async () => {
+            ctrlHostCloses += 1;
+          },
+        }),
+        connect: async () => ({
+          sandboxStatus: async () => ({
+            state: "available",
+            requireSandbox: false,
+          }),
+          agentId: "agent-fixture",
+          databasePath: "/fixture/main.sqlite",
+          sessionId: "main",
+          session: ctrlSession,
+          close: async () => {
+            ctrlHostCloses += 1;
+          },
+        }),
+      }),
+      createWhistle: () => ctrlCommands,
+      createQueryClient: () => ctrlQueryClient,
+      enableKeymap: true,
+      createRenderer: async (options) => {
+        ctrlSetup = await createTestRenderer({
+          ...options,
+          height: 10,
+          width: 48,
+          useKittyKeyboard: null,
+        });
+        ctrlReady.resolve();
+        return ctrlSetup.renderer;
+      },
+      createRoot,
+    },
+  );
+  try {
+    await ctrlReady.promise;
+    await ctrlSetup.renderOnce();
+    // The frame can paint while connecting; Ctrl+C then arms cancellation.
+    // This case asserts the idle Session's exit contract.
+    await waitForFrame(
+      ctrlSetup,
+      (frame) =>
+        frame.includes("Start a conversation.") &&
+        frame.includes("● idle") &&
+        renderedNodes(ctrlSetup.renderer.root).some(
+          (node) => node instanceof TextareaRenderable && node.focused,
+        ) &&
+        ctrlCommands
+          .snapshot()
+          .bindings.some(
+            (binding) =>
+              binding.binding === "ctrl+c" && binding.scope !== undefined,
+          ),
+    );
+    if (exitGesture === "/exit") {
+      await act(async () => ctrlSetup.mockInput.typeText("/exit"));
+      await pressDecodedKey(ctrlSetup, () => ctrlSetup.mockInput.pressEnter());
+    } else {
+      await pressDecodedKey(ctrlSetup, () => {
+        ctrlSetup.mockInput.pressKey("c", { ctrl: true });
+      });
+    }
+    try {
+      await boundedCompletion(ctrlRunning, `${exitGesture} frame exit`);
+    } catch (cause) {
+      throw new Error(
+        `${exitGesture}: host closes=${ctrlHostCloses}, destroyed=${ctrlSetup.renderer.isDestroyed}\n${ctrlSetup.captureCharFrame()}`,
+        { cause },
+      );
+    }
+    assert.equal(ctrlHostCloses, 1, `${exitGesture} closes the Local host`);
+    assert.equal(ctrlSetup.renderer.isDestroyed, true);
+  } finally {
+    if (!ctrlSetup?.renderer.isDestroyed)
+      await ctrlCommands.execute("tui:exit", { origin: "slash" });
+    await ctrlRunning;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+  }
+  await ctrlFixture.waitForClose();
+  assert.equal(ctrlFixture.closeCalls(), 1);
 }
-await ctrlFixture.waitForClose();
-assert.equal(ctrlFixture.closeCalls(), 1);
 
 await runSessionPickerProof();
 
 const fixture = createTuiFixture();
 let admittedRequestId;
 let admittedDelivery;
-const abortRequests = [];
-const pendingAbort = Promise.withResolvers();
-const abortObserved = Promise.withResolvers();
+const cancelRequests = [];
+const pendingCancel = Promise.withResolvers();
+const cancelObserved = Promise.withResolvers();
 let exits = 0;
 const observedSession = {
   ...fixture.session,
   command: async (input) => {
-    if (input.type === "abort") {
-      abortRequests.push(input);
-      abortObserved.resolve();
-      return pendingAbort.promise;
+    if (input.type === "cancel") {
+      cancelRequests.push(input);
+      cancelObserved.resolve();
+      return pendingCancel.promise;
     }
     if (input.type === "prompt") {
       admittedRequestId = input.requestId;
@@ -415,13 +471,7 @@ const observedSession = {
   },
 };
 const normalWhistle = createWhistle();
-const normalCommands = {
-  contribute: normalWhistle.contribute,
-  snapshot: normalWhistle.snapshot,
-  subscribe: normalWhistle.subscribe,
-  execute: normalWhistle.execute,
-  present: normalWhistle.present,
-};
+const normalCommandHost = createAppSurfaceCommandHost(normalWhistle);
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false } },
 });
@@ -430,7 +480,8 @@ const setup = await testRender(
     QueryClientProvider,
     { client: queryClient },
     createElement(TuiFrame, {
-      commands: normalCommands,
+      commands: normalWhistle,
+      commandHost: normalCommandHost,
       onExit: () => {
         exits += 1;
       },
@@ -441,6 +492,12 @@ const setup = await testRender(
   { height: 10, width: 48 },
 );
 const nativeKeymap = createDefaultOpenTuiKeymap(setup.renderer);
+const detachKeymapAddons = [
+  registerModBindings(nativeKeymap),
+  registerLeader(nativeKeymap, { trigger: "ctrl+k" }),
+  registerEscapeClearsPendingSequence(nativeKeymap),
+  registerBackspacePopsPendingSequence(nativeKeymap),
+];
 const normalKeymap = createWhistleKeymapAdapter(
   {
     registerLayer: (layer) =>
@@ -450,7 +507,11 @@ const normalKeymap = createWhistleKeymapAdapter(
         priority: 100,
       }),
   },
-  normalWhistle,
+  {
+    snapshot: normalCommandHost.active,
+    subscribe: normalCommandHost.subscribe,
+    execute: normalCommandHost.execute,
+  },
   "keyboard",
 );
 
@@ -472,7 +533,8 @@ try {
   await waitForFrame(
     setup,
     (frame) =>
-      frame.includes("Steering · Native prompt") &&
+      frame.includes("Native prompt") &&
+      frame.includes("queued for host") &&
       frame.includes("spaced text"),
   );
   assert.equal(
@@ -488,11 +550,13 @@ try {
       line.spans.some((span) => span.text.includes("Native prompt")),
     );
   assert.ok(pendingUserLine !== undefined);
-  const pendingUserLabel = pendingUserLine.spans.find((span) =>
-    span.text.includes("Steering ·"),
+  const pendingUserText = pendingUserLine.spans.find((span) =>
+    span.text.includes("Native prompt"),
   );
-  assert.ok(pendingUserLabel !== undefined);
-  assert.ok(pendingUserLabel.fg.equals(RGBA.fromHex("#cdd6f4")));
+  assert.ok(pendingUserText !== undefined);
+  assert.ok(
+    pendingUserText.fg.equals(RGBA.fromHex(terminalPalette("mocha").accent)),
+  );
   fixture.pushFrame({
     pending: { total: 0, prompts: [], hasMore: false },
     cursor: `fixture-${admittedRequestId}`,
@@ -518,33 +582,15 @@ try {
     extensions: {},
     attention: [],
   });
-  await waitForFrame(
+  const confirmedFrame = await waitForFrame(
     setup,
-    (frame) => frame.includes("Native prompt") && frame.includes("spaced text"),
-  );
-  fixture.pushFrame({
-    kind: "progress",
-    activity: {
-      queue: { state: "running", commandId: "running-command" },
-      cancellationRequested: false,
-      retry: null,
-      activeTool: null,
-      lastModelChoiceSequence: null,
-      compaction: null,
-    },
-    progress: {
-      messageId: `assistant-${admittedRequestId}`,
-      revision: 1,
-      text: "Fixture is streaming a reply.",
-      textTruncated: false,
-      thinking: "",
-      thinkingTruncated: false,
-    },
-  });
-  const confirmedFrame = await waitForFrame(setup, (frame) =>
-    frame.includes("Fixture is streaming a reply."),
+    (frame) =>
+      frame.includes("Native prompt") &&
+      frame.includes("spaced text") &&
+      !frame.includes("queued for host"),
   );
 
+  // Inspect the confirmed user before streaming scrolls this 10-row viewport.
   const confirmedLines = confirmedFrame.split("\n");
   const firstPromptLine = confirmedLines.findIndex((line) =>
     line.includes("Native prompt"),
@@ -554,9 +600,8 @@ try {
   );
   assert.ok(
     firstPromptLine >= 0 && lastPromptLine > firstPromptLine,
-    "long timeline content wraps across multiple rendered lines",
+    `long timeline content wraps across multiple rendered lines:\n${confirmedFrame}`,
   );
-  assert.match(confirmedFrame, /Fixture is streaming a reply\./);
   await act(async () => setup.waitForVisualIdle());
   const confirmedSpanLines = setup.captureSpans().lines;
   const confirmedUserLine = confirmedSpanLines.find((line) =>
@@ -585,11 +630,36 @@ try {
     ),
     "confirmed user surface is uniform outside its right scrollbar gutter",
   );
-  const streamingAssistantLine = confirmedSpanLines.find((line) =>
-    line.spans.some((span) =>
-      span.text.includes("Fixture is streaming a reply."),
-    ),
+  fixture.pushFrame({
+    kind: "progress",
+    activity: {
+      queue: { state: "running", commandId: "running-command" },
+      cancellationRequested: false,
+      retry: null,
+      activeTool: null,
+      lastModelChoiceSequence: null,
+      compaction: null,
+    },
+    progress: {
+      messageId: `assistant-${admittedRequestId}`,
+      revision: 1,
+      text: "Fixture is streaming a reply.",
+      textTruncated: false,
+      thinking: "",
+      thinkingTruncated: false,
+    },
+  });
+  const streamingFrame = await waitForFrame(setup, (frame) =>
+    frame.includes("Fixture is streaming a reply."),
   );
+  assert.match(streamingFrame, /Fixture is streaming a reply\./);
+  const streamingAssistantLine = setup
+    .captureSpans()
+    .lines.find((line) =>
+      line.spans.some((span) =>
+        span.text.includes("Fixture is streaming a reply."),
+      ),
+    );
   assert.ok(streamingAssistantLine !== undefined);
   const streamingAssistantDot = streamingAssistantLine.spans.find((span) =>
     span.text.includes("●"),
@@ -604,16 +674,24 @@ try {
   for (let press = 0; press < 2; press += 1) {
     await pressDecodedKey(setup, () => setup.mockInput.pressEscape());
     if (press === 0)
-      await boundedCompletion(abortObserved.promise, "Escape abort dispatch");
+      await boundedCompletion(
+        cancelObserved.promise,
+        "Escape targeted cancellation",
+      );
   }
-  assert.deepEqual(abortRequests, [{ type: "abort" }]);
+  assert.deepEqual(cancelRequests, [
+    { type: "cancel", commandId: "running-command" },
+  ]);
   assert.match(setup.captureCharFrame(), /Fixture is streaming a reply\./u);
   const composer = renderedNodes(setup.renderer.root).find(
     (node) => node instanceof TextareaRenderable,
   );
-  assert.ok(composer?.focused, "Escape abort keeps the composer focused");
-  assert.equal(exits, 0, "Escape abort does not exit the frame");
-  pendingAbort.resolve();
+  assert.ok(
+    composer?.focused,
+    "Escape cancellation keeps the composer focused",
+  );
+  assert.equal(exits, 0, "Escape cancellation does not exit the frame");
+  pendingCancel.resolve();
   await act(async () => {
     await setup.renderOnce();
   });
@@ -658,23 +736,28 @@ try {
     });
     await setup.renderOnce();
   });
-  await waitForFrame(setup, (frame) => frame.includes("error"));
-  await act(async () => setup.mockInput.pressKey("u", { ctrl: true }));
-  await act(async () => setup.mockInput.typeText("/exit"));
-  await act(async () => setup.mockInput.pressEnter());
-  assert.equal(exits, 1, "/exit remains the explicit frame exit");
-  await act(async () => {
+  await waitForFrame(
+    setup,
+    (frame) =>
+      frame.includes("Stopped: Fixture run failed") && frame.includes("/retry"),
+  );
+  await pressDecodedKey(setup, () =>
+    setup.mockInput.pressKey("u", { ctrl: true }),
+  );
+  assert.equal(composer.plainText, "");
+  await pressDecodedKey(setup, () => {
     setup.mockInput.pressKey("c", { ctrl: true });
   });
-  assert.equal(exits, 2, "Ctrl+C routes through the frame exit callback");
+  await waitForFrame(setup, () => exits === 1);
+  assert.equal(exits, 1, "Ctrl+C routes through the frame exit callback");
 } finally {
-  await act(async () => {
-    setup.renderer.destroy();
+  await destroyTestRenderer(setup, () => {
     normalKeymap.cleanup();
+    for (const detach of detachKeymapAddons.toReversed()) detach();
   });
   assert.deepEqual(normalWhistle.snapshot().slash, []);
   queryClient.clear();
-  normalWhistle.close();
+  normalCommandHost.dispose();
 }
 
 await fixture.waitForClose();
@@ -779,7 +862,7 @@ try {
   assert.ok(frame.indexOf("Read 2 files") < frame.indexOf("Thinking"));
   assert.ok(frame.indexOf("Thinking") < frame.indexOf("Read c.ts"));
 } finally {
-  await act(async () => toolProofSetup.renderer.destroy());
+  await destroyTestRenderer(toolProofSetup);
   toolProofClient.clear();
   toolProofCommands.close();
 }
@@ -820,7 +903,13 @@ async function runSessionPickerProof() {
       createWhistle: () => pickerCommands,
       loadThemePreference: async () => ({ theme: "mocha" }),
       discoverSessions: async () => ({
-        agentCount: 1,
+        agents: [
+          {
+            agentId: "one",
+            databasePath: "/project/one/agent.sqlite",
+            sessionCount: 1,
+          },
+        ],
         sessions: [pickerChoice, { ...pickerChoice, title: "", updatedAt: 3 }],
         problems: [],
       }),
@@ -842,7 +931,13 @@ async function runSessionPickerProof() {
           throw new Error("Picker owner must not open after Ctrl+C");
         },
         discover: async () => ({
-          agentCount: 1,
+          agents: [
+            {
+              agentId: "one",
+              databasePath: "/project/one/agent.sqlite",
+              sessionCount: 1,
+            },
+          ],
           sessions: [
             pickerChoice,
             { ...pickerChoice, title: "", updatedAt: 3 },

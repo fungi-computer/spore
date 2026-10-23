@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { idleActivity } from "@fungi.computer/parakeet-testing";
 import { createWhistle } from "@fungi.computer/whistle";
@@ -88,6 +89,7 @@ const failedRunSnapshot: SessionSnapshot = {
   terminals: [],
   compactions: [],
   activity: idleActivity,
+  toolOutput: [],
   progress: null,
   extensions: {},
   attention: [],
@@ -163,9 +165,7 @@ for (const width of [80, 160]) {
         sigils.code.color.toInts().slice(0, 3),
       );
     } finally {
-      act(() => {
-        setup.renderer.destroy();
-      });
+      await destroyTestRenderer(setup);
       client.clear();
       commands.close();
       await fixture.waitForClose();

@@ -13,7 +13,10 @@ export type TuiCliOptions = Readonly<{
   /** Installed programs the project enabled, offered in Open pane. */
   paneKinds?: readonly import("./button/index.js").PaneKindEntry[] | undefined;
   clients?: readonly ClientEntryV1[] | undefined;
+  questionExtensionId?: string | undefined;
   databasePath?: string | undefined;
+  /** Persisted Local sandbox requirement; independent of auto-approval. */
+  requireSandbox?: boolean | undefined;
   fungiMcp?: PrivateLocalServiceSelection["fungiMcp"];
   sessionId?: string | undefined;
   sessionChoice?: PrivateLocalSessionChoice | undefined;
@@ -40,18 +43,25 @@ export type TuiFrameControls = {
   acquireSession: NonNullable<TuiFrameProps["acquireSession"]>;
   apps?: TuiFrameProps["apps"];
   paneKinds?: TuiFrameProps["paneKinds"];
-  commandHost: import("@fungi.computer/oyster/shell/command-host").AppSurfaceCommandHost;
+  commandHost: import("@fungi.computer/nacre/command-host").AppSurfaceCommandHost;
   target: import("./button/index.js").ConversationPaneTarget;
   replacePaneId?: string | undefined;
+  openPlacement?: TuiFrameProps["openPlacement"];
   onClose: () => Promise<void>;
-  openConversation: () => Promise<void>;
-  chooseConversation: () => Promise<void>;
+  openConversation: (
+    placement?: TuiFrameProps["openPlacement"],
+  ) => Promise<void>;
+  chooseConversation: (
+    placement?: TuiFrameProps["openPlacement"],
+  ) => Promise<void>;
   clients?: TuiFrameProps["clients"];
   interactionStore?: TuiFrameProps["interactionStore"];
   inputHandoff?:
     | import("./button/terminal-input-handoff.js").TerminalInputHandoff
     | undefined;
   modelSource?: TuiFrameProps["modelSource"];
+  sandboxSource?: TuiFrameProps["sandboxSource"];
+  onStopAll?: TuiFrameProps["onStopAll"];
   sessionTitle?: TuiFrameProps["sessionTitle"];
   reloadSources?: TuiFrameProps["reloadSources"];
   onResume: NonNullable<TuiFrameProps["onResume"]>;
@@ -60,6 +70,7 @@ export type TuiFrameControls = {
   onObservationUnavailable: NonNullable<
     TuiFrameProps["onObservationUnavailable"]
   >;
+  onRebindService: TuiFrameProps["onRebindService"];
   initialCommandError?: string | undefined;
   initialCommandNotice?: string | undefined;
 };

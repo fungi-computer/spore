@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { act } from "react";
 import { ScrollBoxRenderable, type Renderable } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { createQueryClient } from "@fungi.computer/agar/query";
 import {
   QueryClientProvider,
@@ -258,9 +259,7 @@ for (const [width, height] of [
         `completed-${String(width)}`,
       );
     } finally {
-      act(() => {
-        setup.renderer.destroy();
-      });
+      await destroyTestRenderer(setup);
       query.clear();
       commands.close();
       await fixture.waitForClose();

@@ -225,12 +225,14 @@ const footerSnapshots = {
   idle: {
     ...representativeDesignSnapshot,
     activity: idleActivity,
+    toolOutput: [],
     progress: null,
     terminals: [],
   },
   waiting: {
     ...representativeDesignSnapshot,
     activity: idleActivity,
+    toolOutput: [],
     progress: null,
     terminals: [
       {
@@ -241,7 +243,7 @@ const footerSnapshots = {
       },
     ],
   },
-  thinking: { ...representativeDesignSnapshot, progress: null },
+  thinking: { ...representativeDesignSnapshot, toolOutput: [], progress: null },
   responding: representativeDesignSnapshot,
   "running-tool": longHistoryDesignSnapshot,
 } satisfies Readonly<Record<string, SessionSnapshot>>;
@@ -434,12 +436,15 @@ for (const size of sizes) {
     },
   );
   await scene(
-    "login-success",
+    "login-completed",
     size,
     scriptedOwner(() => Promise.resolve()),
     async (setup) => {
       await login(setup, "OpenAI");
-      await until(setup, "Signed in to OpenAI.");
+      await setup.waitForFrame(
+        (frame) => !frame.includes("Sign in to a model provider"),
+      );
+      assert.doesNotMatch(setup.captureCharFrame(), /Signed in to OpenAI\./u);
     },
   );
   await scene("theme", size, scriptedOwner(), async (setup) => {

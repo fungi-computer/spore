@@ -72,7 +72,6 @@ function resolveColors(
 type PaletteSnapshot = Readonly<{
   palette: TerminalColors | undefined;
   mode: "dark" | "light" | null;
-  error: string | undefined;
 }>;
 const palettes = new WeakMap<
   ReturnType<typeof useRenderer>,
@@ -83,7 +82,6 @@ function createPaletteOwner(renderer: ReturnType<typeof useRenderer>) {
   let snapshot: PaletteSnapshot = {
     palette: undefined,
     mode: renderer.themeMode,
-    error: undefined,
   };
   let requested = false;
   const listeners = new Set<() => void>();
@@ -95,10 +93,6 @@ function createPaletteOwner(renderer: ReturnType<typeof useRenderer>) {
     publish({
       ...snapshot,
       palette,
-      error:
-        palette.defaultForeground === null || palette.defaultBackground === null
-          ? "Terminal palette unavailable; using terminal color defaults."
-          : undefined,
     });
   };
   const mode = (value: "dark" | "light" | null) => {
@@ -108,12 +102,9 @@ function createPaletteOwner(renderer: ReturnType<typeof useRenderer>) {
   const query = () => {
     scheduled = false;
     renderer.clearPaletteCache();
-    void renderer.getPalette({ size: 16 }).then(update, () => {
-      publish({
-        ...snapshot,
-        error: "Terminal palette unavailable; using terminal color defaults.",
-      });
-    });
+    // Missing palette replies are normal for unsupported terminals. Keep the
+    // terminal defaults (or last observed colors) without announcing a fallback.
+    void renderer.getPalette({ size: 16 }).then(update, () => undefined);
   };
   // Every pane workspace observing the same theme change asks in one commit;
   // the terminal is queried once for all of them.
@@ -157,10 +148,7 @@ export function useTerminalTheme(
     owner = createPaletteOwner(renderer);
     palettes.set(renderer, owner);
   }
-  const { palette, mode, error } = useSyncExternalStore(
-    owner.subscribe,
-    owner.read,
-  );
+  const { palette, mode } = useSyncExternalStore(owner.subscribe, owner.read);
   const refresh = owner.refresh;
   const ensure = owner.ensure;
   const previousTheme = useRef(theme);
@@ -206,7 +194,6 @@ export function useTerminalTheme(
   return {
     ...presentation,
     refresh,
-    error: theme === "terminal" ? error : undefined,
   };
 }
 
@@ -216,7 +203,7 @@ const themeHints = [
   { keys: "Esc", label: "cancel", priority: 2 },
 ];
 
-/** A dialog previews locally; only confirmation changes the saved preference. */
+/** Arrows preview locally; picking a theme saves it in the same action. */
 function ThemePicker({
   theme,
   colors,
@@ -230,7 +217,6 @@ function ThemePicker({
   onConfirm: (theme: ThemeName) => Promise<void>;
   onClose: () => void;
 }>) {
-  const [preview, setPreview] = useState(theme);
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string>();
   const mounted = useRef(false);
@@ -241,11 +227,11 @@ function ThemePicker({
       onPreview(undefined);
     };
   }, [onPreview]);
-  const confirm = async () => {
+  const confirm = async (selected: ThemeName) => {
     if (saving) return;
     setSaving(true);
     try {
-      await onConfirm(preview);
+      await onConfirm(selected);
       onClose();
     } catch (error) {
       reportFailure("terminal-theme-save", error);
@@ -271,12 +257,12 @@ function ThemePicker({
         onHighlight={(index) => {
           const selected = themeNames[index];
           if (selected !== undefined) {
-            setPreview(selected);
             onPreview(selected);
           }
         }}
-        onSelect={() => {
-          void confirm();
+        onSelect={(index) => {
+          const selected = themeNames[index];
+          if (selected !== undefined) void confirm(selected);
         }}
         onCancel={onClose}
         colors={colors}
@@ -362,5 +348,5 @@ export function useThemeControls(
       lease.dispose();
     };
   }, [commands]);
-  return { presentation, error: failure ?? presentation.error };
+  return { presentation, error: failure };
 }

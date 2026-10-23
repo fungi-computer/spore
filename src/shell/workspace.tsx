@@ -1,5 +1,4 @@
 import { HostColorsContext } from "../button/dialog-surface.js";
-import { NoticeLine } from "../button/notice.js";
 import { Placeholder } from "../button/placeholder.js";
 import {
   useKeyboard,
@@ -10,12 +9,13 @@ import {
 import { CliRenderEvents } from "@opentui/core";
 import {
   useEffect,
+  useContext,
   useLayoutEffect,
   useMemo,
   useState,
   useSyncExternalStore,
 } from "react";
-import type { AppSurfaceCommandHost } from "@fungi.computer/oyster/shell/command-host";
+import type { AppSurfaceCommandHost } from "@fungi.computer/nacre/command-host";
 import { builtinPanes } from "../panes/builtins.js";
 import {
   DialogHost,
@@ -25,16 +25,21 @@ import {
   type PaneSessions,
   type PaneApps,
   type ThemeName,
-  type PaneNotice,
   type PaneKindEntry,
+  useToast,
+  ToastProvider,
 } from "../button/index.js";
 import {
   usePaneShellCommands,
   type PaneShellCommandOptions,
 } from "./commands.js";
-import { displayText } from "./display-text.js";
 import { paneValue } from "./value.js";
-import { createPaneRegistry, type PaneProjection } from "./registry.js";
+import {
+  createPaneRegistry,
+  type PaneProjection,
+  type PaneOpenDirection,
+} from "./registry.js";
+import { KeyHintsContext } from "./which-key.js";
 
 export type PaneWorkspaceProps = Readonly<{
   kinds?: readonly PaneKindEntry[];
@@ -45,13 +50,28 @@ export type PaneWorkspaceProps = Readonly<{
   apps?: PaneApps | undefined;
   theme: ThemeName;
   exit: () => void;
-  openPane: () => void | Promise<void>;
+  openPane: (direction?: PaneOpenDirection) => void | Promise<void>;
   dialog: DialogController;
   onRegistry: (registry: ReturnType<typeof createPaneRegistry>) => void;
 }>;
 
-/** One shell renderer reads the registry; hidden tiles keep their React lifetime. */
+/**
+ * One shell renderer reads the registry; hidden tiles keep their React
+ * lifetime. Toasts float over it, owned by the application root when there is
+ * one and by the workspace when it is mounted alone.
+ */
 export function PaneWorkspace(props: PaneWorkspaceProps) {
+  return (
+    <box width="100%" height="100%" position="relative">
+      <ToastProvider>
+        <PaneWorkspaceBody {...props} />
+      </ToastProvider>
+    </box>
+  );
+}
+
+function PaneWorkspaceBody(props: PaneWorkspaceProps) {
+  const keyHints = useContext(KeyHintsContext);
   const renderer = useRenderer();
   const viewport = useTerminalDimensions();
   const dialog = props.dialog;
@@ -76,10 +96,7 @@ export function PaneWorkspace(props: PaneWorkspaceProps) {
       presentation.nativeDefaults,
     ],
   );
-  const [notice, setNotice] = useState<PaneNotice>();
-  const notify = (next: PaneNotice) => {
-    setNotice({ ...next, message: displayText(next.message) });
-  };
+  const toast = useToast();
   const [stores] = useState(() => ({
     theme: paneValue(themePresentation),
     open: paneValue(dialog.isOpen),
@@ -96,7 +113,7 @@ export function PaneWorkspace(props: PaneWorkspaceProps) {
       apps: props.apps,
       theme: stores.theme.value,
       exit: props.exit,
-      notify,
+      toast: toast.show,
       dialogs: {
         open: stores.open.value,
         show: (...args) => stores.dialog.current.show(...args),
@@ -120,7 +137,7 @@ export function PaneWorkspace(props: PaneWorkspaceProps) {
   useEffect(() => {
     stores.theme.set(themePresentation);
   }, [stores, themePresentation]);
-  // Only a Dialog is modal; a notice never holds the keyboard. A layout
+  // Only a Dialog is modal; a toast never holds the keyboard. A layout
   // effect: panes must see a Dialog as open before their own passive effects
   // run in the commit that shows it.
   useLayoutEffect(() => {
@@ -143,25 +160,11 @@ export function PaneWorkspace(props: PaneWorkspaceProps) {
     dialog,
     colors: presentation.colors,
     openPane: props.openPane,
-    notify,
+    toast: toast.show,
   };
-  const leaderKey = usePaneShellCommands(shellCommands);
-  useEffect(() => {
-    // A notice is read, not answered: the next key (Esc included, which a
-    // keymap binding may consume first) dismisses it and still reaches its owner.
-    const dismiss = () => {
-      setNotice(undefined);
-    };
-    renderer.keyInput.prependListener("keypress", dismiss);
-    return () => {
-      renderer.keyInput.off("keypress", dismiss);
-    };
-  }, [renderer]);
+  usePaneShellCommands(shellCommands);
   useKeyboard((event) => {
-    if (leaderKey(event)) {
-      event.preventDefault();
-      event.stopPropagation();
-    } else registry.key(event);
+    registry.key(event);
   });
   usePaste((event) => {
     registry.paste(event);
@@ -215,18 +218,7 @@ export function PaneWorkspace(props: PaneWorkspaceProps) {
             )}
           </box>
         ))}
-        {notice === undefined ? null : (
-          <box
-            position="absolute"
-            bottom={0}
-            left={0}
-            width="100%"
-            height="auto"
-            backgroundColor={chrome.colors.background}
-          >
-            <NoticeLine notice={notice} colors={chrome.colors} />
-          </box>
-        )}
+        {keyHints}
         <DialogHost dialog={dialog} colors={chrome.colors} />
       </box>
     </HostColorsContext.Provider>

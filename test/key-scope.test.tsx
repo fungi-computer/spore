@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { act, useRef } from "react";
 import { testRender } from "@opentui/react/test-utils";
 import type { TextareaRenderable } from "@opentui/core";
-import { createAppSurfaceCommandHost } from "@fungi.computer/oyster/shell/command-host";
+import { createAppSurfaceCommandHost } from "@fungi.computer/nacre/command-host";
 import {
   z,
   PaneProvider,
@@ -100,7 +100,9 @@ test("native focus follows the focused pane, and closing a Dialog restores the p
     expect(editors.get("first")?.focused).toBe(false);
 
     // A Dialog holds the keyboard: no pane editor keeps native focus.
-    const dialog = dialogs?.show(() => <text>modal</text>);
+    const { dialog } = await act(() => ({
+      dialog: dialogs?.show(() => <text>modal</text>),
+    }));
     await waitForFrame(setup, (frame) => frame.includes("modal"));
     expect(focusedName()).toBeUndefined();
     // Focus moves under the Dialog; closing it restores that pane's editor.

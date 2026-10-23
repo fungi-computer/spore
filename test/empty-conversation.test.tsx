@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "@fungi.computer/agar/query";
 import { createWhistle } from "@fungi.computer/whistle";
@@ -82,9 +83,7 @@ for (const kind of ["missing", "oauth"] as const) {
         expect(frame).toContain("Sign in to start: type /login");
       else expect(frame).not.toContain("Sign in to start");
     } finally {
-      act(() => {
-        setup.renderer.destroy();
-      });
+      await destroyTestRenderer(setup);
       commands.close();
       query.clear();
       await fixture.waitForClose();

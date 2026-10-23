@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { createQueryClient } from "@fungi.computer/agar/query";
 import {
   QueryClientProvider,
@@ -125,9 +126,7 @@ test("/skills lists each discovered skill beside the file it came from", async (
       ["skills", { name: "herdr" }],
     ]);
   } finally {
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     query.clear();
     commands.close();
     await fixture.waitForClose();

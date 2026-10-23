@@ -21,6 +21,7 @@ import {
 import { TuiFrame } from "../src/frame.js";
 import { captureFrame } from "./frame-capture.js";
 import { footerRow } from "./footer-row.js";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 
 const contextWindow = 200_000;
 // Pi never drops a reply away from the question it answered: if one old
@@ -96,16 +97,18 @@ test("the footer shows compacting live with a real window, then the divider's pl
     { width: 100, height: 24 },
   );
   try {
-    for (let turn = 0; turn < oldTurns; turn += 1) {
-      await session.send(`Build history turn ${String(turn)}.`, {
-        requestId: `capture-history-${String(turn)}`,
+    const settledBefore = await act(async () => {
+      for (let turn = 0; turn < oldTurns; turn += 1) {
+        await session.send(`Build history turn ${String(turn)}.`, {
+          requestId: `capture-history-${String(turn)}`,
+        });
+        await host.settle(sessionId);
+      }
+      await session.send("One more short thing to check.", {
+        requestId: "capture-history-recent",
       });
-      await host.settle(sessionId);
-    }
-    await session.send("One more short thing to check.", {
-      requestId: "capture-history-recent",
+      return host.settle(sessionId);
     });
-    const settledBefore = await host.settle(sessionId);
     expect(settledBefore.activity.queue.state).toBe("idle");
     // Host settlement is not acknowledgement by the streamed Query/React
     // projection. Observe its idle footer before capturing, just as we observe
@@ -212,9 +215,7 @@ test("the footer shows compacting live with a real window, then the divider's pl
     expect(idleAfter).not.toMatch(/·\s*0(\/|$)/u);
     expect(idleAfter).not.toMatch(/\b(2[5-9]|3[0-5])K\/200K/u);
   } finally {
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     query.clear();
     commands.close();
     await host.close();

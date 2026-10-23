@@ -4,6 +4,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
 import { createPrivateModels } from "@fungi.computer/truffle";
+import type { ApiKeyCredential, AuthInteraction } from "@earendil-works/pi-ai";
 import type { LocalAuthModels } from "@fungi.computer/truffle/auth";
 import { runFungiCli, type TuiAuthCall } from "../src/cli.js";
 
@@ -121,4 +122,62 @@ test("expanded providers use the actual terminal height", async () => {
   expect(expanded).toContain("Amazon Bedrock");
   expect(expanded).toContain("Cerebras");
   expect(expanded).toContain("Cloudflare Workers AI");
+});
+
+// Locks in the CLI line (`fungi: No key entered`); it passed before the
+// Local-service fix because the CLI never crossed the service.
+test("fungi login refuses a blank API key with plain No key entered and stores nothing", async () => {
+  const input = new PassThrough();
+  const output = Object.assign(new PassThrough(), { columns: 80, rows: 36 });
+  let shown = "";
+  let answered = false;
+  output.on("data", (chunk: Buffer) => {
+    const text = stripVTControlCharacters(chunk.toString());
+    shown += text;
+    if (!answered && text.includes("Enter OpenAI API key")) {
+      answered = true;
+      queueMicrotask(() => input.write("\r"));
+    }
+  });
+  const openai = createPrivateModels()
+    .getProviders()
+    .find((provider) => provider.id === "openai");
+  assert.ok(openai?.auth.apiKey);
+  const apiKey = openai.auth.apiKey;
+  const provider = {
+    ...openai,
+    auth: {
+      apiKey: {
+        ...apiKey,
+        login: async (auth: AuthInteraction): Promise<ApiKeyCredential> => {
+          const key = await auth.prompt({
+            type: "secret",
+            message: "Enter OpenAI API key",
+          });
+          return { type: "api_key", key };
+        },
+      },
+    },
+  };
+  const authModels: LocalAuthModels = {
+    getProviders: () => [provider],
+    checkAuth: () => Promise.resolve(undefined),
+    login: async (_id, _type, auth) => {
+      const login = provider.auth.apiKey.login;
+      return login(auth);
+    },
+    logout: () => Promise.reject(new Error("Unexpected logout")),
+  };
+  await assert.rejects(
+    runFungiCli(["login", "--provider", "openai", "--auth-type", "api_key"], {
+      interactive: true,
+      stdin: input,
+      stdout: output,
+      authModels,
+    }),
+    // bin.ts prints a failure as `fungi: <message>`; the message is the line.
+    (cause: unknown) =>
+      cause instanceof Error && cause.message === "No key entered",
+  );
+  expect(shown).not.toContain("login complete");
 });

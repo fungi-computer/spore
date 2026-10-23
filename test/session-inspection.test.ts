@@ -101,6 +101,9 @@ const snapshot: SessionSnapshot = {
     },
     {
       id: "tool-1",
+      data: {
+        error: { kind: "not-found", message: "Old text was not found" },
+      },
       sequence: 5,
       commandId: "command-1",
       value: {
@@ -108,9 +111,6 @@ const snapshot: SessionSnapshot = {
         toolCallId: "call-1",
         toolName: "files.edit",
         content: [{ type: "text", text: "Old text was not found" }],
-        details: {
-          error: { kind: "not-found", message: "Old text was not found" },
-        },
         isError: true,
         timestamp: 2,
       },
@@ -126,6 +126,7 @@ const snapshot: SessionSnapshot = {
   ],
   pending: { total: 0, prompts: [], hasMore: false },
   activity: idleActivity,
+  toolOutput: [],
   progress: null,
   extensions: {
     loop: {
@@ -386,6 +387,7 @@ test("plain inspection explains diagnostics while JSON keeps the exact status an
   const toolCause = "tool:failed: Old text was not found.";
   const message: SessionSnapshot["messages"][number] = {
     id: "tool-error",
+    data: { error: { kind: "not-found", message: toolCause } },
     sequence: 1,
     commandId: "failed",
     value: {
@@ -394,7 +396,6 @@ test("plain inspection explains diagnostics while JSON keeps the exact status an
       toolName: "files.edit",
       content: [{ type: "text", text: toolCause }],
       isError: true,
-      details: { error: { kind: "not-found", message: toolCause } },
       timestamp: 1,
     },
   };
@@ -439,6 +440,7 @@ test("plain inspection explains diagnostics while JSON keeps the exact status an
           commandId: message.commandId,
           role: "toolResult",
           value: message.value,
+          data: message.data,
           error: { kind: "not-found", message: toolCause },
         },
       ],
@@ -471,4 +473,35 @@ test("plain inspection explains diagnostics while JSON keeps the exact status an
   expect(renderInspection(value, false, false)).toContain(
     "Old text was not found.",
   );
+});
+
+test("inspection visibly reports a Goal state reset without a Session error", () => {
+  const reason =
+    "State reset required for botanical-session-goal: stored version 6, declared version 7. An operator must authorize the reset; stored records have not been changed.";
+  const resetSnapshot: SessionSnapshot = {
+    ...snapshot,
+    terminals: [
+      {
+        commandId: "command-1",
+        outcome: "completed",
+        sequence: 6,
+        diagnostic: null,
+      },
+    ],
+    extensions: {
+      "botanical-session-goal": {
+        status: "stopped",
+        revision: "goal-v7",
+        reason,
+      },
+    },
+  };
+  expect(inspectionStateCauses(resetSnapshot)).toEqual([
+    {
+      kind: "extension_stopped",
+      extensionId: "botanical-session-goal",
+      message: reason,
+    },
+  ]);
+  expect(renderInspection(resetSnapshot, true, false)).toContain(reason);
 });

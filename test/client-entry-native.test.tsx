@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import { act } from "react";
 import type { KeyEvent } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { createQueryClient } from "@fungi.computer/agar/query";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import {
@@ -71,7 +72,8 @@ for (const { width, height } of [
                 revision: "capture-goal",
                 objective: "Verify the garden change",
                 state: "active",
-                stopReason: null,
+                startedAt: fixtures.fixtureGoalStartedAt,
+                pauseCause: null,
               }
             : null,
         plan:
@@ -175,7 +177,7 @@ for (const { width, height } of [
         expect(footer).not.toMatch(footerHint);
         expect(frame).not.toContain("Esc nothing to cancel");
         if (state === "panel" || state === "notice")
-          expect(frame).toContain("Goal · active");
+          expect(frame).toContain("Pursuing goal since");
         if (state === "waiting") {
           const loopRows = frame
             .split("\n")
@@ -226,7 +228,7 @@ for (const { width, height } of [
           } finally {
             setup.renderer.keyInput.off("keypress", parsed);
           }
-          expect(setup.captureCharFrame()).toContain("Goal · active");
+          expect(setup.captureCharFrame()).toContain("Pursuing goal since");
           expect(fixture.cancelCalls()).toHaveLength(0);
         }
         if (state === "active") {
@@ -262,9 +264,7 @@ for (const { width, height } of [
         }
       } finally {
         adapter.cleanup();
-        act(() => {
-          setup.renderer.destroy();
-        });
+        await destroyTestRenderer(setup);
         commands.close();
         query.clear();
         await fixture.waitForClose();

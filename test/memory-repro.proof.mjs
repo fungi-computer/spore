@@ -113,6 +113,7 @@ function group(index) {
   };
   const results = calls.map((call, result) => ({
     id: `result-${index}-${result}`,
+    data: {},
     commandId: null,
     sequence: sequence + result + 1,
     value: {
@@ -122,7 +123,6 @@ function group(index) {
       content: [
         { type: "text", text: `${index}-${result}:${"x".repeat(16384)}` },
       ],
-      details: {},
       isError: false,
       timestamp: sequence + result + 1,
     },

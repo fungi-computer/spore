@@ -133,12 +133,10 @@ function PromptView({
 export function InteractionView({
   host,
   colors,
-  onRetry,
   onClose,
 }: Readonly<{
   host: WhistleInteractionHost;
   colors: Colors;
-  onRetry?: (() => void) | undefined;
   onClose: () => void;
 }>) {
   const state = useSyncExternalStore(host.subscribe, host.snapshot);
@@ -293,11 +291,11 @@ export function InteractionView({
           <Picker
             colors={colors}
             choices={[
-              ...(onRetry === undefined ? [] : [{ name: "Try again" }]),
+              ...(state.retryable ? [{ name: "Try again" }] : []),
               { name: "Close" },
             ]}
             onSelect={(index) => {
-              if (onRetry !== undefined && index === 0) onRetry();
+              if (state.retryable && index === 0) host.retry();
               else {
                 host.cancel();
                 onClose();
@@ -340,10 +338,6 @@ export function useInteractionDialog(
         <InteractionView
           host={open.host}
           colors={view.current.colors}
-          onRetry={() => {
-            store.close();
-            open.retry();
-          }}
           onClose={() => {
             view.current.inputHandoff?.capture();
             store.close();

@@ -49,7 +49,7 @@ export async function waitForLiveFrame(
       throw new Error("Renderer closed before the expected frame");
     if (Date.now() > deadline)
       throw new Error(`Expected live frame was not rendered:\n${frame}`);
-    await delay(20);
+    await act(async () => delay(20));
   }
 }
 

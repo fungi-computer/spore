@@ -14,10 +14,10 @@ export type SessionPickerProps = Readonly<{
 
 /** Standalone picker composer; the application uses its existing DialogHost. */
 export function SessionPicker(props: SessionPickerProps) {
-  const { colors, error } = useTerminalTheme(props.initialTheme ?? "terminal");
+  const { colors } = useTerminalTheme(props.initialTheme ?? "terminal");
   return (
     <DialogSurface colors={colors} onClose={props.onCancel}>
-      <SessionPickerContent {...props} themeError={props.themeError ?? error} />
+      <SessionPickerContent {...props} />
     </DialogSurface>
   );
 }

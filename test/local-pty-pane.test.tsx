@@ -102,7 +102,7 @@ async function openConversationTerminal(width: number, height: number) {
     await frame(() => terminalFocused(app));
     return { setup, app, frame, key };
   } catch (cause) {
-    await app.close();
+    await act(async () => app.close());
     throw cause;
   }
 }
@@ -663,6 +663,6 @@ test("closing an idle local shell closes at once, without asking to terminate jo
     await frame(() => !terminalFocused(app));
     expect(setup.captureCharFrame()).not.toContain("terminate its jobs");
   } finally {
-    await app.close();
+    await act(async () => app.close());
   }
 });

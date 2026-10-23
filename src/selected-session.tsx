@@ -1,11 +1,18 @@
 import { createAppPaneService } from "./app-pane-service.js";
+import { localManagementCommands } from "./local-management-commands.js";
+import { localExtensions } from "@fungi.computer/truffle/extensions";
+import { homedir } from "node:os";
+import { resolveDefaultCredentialPath } from "@fungi.computer/truffle";
 import {
   createParakeetInteractions,
   type ModelAccountContext,
   type ParakeetInteractions,
   type ReloadSource,
 } from "@fungi.computer/parakeet/headless";
-import type { PrivateLocalServiceManager } from "@fungi.computer/truffle/service";
+import {
+  LocalServiceUpdated,
+  type PrivateLocalServiceManager,
+} from "@fungi.computer/truffle/service";
 import type { WhistleRuntime } from "@fungi.computer/whistle";
 import type { createRoot } from "@opentui/react";
 import type { QueryClient } from "@tanstack/query-core";
@@ -15,6 +22,12 @@ import * as Scope from "effect/Scope";
 
 import { asCliFailure, combinedCliFailure } from "./cli-failure.js";
 import { reportFailure } from "./button/log-event.js";
+import { createSandboxNoticeClaims } from "./button/local-sandbox.js";
+import type { PaneOpenPlacement } from "./shell/registry.js";
+import {
+  bindTuiUpdateRestart,
+  checkpointTuiUpdateDrafts,
+} from "./frame-renderer.js";
 import { runTuiEffect } from "./effect-boundary.js";
 import type { prepareClientExtensions } from "./client-extensions.js";
 import {
@@ -36,6 +49,9 @@ import type {
 } from "./tui-cli-contract.js";
 
 export type SelectedSessionDependencies = Readonly<{
+  checkpointDrafts: typeof checkpointTuiUpdateDrafts;
+  /** Release clients restart only through the person's toast action. */
+  automaticInstalledRestart?: boolean | undefined;
   checkInstalledUpdate?:
     | ((
         sessions: readonly UpdateRestartSession[],
@@ -61,13 +77,12 @@ export type SelectedSessionDependencies = Readonly<{
     retry: () => void,
     exit: () => void,
   ) => void;
-  renderServiceMismatch: (
+  /** The one message a running window shows once the service speaks another protocol. */
+  renderServiceUpdated: (
     root: ReturnType<typeof createRoot>,
     message: string,
-    upgrade: (() => void) | undefined,
     exit: () => void,
   ) => void;
-  clientBuildId: string | undefined;
 }>;
 
 export type SelectedSessionApplication = Readonly<{
@@ -107,9 +122,6 @@ const localReload: readonly ReloadSource[] = [
   clientExtensionReload,
 ];
 
-const serviceMismatchNotice =
-  "Client and shared Local service have different builds. Upgrade waits for active turns to finish, starts the installed service, and reopens this Session. Other clients may need to reconnect afterward.";
-
 type Selection = {
   host: TuiSessionMount;
   scope: Scope.Closeable;
@@ -121,15 +133,18 @@ export async function runSessionApplication(
   options: TuiCliOptions,
   dependencies: SelectedSessionDependencies,
   application: SelectedSessionApplication,
+  home = homedir(),
 ): Promise<void> {
+  const credentialPath = resolveDefaultCredentialPath(home);
   const { terminal, root, commands, queryClient, serviceManager, theme } =
     application;
   const scope = await runTuiEffect(Scope.make());
-  const appPanes = createAppPaneService();
+  const appPanes = createAppPaneService(credentialPath);
   let notice: string | undefined;
   const extensionFailures: string[] = [];
   let current: Selection | undefined;
   const selections = new Set<Selection>();
+  const claimSandboxNotice = createSandboxNoticeClaims();
   let selectedOnce = false;
   const extensions = await runTuiEffect(
     dependencies
@@ -137,6 +152,7 @@ export async function runSessionApplication(
         invocationRoot: options.invocationRoot,
         entries: options.extensions ?? [],
         clients: options.clients,
+        questionExtensionId: options.questionExtensionId,
         queryClient,
         onError: (cause) => {
           application.onDiagnostic(cause);
@@ -158,8 +174,9 @@ export async function runSessionApplication(
   let checkingInstalledUpdate: Promise<boolean> | undefined;
   let updateTimer: ReturnType<typeof setTimeout> | undefined;
   const hasPendingSelection = () => pending !== undefined;
-  const checkInstalledClient = (): Promise<boolean> => {
+  const checkInstalledClient = (requested = false): Promise<boolean> => {
     if (
+      (!requested && dependencies.automaticInstalledRestart === false) ||
       terminal.destroyed() ||
       current === undefined ||
       hasPendingSelection() ||
@@ -190,18 +207,38 @@ export async function runSessionApplication(
         update.kind === "restart" &&
         application.restartInstalledUpdate !== undefined
       ) {
+        dependencies.checkpointDrafts(
+          root,
+          ordered.map(({ host }) => host.session.address),
+        );
+        // No await after the synchronous journal barrier: do not lose typing
+        // that happened while the installed launcher was checking activity.
         application.restartInstalledUpdate(update);
         terminal.setQuitGuard(undefined);
         terminal.exit();
+        return true;
       }
-      return true;
+      // Waiting for a running turn does not replace its pane. Let observation
+      // recovery rebind to the newer service while the update waits for idle.
+      return false;
     })().finally(() => {
       checkingInstalledUpdate = undefined;
     });
     return checkingInstalledUpdate;
   };
+  const unbindRestart = bindTuiUpdateRestart(root, async () => {
+    const checked = await checkInstalledClient(true);
+    if (!checked || !terminal.destroyed())
+      throw new Error(
+        "The installed update is not ready to restart. Keep this window open and try again.",
+      );
+  });
   const scheduleInstalledCheck = () => {
-    if (dependencies.checkInstalledUpdate === undefined || terminal.destroyed())
+    if (
+      dependencies.automaticInstalledRestart === false ||
+      dependencies.checkInstalledUpdate === undefined ||
+      terminal.destroyed()
+    )
       return;
     updateTimer = setTimeout(() => {
       void checkInstalledClient()
@@ -216,13 +253,12 @@ export async function runSessionApplication(
   terminal.setExitHandler(() => {
     completed.resolve(undefined);
   });
-  const serviceBuildMismatch = async () => {
-    if (dependencies.clientBuildId === undefined) return false;
-    const status = await serviceManager.status();
-    return (
-      status?.buildId !== undefined &&
-      status.buildId !== dependencies.clientBuildId
-    );
+  /** A newer client replaced the service with another protocol: only a restart reconnects. */
+  let serviceUpdated = false;
+  const showServiceUpdated = (updated: LocalServiceUpdated) => {
+    serviceUpdated = true;
+    terminal.inputHandoff?.pause();
+    dependencies.renderServiceUpdated(root, updated.message, terminal.exit);
   };
   const closeScope = (owned: Scope.Closeable) =>
     runTuiEffect(Scope.close(owned, Exit.void));
@@ -284,6 +320,7 @@ export async function runSessionApplication(
   const navigate = (
     open: () => Promise<TuiSessionMount | undefined>,
     replacePaneId?: string,
+    openPlacement?: PaneOpenPlacement,
   ): Promise<void> => {
     if (pending !== undefined || terminal.destroyed())
       return Promise.reject(
@@ -304,7 +341,7 @@ export async function runSessionApplication(
         );
         if (existing !== undefined) {
           current = existing;
-          render(existing, replacePaneId);
+          render(existing, replacePaneId, openPlacement);
           return;
         }
         const previous = current;
@@ -312,7 +349,7 @@ export async function runSessionApplication(
         selections.add(next);
         selectedOnce = true;
         try {
-          render(next, replacePaneId);
+          render(next, replacePaneId, openPlacement);
         } catch (cause) {
           current = previous;
           selections.delete(next);
@@ -327,6 +364,11 @@ export async function runSessionApplication(
               .pipe(Scope.provide(nextScope)),
           );
       } catch (cause) {
+        // The window's one answer to a replaced protocol, not a selection error.
+        if (cause instanceof LocalServiceUpdated) {
+          if (!terminal.destroyed()) showServiceUpdated(cause);
+          return;
+        }
         selectionFailure = asCliFailure(cause, "Session selection failed");
         throw selectionFailure;
       } finally {
@@ -347,87 +389,54 @@ export async function runSessionApplication(
     return pending;
   };
 
-  let upgradingService = false;
-  const showServiceMismatch = (
-    message: string,
-    selection: TuiCliOptions,
-    replacePaneId?: string,
+  /** A fresh Session of the Agent at `databasePath`, in `paneId` or a new pane. */
+  const createIn = async (
+    databasePath: string,
+    paneId?: string,
+    openPlacement?: PaneOpenPlacement,
   ) => {
-    terminal.inputHandoff?.pause();
-    dependencies.renderServiceMismatch(
-      root,
-      message,
-      () => {
-        if (upgradingService || terminal.destroyed()) return;
-        upgradingService = true;
-        void (async () => {
-          try {
-            dependencies.renderServiceMismatch(
-              root,
-              "Waiting for running turns to finish before upgrading the shared service…",
-              undefined,
-              terminal.exit,
-            );
-            const before = await serviceManager.status();
-            if (
-              before?.buildId !== undefined &&
-              before.buildId !== dependencies.clientBuildId
-            )
-              await serviceManager.stop(before.serviceId);
-            const started = await serviceManager.start();
-            if (
-              dependencies.clientBuildId !== undefined &&
-              started.buildId !== dependencies.clientBuildId
-            )
-              throw new Error(
-                "The installed client started a service with a different build",
-              );
-            await pending;
-            dependencies.renderConnecting(root);
-            await navigate(() => select(selection), replacePaneId);
-          } catch (cause) {
-            reportFailure("service-upgrade", cause);
-            if (!terminal.destroyed())
-              showServiceMismatch(
-                `${asCliFailure(cause, "Service upgrade failed").message}. Running turns remain with the service. You can retry here. If that fails, let active turns finish, run fungi stop, then fungi resume in this project and choose this Session.`,
-                selection,
-                replacePaneId,
-              );
-          } finally {
-            upgradingService = false;
-          }
-        })();
-      },
-      terminal.exit,
+    const requestId = (pendingCreateRequestId ??=
+      sessionCreateRequests.request.generate());
+    await navigate(
+      () =>
+        serviceManager.createSession(
+          {
+            invocationRoot: options.invocationRoot,
+            databasePath,
+            requestId,
+            fungiMcp: options.fungiMcp,
+          },
+          { signal: terminal.signal },
+        ),
+      paneId,
+      openPlacement,
     );
+    pendingCreateRequestId = undefined;
+  };
+  /** The workspace Open action outlives any one pane: start from a live one. */
+  const openConversation = async (placement?: PaneOpenPlacement) => {
+    if (terminal.destroyed()) return;
+    const owner = current ?? [...selections].at(-1);
+    if (owner === undefined)
+      throw new Error("No conversation is open to start from");
+    await createIn(owner.host.databasePath, undefined, placement);
   };
 
   const controlsFor = (selection: Selection): TuiFrameControls => {
     const { host } = selection;
     const ownsView = () => !terminal.destroyed() && selections.has(selection);
-    let checkingServiceBuild = false;
-    /** A fresh Session of this Agent, in `paneId` or else in a new pane. */
-    const createConversation = async (paneId: string | undefined) => {
+    let checkingService = false;
+    /** A fresh Session of this Agent, in the pane `paneId`. */
+    const createConversation = async (paneId: string) => {
       if (!ownsView()) return;
-      const requestId = (pendingCreateRequestId ??=
-        sessionCreateRequests.request.generate());
-      await navigate(
-        () =>
-          serviceManager.createSession(
-            {
-              invocationRoot: options.invocationRoot,
-              databasePath: host.databasePath,
-              requestId,
-              fungiMcp: options.fungiMcp,
-            },
-            { signal: terminal.signal },
-          ),
-        paneId,
-      );
-      pendingCreateRequestId = undefined;
+      await createIn(host.databasePath, paneId);
     };
     return {
       folder: displayFolder(options.invocationRoot),
+      onStopAll: async () => {
+        if (!ownsView()) throw new Error("The selected Agent changed.");
+        return host.stopAll();
+      },
       acquireSession: acquireTarget,
       apps: appPanes.apps,
       paneKinds: options.paneKinds,
@@ -443,16 +452,19 @@ export async function runSessionApplication(
         if (current === selection) current = undefined;
         await closeScope(selection.scope);
       },
-      openConversation: () => createConversation(undefined),
-      chooseConversation: () =>
-        navigate(() =>
-          select({
-            ...options,
-            sessionId: undefined,
-            databasePath: undefined,
-            resume: true,
-            last: false,
-          }),
+      openConversation,
+      chooseConversation: (placement) =>
+        navigate(
+          () =>
+            select({
+              ...options,
+              sessionId: undefined,
+              databasePath: undefined,
+              resume: true,
+              last: false,
+            }),
+          undefined,
+          placement,
         ),
       interactionStore: selection.interactionStore,
       clients,
@@ -475,6 +487,12 @@ export async function runSessionApplication(
         models: (signal) => serviceManager.models({ signal }),
         effectiveModel: (signal) => host.effectiveModel({ signal }),
         modelPreference: host.session.modelPreference,
+      },
+      sandboxSource: {
+        identity: JSON.stringify([host.agentId, host.sessionId]),
+        read: (signal) => host.sandboxStatus({ signal }),
+        takeUnavailableNotice: () =>
+          claimSandboxNotice(host.agentId, host.sessionId),
       },
       reloadSources: localReload,
       onResume: async (paneId) => {
@@ -504,35 +522,27 @@ export async function runSessionApplication(
           paneId,
         );
       },
-      onObservationUnavailable: async (paneId) => {
-        if (
-          !ownsView() ||
-          checkingServiceBuild ||
-          dependencies.clientBuildId === undefined
-        )
-          return !ownsView();
-        checkingServiceBuild = true;
+      onRebindService: (signal) => host.rebind({ signal }),
+      onObservationUnavailable: async () => {
+        if (!ownsView() || checkingService) return !ownsView();
+        checkingService = true;
         try {
           if (await checkInstalledClient()) return true;
-          const mismatch = await serviceBuildMismatch();
-          if (!ownsView() || !mismatch) return !ownsView();
-          showServiceMismatch(
-            serviceMismatchNotice,
-            {
-              ...options,
-              databasePath: host.databasePath,
-              sessionId: host.sessionId,
-            },
-            paneId,
-          );
-          return true;
+          // Throws LocalServiceUpdated once a newer client's service speaks
+          // another protocol; otherwise the ordinary reconnect follows.
+          await serviceManager.status();
+          return !ownsView();
         } catch (cause) {
+          if (cause instanceof LocalServiceUpdated) {
+            if (ownsView()) showServiceUpdated(cause);
+            return true;
+          }
           application.onDiagnostic(
-            asCliFailure(cause, "Service build check failed"),
+            asCliFailure(cause, "Service protocol check failed"),
           );
           return false;
         } finally {
-          checkingServiceBuild = false;
+          checkingService = false;
         }
       },
     };
@@ -549,9 +559,12 @@ export async function runSessionApplication(
       clients: controls.clients,
       interactions: controls.interactionStore,
       models: controls.modelSource,
+      sandbox: controls.sandboxSource,
+      stopAll: controls.onStopAll,
       sessionTitle: controls.sessionTitle,
       reload: controls.reloadSources,
       observationUnavailable: controls.onObservationUnavailable,
+      rebindService: controls.onRebindService,
       themeName: settings.initialTheme,
       saveTheme: settings.onThemeConfirm,
       themeError: settings.themeError,
@@ -676,7 +689,11 @@ export async function runSessionApplication(
     }
   };
 
-  const render = (selection: Selection, replacePaneId?: string) => {
+  const render = (
+    selection: Selection,
+    replacePaneId?: string,
+    openPlacement?: PaneOpenPlacement,
+  ) => {
     dependencies.render(
       root,
       queryClient,
@@ -684,11 +701,20 @@ export async function runSessionApplication(
       commands,
       terminal.exit,
       theme(),
-      { ...controlsFor(selection), replacePaneId },
+      { ...controlsFor(selection), replacePaneId, openPlacement },
     );
     extensionFailures.length = 0;
   };
 
+  const management = commands.contribute({
+    sourceId: "local-management",
+    namespace: "local",
+    commands: localManagementCommands(
+      options.invocationRoot,
+      serviceManager,
+      () => localExtensions({ home }),
+    ),
+  });
   try {
     while (!terminal.destroyed()) {
       try {
@@ -698,23 +724,6 @@ export async function runSessionApplication(
       } catch (cause) {
         reportFailure("session-connect-recovery", cause);
         if (terminal.destroyed()) break;
-        let mismatch = false;
-        try {
-          mismatch = await serviceBuildMismatch();
-        } catch (checkCause) {
-          application.onDiagnostic(
-            asCliFailure(checkCause, "Service build check failed"),
-          );
-        }
-        if (terminal.destroyed()) break;
-        if (mismatch) {
-          showServiceMismatch(
-            `${asCliFailure(cause, "Session connection failed").message}. ${serviceMismatchNotice}`,
-            options,
-          );
-          await completed.promise;
-          break;
-        }
         terminal.inputHandoff?.pause();
         const retry = await new Promise<boolean>((resolve, reject) => {
           const finish = (again: boolean) => {
@@ -746,13 +755,17 @@ export async function runSessionApplication(
       }
     }
     const hasSelected = () => selectedOnce;
-    if (!hasSelected()) terminal.exit();
+    const showsServiceUpdated = () => serviceUpdated;
+    // The restart message stays up until the person exits.
+    if (!hasSelected() && !showsServiceUpdated()) terminal.exit();
     scheduleInstalledCheck();
     if (!terminal.destroyed()) await completed.promise;
   } catch (cause) {
     if (!terminal.destroyed())
       failure = asCliFailure(cause, "Local TUI failed");
   } finally {
+    unbindRestart();
+    management.dispose();
     if (updateTimer !== undefined) clearTimeout(updateTimer);
     // Restore the terminal independently of remote/client cleanup completion.
     terminal.exit();

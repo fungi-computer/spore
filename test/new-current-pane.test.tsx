@@ -4,7 +4,7 @@ import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "@fungi.computer/agar/query";
-import { createAppSurfaceCommandHost } from "@fungi.computer/oyster/shell/command-host";
+import { createAppSurfaceCommandHost } from "@fungi.computer/nacre/command-host";
 import { PaneWorkspace } from "../src/shell/workspace.js";
 import { useDialog } from "../src/button/index.js";
 import type { createPaneRegistry } from "../src/shell/registry.js";

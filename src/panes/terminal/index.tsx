@@ -4,6 +4,7 @@ import {
   useState,
   useSyncExternalStore,
   useRef,
+  useMemo,
 } from "react";
 import {
   PaneProvider,
@@ -22,6 +23,7 @@ import {
   type PaneKindEntry,
 } from "../../button/index.js";
 import { admitTerminalTermination } from "./quit.js";
+import { terminalControls } from "./controls.js";
 import { WhistleActionError } from "@fungi.computer/whistle";
 
 const openings = defineIdFamily({
@@ -202,8 +204,9 @@ function TerminalPane({
           await terminal.close();
           return true;
         } catch (cause) {
-          kit.notify({
-            tone: "error",
+          kit.toast({
+            variant: "error",
+            duration: "until-dismissed",
             message: "The local shell could not be closed cleanly",
           });
           reportFailure("local-terminal-confirm-close", cause);
@@ -215,14 +218,14 @@ function TerminalPane({
       admitTerminalTermination(
         () => terminal.hasRunningJobs(),
         () => confirm(false),
-        kit.notify,
+        kit.toast,
       ),
     );
     const quit = kit.guardQuit(() =>
       admitTerminalTermination(
         () => terminal.hasRunningJobs(),
         () => confirm(true),
-        kit.notify,
+        kit.toast,
       ),
     );
     return () => {
@@ -314,6 +317,10 @@ function MacTerminalPane({
   label: string;
 }>) {
   const kit = usePaneKit();
+  const controls = useMemo(
+    () => terminalControls(terminal, kit.toast),
+    [terminal, kit],
+  );
   const focused = usePaneFocused();
   const [live, setLive] = useState(terminal.live);
   const [exitCode, setExitCode] = useState(terminal.exitCode);
@@ -364,11 +371,7 @@ function MacTerminalPane({
       native.current?.handlePaste(event);
     });
     const lease = contributeTerminalCommands(kit, (text) => {
-      if (!terminal.input(new TextEncoder().encode(text)))
-        kit.notify({
-          tone: "error",
-          message: "Local terminal input was not sent",
-        });
+      controls.input(new TextEncoder().encode(text));
     });
     const confirm = (quitting: boolean) =>
       confirmTerminalTermination(kit, colors, quitting, () =>
@@ -378,15 +381,16 @@ function MacTerminalPane({
       const admitted = await admitTerminalTermination(
         () => terminal.hasRunningJobs(),
         () => confirm(false),
-        kit.notify,
+        kit.toast,
       );
       if (!admitted) return false;
       try {
         await terminal.close();
         return true;
       } catch (cause) {
-        kit.notify({
-          tone: "error",
+        kit.toast({
+          variant: "error",
+          duration: "until-dismissed",
           message: "The local shell could not be closed cleanly",
         });
         reportFailure("mac-terminal-guard-close", cause);
@@ -400,7 +404,7 @@ function MacTerminalPane({
       admitTerminalTermination(
         () => terminal.hasRunningJobs(),
         () => confirm(true),
-        kit.notify,
+        kit.toast,
       ),
     );
     return () => {
@@ -410,7 +414,7 @@ function MacTerminalPane({
       guard();
       quit();
     };
-  }, [kit, terminal, colors]);
+  }, [kit, terminal, colors, controls]);
   // PaneKit, not the renderer's global focused renderable, exclusively routes
   // keyboard/paste. Focusing the native cell would install a competing listener.
   return (
@@ -422,22 +426,12 @@ function MacTerminalPane({
           height="100%"
           selectable={focused}
           onData={(data, source) => {
-            if (source === "input" && !terminal.input(data))
-              kit.notify({
-                tone: "error",
-                message: terminal.live
-                  ? "Local terminal input was not sent; retry with a smaller paste"
-                  : "Local terminal input was not sent; the program has ended",
-              });
+            if (source === "input") controls.input(data);
             // opencode-pty's Ghostty actor answers terminal queries; passing
             // OpenTUI responses back would duplicate them.
           }}
           onTerminalResize={(cols, rows) => {
-            if (!terminal.resize(cols, rows))
-              kit.notify({
-                tone: "error",
-                message: "Local terminal resize was not sent",
-              });
+            controls.resize(cols, rows);
           }}
         />
       </box>

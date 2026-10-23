@@ -1,4 +1,4 @@
-import { executeAlias } from "./command-selection.js";
+import { executeAlias, waitForCommandGraph } from "./command-selection.js";
 import assert from "node:assert/strict";
 import { EventEmitter, once } from "node:events";
 import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
@@ -6,25 +6,35 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { spawn } from "bun";
-import { setTimeout as delay, setInterval } from "node:timers/promises";
-import { setTimeout, clearTimeout } from "node:timers";
+import { setTimeout as delay } from "node:timers/promises";
+import { setTimeout, clearTimeout, setImmediate } from "node:timers";
 import { fileURLToPath, URL } from "node:url";
 import { test } from "bun:test";
 import { createTestRenderer } from "@opentui/core/testing";
 import { InputRenderable, KeyEvent, TextareaRenderable } from "@opentui/core";
 import { createWhistle } from "@fungi.computer/whistle";
 import { act } from "react";
+import {
+  defaultScheduler,
+  notifyManager,
+  QueryObserver,
+} from "@tanstack/query-core";
+import { createQueryClient } from "@fungi.computer/agar/query";
+import { sessionQueryOptions } from "@fungi.computer/parakeet/headless";
 
 import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
+import { renderTuiConversation } from "@fungi.computer/spore/frame-renderer";
 import { runFungiCli } from "../src/cli.js";
 import { runPrivateLocalWorkerServer } from "@fungi.computer/truffle/service";
-import { createTuiFixture } from "./fixture.js";
+import { createTuiFixture, fixtureGoalStartedAt } from "./fixture.js";
 import {
   loadThemePreference,
   saveThemePreference,
 } from "@fungi.computer/spore/button/theme-preferences";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 import { configuredModelAccess } from "./model-access-fixture.js";
+import { waitForFrame } from "./native-readiness.js";
+import { enterReactActEnvironment } from "./native-renderer-cleanup.js";
 
 async function pressDecodedKey(setup, press) {
   const decoded = Promise.withResolvers();
@@ -63,6 +73,10 @@ const choice = (resume) => ({
 });
 
 const host = {
+  sandboxStatus: async () => ({
+    state: "available",
+    requireSandbox: false,
+  }),
   agentId: "agent-fixture",
   sessionId: "session-fixture",
   databasePath: "/private/hidden.sqlite",
@@ -192,6 +206,16 @@ test("serve remains alive until a signal and closes its batch once", async () =>
           owner: {
             invocationRoot: join(directory, "alpha"),
             databasePath: "./alpha.sqlite",
+            configRoot: {
+              home: process.env.HOME,
+              credentialPath: join(
+                process.env.HOME,
+                ".config",
+                "fungi",
+                "credentials.json",
+              ),
+              serviceDirectory: join(process.env.HOME, ".fungi", "service"),
+            },
           },
         },
       ],
@@ -436,7 +460,17 @@ test("sessions list and resume by number, ID, or unique prefix use the same disc
   const manager = {
     discover: async () => {
       discoveries += 1;
-      return { agentCount: 1, sessions: saved, problems: [] };
+      return {
+        agents: [
+          {
+            agentId: "one",
+            databasePath: "/project/one/agent.sqlite",
+            sessionCount: 1,
+          },
+        ],
+        sessions: saved,
+        problems: [],
+      };
     },
   };
   const overrides = dependencies(undefined, {
@@ -484,7 +518,13 @@ test("sessions status --json exposes the owner's typed state through the Local s
   let inspectedSessionId;
   const manager = {
     discover: async () => ({
-      agentCount: 1,
+      agents: [
+        {
+          agentId: "one",
+          databasePath: "/project/one/agent.sqlite",
+          sessionCount: 1,
+        },
+      ],
       problems: [{ kind: "unreadable" }],
       sessions: [{ ...choice(async () => host), sessionId: "saved-session" }],
     }),
@@ -510,6 +550,7 @@ test("sessions status --json exposes the owner's typed state through the Local s
               diagnostic: null,
             },
           ],
+          toolOutput: [],
           progress: null,
         },
         close: async () => {
@@ -576,7 +617,13 @@ test("session ID selectors prefer an exact ID and reject ambiguous prefixes", as
   let resumed = 0;
   const manager = {
     discover: async () => ({
-      agentCount: 1,
+      agents: [
+        {
+          agentId: "one",
+          databasePath: "/project/one/agent.sqlite",
+          sessionCount: 1,
+        },
+      ],
       problems: [],
       sessions: [
         {
@@ -712,12 +759,16 @@ test("runTuiCli does not open a Session after its renderer dies during startup",
         loadThemePreference: async () => ({ theme: "terminal" }),
         createServiceManager: () => ({
           discover: async () => ({
-            agentCount: 0,
+            agents: [],
             sessions: [],
             problems: [],
           }),
           models: async () => [],
           connect: async () => ({
+            sandboxStatus: async () => ({
+              state: "available",
+              requireSandbox: false,
+            }),
             agentId: "agent-fixture",
             sessionId: "session-fixture",
             databasePath: "/tmp/renderer-loss.sqlite",
@@ -841,7 +892,7 @@ test("renderer exit interrupts a pending service selection without stopping the 
   const running = runTuiCli(
     { invocationRoot: "/tmp" },
     dependencies(
-      { agentCount: 0, sessions: [], problems: [] },
+      { agents: [], sessions: [], problems: [] },
       {
         createServiceManager: () => ({
           connect: async (_selection, options) => {
@@ -884,6 +935,15 @@ function renderedNodes(node) {
   return [node, ...node.getChildren().flatMap(renderedNodes)];
 }
 
+/** Poll a condition the fixture sets from outside the render loop. */
+async function waitFor(ready) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (ready()) return;
+    await act(async () => delay(10));
+  }
+  throw new Error("The expected condition never held");
+}
+
 async function withCli(
   check,
   {
@@ -898,6 +958,7 @@ async function withCli(
     rendererOptions = {},
     expectedWatchCalls = 1,
     expectedCloseCalls = 1,
+    queryClient,
     auth = async () => configuredModelAccess(preferences.listModels?.() ?? []),
     beforeFrame,
     readyText = "Ask anything",
@@ -905,7 +966,10 @@ async function withCli(
 ) {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const fixture = createTuiFixture({
-    goal: goal === undefined ? undefined : { stopReason: null, ...goal },
+    goal:
+      goal === undefined
+        ? undefined
+        : { startedAt: fixtureGoalStartedAt, pauseCause: null, ...goal },
   });
   const setup = await createTestRenderer({
     width: 72,
@@ -914,10 +978,13 @@ async function withCli(
   });
   prepareRenderer?.(setup.renderer);
   const commands = createWhistle();
+  const frameQueryClient = queryClient ?? createQueryClient();
   const requests = [];
   let hostCloses = 0;
   let running;
-  const ready = Promise.withResolvers();
+  // Allocation only makes the Connecting frame possible. Keep startup inside
+  // act until the CLI requests the admitted conversation frame.
+  const conversationReady = Promise.withResolvers();
   try {
     await act(async () => {
       running = runTuiCli(
@@ -929,9 +996,10 @@ async function withCli(
             throw new Error("Unexpected theme save in fixture");
           },
           ...preferences,
+          createQueryClient: () => frameQueryClient,
           createServiceManager: () => ({
             discover: async () => ({
-              agentCount: 0,
+              agents: [],
               sessions: [],
               problems: [],
             }),
@@ -940,8 +1008,11 @@ async function withCli(
             connect: async () => {
               await beforeFrame?.(setup);
               return {
-                agentId: "agent-fixture",
-                sessionId: "session-fixture",
+                sandboxStatus: async () => ({
+                  state: "available",
+                  requireSandbox: false,
+                }),
+                ...fixture.identity,
                 databasePath: "/tmp/fixture-session.sqlite",
                 session: {
                   ...fixture.session,
@@ -961,6 +1032,7 @@ async function withCli(
                     return fixture.session.command(input);
                   },
                 },
+                rebind: async () => ({ kind: "rebound" }),
                 close: async () => {
                   hostCloses += 1;
                 },
@@ -969,13 +1041,33 @@ async function withCli(
           }),
           createWhistle: () => commands,
           enableKeymap,
-          createRenderer: async () => {
-            ready.resolve();
-            return setup.renderer;
+          render: (
+            root,
+            frameQueryClient,
+            session,
+            frameCommands,
+            onExit,
+            theme,
+            controls,
+          ) => {
+            renderTuiConversation(root, frameQueryClient, {
+              ...theme,
+              commands: frameCommands,
+              onExit,
+              session,
+              ...controls,
+            });
+            conversationReady.resolve();
           },
+          createRenderer: async () => setup.renderer,
         },
       );
-      await ready.promise;
+      await Promise.race([
+        conversationReady.promise,
+        running.then(() => {
+          throw new Error("CLI exited before rendering a conversation");
+        }),
+      ]);
     });
     await setup.waitForFrame((frame) => frame.includes(readyText));
     const input = renderedNodes(setup.renderer.root).find(
@@ -999,6 +1091,27 @@ async function withCli(
       requests,
       type,
       submit,
+      pushFrame: async (frame) => {
+        const delivered = Promise.withResolvers();
+        const observer = new QueryObserver(frameQueryClient, {
+          ...sessionQueryOptions(fixture.session),
+          enabled: false,
+        });
+        const unsubscribe = observer.subscribe(
+          notifyManager.batchCalls((result) => {
+            if (result.data?.snapshot?.cursor === frame.cursor)
+              delivered.resolve();
+          }),
+        );
+        try {
+          await act(async () => {
+            fixture.pushFrame(frame);
+            await delivered.promise;
+          });
+        } finally {
+          unsubscribe();
+        }
+      },
       get hostCloses() {
         return hostCloses;
       },
@@ -1085,9 +1198,11 @@ test("a pending theme save keeps its dialog and command definitions until comple
     async ({ setup, commands, type, submit, input }) => {
       // Initial Session catalogs arrive after the first composer frame.
       // Compare graph identity only after those maintained commands are admitted.
-      await setup.waitForFrame(() =>
-        ["goal", "loop"].every((alias) =>
-          commands.snapshot().slash.some((row) => row.alias === alias),
+      await act(async () =>
+        waitForCommandGraph(commands, (snapshot) =>
+          ["goal", "loop"].every((alias) =>
+            snapshot.slash.some((row) => row.alias === alias),
+          ),
         ),
       );
       const graph = commands.snapshot();
@@ -1103,8 +1218,10 @@ test("a pending theme save keeps its dialog and command definitions until comple
       assert.equal(commands.snapshot(), graph);
       await act(async () => {
         saving.resolve();
+        await saving.promise;
       });
-      await setup.waitForFrame((frame) => !frame.includes("Saving theme"));
+      await act(async () => setup.renderOnce());
+      assert.doesNotMatch(setup.captureCharFrame(), /Saving theme/u);
       assert.equal(input.focused, true);
     },
     {
@@ -1187,8 +1304,8 @@ test("theme preview and dialog replacement preserve the Whistle command graph", 
     // The Session advertises these commands asynchronously after its first frame.
     // Take the baseline after attachment, so this tests preview rather than loading.
     await act(async () =>
-      setup.waitForFrame(() => {
-        const rows = commands.snapshot().palette;
+      waitForCommandGraph(commands, (snapshot) => {
+        const rows = snapshot.palette;
         return (
           rows.some((row) => row.title === "Goal") &&
           rows.some((row) => row.title === "Loop")
@@ -1257,9 +1374,9 @@ test("the production CLI keeps the frame mounted under the /model choice", async
       assert.equal(input.focused, false);
       await pressEscape(setup);
       assert.equal(input.focused, true);
-      // A dismissed flow is not a failure, and the draft stays for a retry.
+      // A dispatched command is consumed even when its picker is dismissed.
       assert.doesNotMatch(setup.captureCharFrame(), /cancelled/u);
-      assert.equal(input.plainText, "/model");
+      assert.equal(input.plainText, "");
       assert.equal(fixture.promptCalls(), 0);
       await type("/model");
       await submit();
@@ -1338,7 +1455,10 @@ test("Terminal reselection refreshes the native palette and missing replies keep
       });
       await act(async () => setup.renderOnce());
       assert.deepEqual(calls, ["clear", "get"]);
-      assert.match(setup.captureCharFrame(), /Terminal palette unavailable/u);
+      assert.doesNotMatch(
+        setup.captureCharFrame(),
+        /Terminal palette unavailable/u,
+      );
       assert.equal(input.plainText, "input before missing reply");
       await type("/theme");
       await submit();
@@ -1438,6 +1558,19 @@ test("theme preview stays temporary and confirmed Latte survives a new CLI launc
   }
 });
 
+test("CLI fixture waits for asynchronous Local admission before inspecting frames", async () => {
+  await withCli(
+    async ({ setup }) => {
+      assert.match(setup.captureCharFrame(), /Ask anything/u);
+    },
+    {
+      // Producer latency, not a longer frame wait: Local admission can settle
+      // after the renderer has exhausted its bounded renderless passes.
+      beforeFrame: () => delay(100),
+    },
+  );
+});
+
 test("invalid theme preferences and failed saves stay visible without replacing bytes", async () => {
   const directory = await mkdtemp(join(tmpdir(), "fungi-cli-theme-invalid-"));
   const path = join(directory, "tui.json");
@@ -1497,8 +1630,8 @@ test("the production CLI handles /help without submitting a model prompt", async
       );
       await act(async () => {
         releaseWatch.resolve();
-        await setup.waitForFrame(() => {
-          const aliases = commands.snapshot().slash.map(({ alias }) => alias);
+        await waitForCommandGraph(commands, (snapshot) => {
+          const aliases = snapshot.slash.map(({ alias }) => alias);
           return aliases.includes("goal") && aliases.includes("loop");
         });
       });
@@ -1512,6 +1645,7 @@ test("the production CLI handles /help without submitting a model prompt", async
           "clear",
           "session",
           "cancel",
+          "stop",
           "reconnect",
           "retry",
           "continue",
@@ -1533,6 +1667,8 @@ test("the production CLI handles /help without submitting a model prompt", async
           "compact",
           "name",
           "reload",
+          "archive",
+          "extensions",
         ]),
       );
       await type("/");
@@ -1588,7 +1724,7 @@ test("pending prompt acceptance preserves replacement input", async () => {
     async ({ input, type, submit, setup }) => {
       await type("First prompt");
       await submit();
-      assert.equal(input.plainText, "First prompt");
+      assert.equal(input.plainText, "");
       await type("Next prompt");
       await act(async () => {
         accepted.resolve();
@@ -1673,8 +1809,8 @@ function failedRunFrame() {
 }
 
 test("a failed run shows choices and a new draft enters as a fresh instruction", async () => {
-  await withCli(async ({ fixture, setup, requests, type, submit }) => {
-    await act(async () => fixture.pushFrame(failedRunFrame()));
+  await withCli(async ({ setup, requests, type, submit, pushFrame }) => {
+    await pushFrame(failedRunFrame());
     await setup.waitForFrame((frame) =>
       frame.includes("Stopped: Tool execution failed"),
     );
@@ -1697,8 +1833,8 @@ test("a failed run shows choices and a new draft enters as a fresh instruction",
 
 test("the native recovery commands keep retry and continue distinct", async () => {
   for (const command of ["/retry", "/continue"]) {
-    await withCli(async ({ fixture, setup, requests, type, submit }) => {
-      await act(async () => fixture.pushFrame(failedRunFrame()));
+    await withCli(async ({ setup, requests, type, submit, pushFrame }) => {
+      await pushFrame(failedRunFrame());
       await setup.waitForFrame((frame) =>
         frame.includes("Stopped: Tool execution failed"),
       );
@@ -1727,7 +1863,7 @@ test("exact aliases are commands and unsupported slash drafts stay out of prompt
       for (const [text, error] of [
         ["/unknown", /Unsupported command: \/unknown/u],
         ["/help now", /\/help takes no arguments/u],
-        ["/queue sideways", /Use \/queue list or edit-last/u],
+        ["/queue sideways", /Use \/queue list\./u],
       ]) {
         await type(text);
         await submit();
@@ -1741,9 +1877,13 @@ test("exact aliases are commands and unsupported slash drafts stay out of prompt
       assert.equal(fixture.promptCalls(), 2);
       assert.deepEqual(
         requests.map((input) => input.text),
-        ["/help", "ordinary prompt"],
+        [" /help", "ordinary prompt"],
       );
-      assert.equal(commands.snapshot().slash.length, 26);
+      const aliases = commands.snapshot().slash.map((row) => row.alias);
+      assert.equal(new Set(aliases).size, aliases.length);
+      assert.ok(aliases.includes("archive"));
+      assert.ok(aliases.includes("extensions"));
+      assert.ok(aliases.includes("stop"));
     },
   );
 });
@@ -1752,9 +1892,9 @@ test("/compact queues owner compaction work without a model prompt", async () =>
   await withCli(async ({ fixture, requests, setup, type, submit }) => {
     await type("/compact");
     await submit();
-    await act(async () =>
-      setup.waitForFrame((frame) => frame.includes("Compaction queued")),
-    );
+    await waitFor(() => requests.some((input) => input.type === "compact"));
+    await act(async () => setup.renderOnce());
+    assert.doesNotMatch(setup.captureCharFrame(), /Compaction queued/u);
     const compacts = requests.filter((input) => input.type === "compact");
     assert.equal(compacts.length, 1);
     assert.match(compacts[0]?.requestId ?? "", /^\S+$/u);
@@ -1766,13 +1906,16 @@ test("/name sets and clears the Session title through the owner", async () => {
   await withCli(async ({ fixture, requests, setup, type, submit }) => {
     await type("/name Fern notes");
     await submit();
-    await act(async () =>
-      setup.waitForFrame((frame) => frame.includes('named "Fern notes"')),
-    );
+    await waitFor(() => requests.length >= 1);
     await type("/name");
     await submit();
-    await act(async () =>
-      setup.waitForFrame((frame) => frame.includes("title cleared")),
+    await waitFor(
+      () => requests.filter((input) => input.type === "title").length === 2,
+    );
+    await act(async () => setup.renderOnce());
+    assert.doesNotMatch(
+      setup.captureCharFrame(),
+      /named "Fern notes"|title cleared/u,
     );
     assert.deepEqual(
       requests.filter((input) => input.type === "title"),
@@ -1794,10 +1937,9 @@ test("/reload refreshes supported owners and reports the rest without a prompt",
     );
     const frame = setup.captureCharFrame().replace(/\s+/gu, " ");
     assert.match(frame, /Refreshed now: model catalog, terminal colors\./u);
-    assert.match(
-      frame,
-      /Re-read at the next turn: AGENTS\.md instructions, skills\./u,
-    );
+    // The report is a toast: its long lines wrap inside the card.
+    assert.match(frame, /Re-read at the next turn: AGENTS\.md instructions/u);
+    assert.match(frame, /skills\./u);
     assert.match(frame, /client extensions/u);
     assert.match(frame, /Session extensions/u);
     assert.match(frame, /keybindings/u);
@@ -1827,13 +1969,9 @@ async function startFixtureRun(fixture, setup, requestId) {
   // Cancel is available only after the CLI has observed the active run.
   // Native frame waits finish when the renderer is idle, before external watch
   // deliveries and Query's notification timers. Observe the rendered outcome.
-  for await (const render of setInterval(10, () => setup.renderOnce(), {
-    signal: globalThis.AbortSignal.timeout(2000),
-  })) {
-    await act(render);
-    if (setup.captureCharFrame().includes("Fixture is streaming a reply."))
-      break;
-  }
+  await waitForFrame(setup, (frame) =>
+    frame.includes("Fixture is streaming a reply."),
+  );
 }
 
 for (const scenario of ["changed-away-and-back", "unchanged", "later-typing"]) {
@@ -1942,42 +2080,95 @@ test("repeated cancel shares the existing pending cancellation", async () => {
   );
 });
 
-test("native keymap Escape cancels once and keeps the composer alive", async () => {
-  const pending = Promise.withResolvers();
-  await withCli(
-    async ({ fixture, setup, input, requests, type }) => {
-      await fixture.session.command({
-        type: "prompt",
-        text: "active work",
-        requestId: "active-work",
-      });
-      fixture.confirmLatestPrompt();
-      await act(async () =>
-        setup.waitForFrame((frame) =>
-          frame.includes("Fixture is streaming a reply."),
-        ),
-      );
-      await type("draft before native cancel");
-      await pressEscape(setup);
-      await pressEscape(setup);
-      assert.deepEqual(requests, [
-        { type: "cancel", commandId: "owner-active-work" },
-      ]);
-      assert.equal(input.focused, true);
-      assert.equal(input.plainText, "draft before native cancel");
-      pending.resolve();
-    },
-    {
-      cancel: (input) =>
-        pending.promise.then(() => ({
-          status: "accepted",
-          commandId: input.commandId,
-        })),
-      enableKeymap: true,
-      rendererOptions: { useKittyKeyboard: null },
-    },
-  );
-});
+for (const deferredNotifications of [false, true]) {
+  test(`native keymap Escape cancels once and keeps the composer alive${deferredNotifications ? " with deferred Query notifications" : ""}`, async () => {
+    const pending = Promise.withResolvers();
+    const queryClient = createQueryClient();
+    await withCli(
+      async ({ fixture, setup, input, requests, type }) => {
+        const streaming = Promise.withResolvers();
+        const observer = new QueryObserver(queryClient, {
+          ...sessionQueryOptions(fixture.session),
+          enabled: false,
+        });
+        // Like React's subscription, observe delivery through Query's notify
+        // queue, not merely owner admission or a synchronous cache write.
+        const unsubscribe = observer.subscribe(
+          notifyManager.batchCalls((result) => {
+            if (
+              result.data?.snapshot?.progress?.text ===
+              "Fixture is streaming a reply."
+            )
+              streaming.resolve();
+          }),
+        );
+        // Same external-event bound as startFixtureRun; no render-pass polling.
+        const timeout = setTimeout(
+          () =>
+            streaming.reject(new Error("Fixture streaming was not observed")),
+          2000,
+        );
+        const notifications = [];
+        if (deferredNotifications)
+          notifyManager.setScheduler((callback) =>
+            notifications.push(callback),
+          );
+        try {
+          await act(async () => {
+            await fixture.session.command({
+              type: "prompt",
+              text: "active work",
+              requestId: "active-work",
+            });
+            fixture.confirmLatestPrompt();
+            await setup.renderOnce();
+          });
+          if (deferredNotifications) {
+            // The cache has advanced, but its external React notifications have
+            // not. Deliver them only after the native renderer is genuinely idle.
+            await act(async () => setup.waitForVisualIdle());
+            assert.ok(notifications.length > 0);
+            setImmediate(() => {
+              notifyManager.setScheduler(defaultScheduler);
+              for (const notify of notifications) notify();
+            });
+          }
+          await act(async () => {
+            await streaming.promise;
+            await setup.renderOnce();
+          });
+          assert.match(
+            setup.captureCharFrame(),
+            /Fixture is streaming a reply\./u,
+          );
+        } finally {
+          clearTimeout(timeout);
+          unsubscribe();
+          notifyManager.setScheduler(defaultScheduler);
+        }
+        await type("draft before native cancel");
+        await pressEscape(setup);
+        await pressEscape(setup);
+        assert.deepEqual(requests, [
+          { type: "cancel", commandId: "owner-active-work" },
+        ]);
+        assert.equal(input.focused, true);
+        assert.equal(input.plainText, "draft before native cancel");
+        await act(async () => pending.resolve());
+      },
+      {
+        cancel: (input) =>
+          pending.promise.then(() => ({
+            status: "accepted",
+            commandId: input.commandId,
+          })),
+        enableKeymap: true,
+        rendererOptions: { useKittyKeyboard: null },
+        queryClient,
+      },
+    );
+  });
+}
 
 test("slash details and Ctrl+O share disclosure; slash exit closes the CLI", async () => {
   await withCli(
@@ -2130,7 +2321,7 @@ test("Enter immediately after a long bracketed paste submits that complete draft
       requests
         .filter((request) => request.type === "prompt")
         .map((request) => request.text),
-      [pasted.trim()],
+      [pasted],
     );
   });
 });
@@ -2140,25 +2331,16 @@ test("a disconnected session retries its watch and recovers without /reconnect",
   const reconnected = Promise.withResolvers();
   await withCli(
     async ({ setup }) => {
-      await act(async () =>
-        setup.waitForFrame((frame) =>
-          frame.includes("Session stream is unavailable"),
-        ),
-      );
+      // The first retry comes within a fraction of a second, so the failed
+      // watch's banner may already be gone; the retry itself is the proof.
       await act(async () => reconnected.promise);
       // Query observers notify on their own scheduler after the watch opens.
       // Poll the rendered recovery outcome, bounded independently of that scheduler.
-      for await (const render of setInterval(10, () => setup.renderOnce(), {
-        signal: globalThis.AbortSignal.timeout(2000),
-      })) {
-        await act(render);
-        if (
-          !/Session stream is unavailable|offline|disconnected/u.test(
-            setup.captureCharFrame(),
-          )
-        )
-          break;
-      }
+      await waitForFrame(
+        setup,
+        (frame) =>
+          !/Session stream is unavailable|offline|disconnected/u.test(frame),
+      );
       assert.doesNotMatch(setup.captureCharFrame(), /offline|disconnected/u);
       assert.equal(attempts, 2);
     },
@@ -2183,21 +2365,23 @@ test("a disconnected session retries its watch and recovers without /reconnect",
 test("help and slash discovery follow live Whistle contributions", async () => {
   await withCli(async ({ setup, commands, fixture, type, submit }) => {
     let invoked = 0;
-    const lease = commands.contribute({
-      sourceId: "command-test",
-      namespace: "test",
-      commands: [
-        {
-          id: "probe",
-          title: "A contributed command",
-          category: "Test",
-          projections: { slash: { aliases: ["probe"] } },
-          handler: () => {
-            invoked += 1;
+    const lease = await act(async () =>
+      commands.contribute({
+        sourceId: "command-test",
+        namespace: "test",
+        commands: [
+          {
+            id: "probe",
+            title: "A contributed command",
+            category: "Test",
+            projections: { slash: { aliases: ["probe"] } },
+            handler: () => {
+              invoked += 1;
+            },
           },
-        },
-      ],
-    });
+        ],
+      }),
+    );
     await type("/help");
     await submit();
     assert.equal(
@@ -2211,7 +2395,7 @@ test("help and slash discovery follow live Whistle contributions", async () => {
     await submit();
     assert.equal(invoked, 1);
     assert.equal(fixture.promptCalls(), 0);
-    lease.dispose();
+    await act(async () => lease.dispose());
     await act(async () => {
       void executeAlias(commands, "help", { origin: "slash" });
     });
@@ -2230,6 +2414,7 @@ test("native startup recovery shows the error and Exit restores the terminal", a
     height: 20,
     useKittyKeyboard: null,
   });
+  const restoreActEnvironment = enterReactActEnvironment();
   let attempts = 0;
   let exitClient;
   const running = runTuiCli(
@@ -2262,12 +2447,18 @@ test("native startup recovery shows the error and Exit restores the terminal", a
     assert.match(frame, /Exit/u);
     await act(async () => setup.mockInput.pressArrow("down"));
     await act(async () => setup.mockInput.pressEnter());
-    await running;
+    await act(async () => running);
     assert.equal(setup.renderer.isDestroyed, true);
     assert.equal(attempts, 1);
   } finally {
-    exitClient?.();
-    await running;
+    try {
+      await act(async () => {
+        exitClient?.();
+        await running;
+      });
+    } finally {
+      restoreActEnvironment();
+    }
   }
 });
 
@@ -2278,9 +2469,14 @@ test("real Goal control renders one safe committed footer row", async () => {
       await type("/goal pause");
       await submit();
       await act(async () =>
-        setup.waitForFrame((frame) => frame.includes("Goal · paused")),
+        setup.waitForFrame((frame) =>
+          frame.includes("Goal paused (/goal resume)"),
+        ),
       );
-      assert.match(setup.captureCharFrame(), /safe end · Goal · paused/u);
+      assert.match(
+        setup.captureCharFrame(),
+        /Goal paused \(\/goal resume\) · safe end/u,
+      );
       assert.doesNotMatch(setup.captureCharFrame(), /Goal paused:/u);
       assert.doesNotMatch(
         setup.captureCharFrame(),

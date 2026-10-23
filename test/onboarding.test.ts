@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -56,7 +56,7 @@ function keys(answers: readonly string[]) {
   const input = new PassThrough();
   let output = "";
   let next = 0;
-  const prompts = [/How should Shiitake reach a model\?/u, /Open Fungi now\?/u];
+  const prompts = [/How should Shiitake reach a model\?/u];
   return {
     input,
     output: () => output,
@@ -76,7 +76,7 @@ test("first run asks one question, signs in once, and opens fungi by default", a
   const root = await mkdtemp(join(tmpdir(), "fungi-onboarding-"));
   const path = join(root, "onboarding.json");
   const doors: string[] = [];
-  const terminal = keys(["\r", "\r"]);
+  const terminal = keys(["\r"]);
   try {
     const start = await runOnboarding({
       interactive: true,
@@ -92,6 +92,11 @@ test("first run asks one question, signs in once, and opens fungi by default", a
       },
     });
     const screen = stripVTControlCharacters(terminal.output());
+    if (process.env.TUI_UX_CAPTURE_DIR)
+      await writeFile(
+        join(process.env.TUI_UX_CAPTURE_DIR, "08-onboarding.txt"),
+        screen,
+      );
     expect(start).toBe(true);
     expect(doors).toEqual(["fungi"]);
     expect(screen).toContain("Sign in to Fungi (recommended)");
@@ -99,6 +104,7 @@ test("first run asks one question, signs in once, and opens fungi by default", a
     expect(screen).toContain("Use an API key");
     expect(screen).toContain("Skip for now");
     expect(screen).not.toContain("Team MCP");
+    expect(screen).not.toContain("Open Fungi now?");
     expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
       version: 1,
       door: "hosted",
@@ -111,7 +117,7 @@ test("first run asks one question, signs in once, and opens fungi by default", a
 test("skipping sign-in never starts a login", async () => {
   const root = await mkdtemp(join(tmpdir(), "fungi-onboarding-"));
   const path = join(root, "onboarding.json");
-  const terminal = keys(["\u001B[B\u001B[B\u001B[B\r", "\r"]);
+  const terminal = keys(["\u001B[B\u001B[B\u001B[B\r"]);
   try {
     const start = await runOnboarding({
       interactive: true,
@@ -124,6 +130,9 @@ test("skipping sign-in never starts a login", async () => {
       signIn: () => Promise.reject(new Error("Skip attempted a login")),
     });
     expect(start).toBe(true);
+    expect(stripVTControlCharacters(terminal.output())).not.toContain(
+      "Open Fungi now?",
+    );
     expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
       version: 1,
       door: "later",
@@ -143,6 +152,7 @@ test("non-interactive login rejects credential prompts instead of consuming stdi
 test("doctor reports actual failed checks without exposing credentials or blocking later checks", async () => {
   let output = "";
   const result = await runDoctor({
+    localServiceStatus: () => Promise.resolve(undefined),
     models: {
       getProviders: () => [],
       checkAuth: () => Promise.resolve(undefined),
@@ -169,6 +179,7 @@ test("doctor checks Fungi readiness rather than accepting another provider's log
   let output = "";
   const checked: string[] = [];
   const passed = await runDoctor({
+    localServiceStatus: () => Promise.resolve(undefined),
     models: {
       getProviders: () => [],
       checkAuth: (provider) => {
@@ -202,6 +213,15 @@ test("doctor checks Fungi readiness rather than accepting another provider's log
 test("doctor reports saved Fungi sign-in and a ready model without credential values", async () => {
   let output = "";
   const passed = await runDoctor({
+    localServiceStatus: () =>
+      Promise.resolve({
+        protocol: 3,
+        version: "source",
+        serviceId: "owned-onboarding-fixture",
+        pid: 1,
+        baseUrl: "http://127.0.0.1:12345",
+        diagnostics: { state: "active" },
+      }),
     models: {
       getProviders: () => [],
       checkAuth: () => Promise.resolve({ type: "oauth" }),

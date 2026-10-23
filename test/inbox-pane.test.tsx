@@ -350,7 +350,10 @@ for (const [width, height] of [
       expect(fixture.abortCalls()).toBe(0);
       expect(fixture.cancelCalls()).toEqual([]);
     } finally {
-      application.exit();
+      await act(async () => {
+        application.exit();
+        await application.close();
+      });
     }
   });
 }

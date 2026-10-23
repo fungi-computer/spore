@@ -47,7 +47,7 @@ import {
   useStatus,
   useTimeline,
 } from "@fungi.computer/parakeet/headless";
-import type { TuiPresentation, ClientEntryV1 } from "../../button/index.js";
+import type { TuiPresentation } from "../../button/index.js";
 import { toolCodeQuery } from "../../button/index.js";
 import { TerminalMarkdown } from "../../button/index.js";
 import { userFacingCause } from "./user-facing-cause.js";
@@ -715,6 +715,8 @@ function CompactionDividerRow({
 const compactionNoticeText = {
   nothing_to_compact: "nothing to compact",
   failed: "compaction failed",
+  stale: "compaction skipped: the context moved on",
+  insufficient: "compaction skipped: the summary would not fit",
 } as const;
 
 function CompactionNoticeRow({
@@ -727,7 +729,7 @@ function CompactionNoticeRow({
   id: string;
   inset: number;
   presentation: TuiPresentation;
-  result: "nothing_to_compact" | "failed";
+  result: "nothing_to_compact" | "failed" | "stale" | "insufficient";
   diagnostic: string | null;
 }>) {
   const { colors, dimForeground } = presentation;
@@ -754,17 +756,16 @@ function CompactionNoticeRow({
   );
 }
 
-/** A user message drawn as a raised surface block (not a note-prompt line). */
-function userBlock(
-  item: ParakeetTimelineItem,
-  notePromptOwners: ReadonlySet<string>,
-): boolean {
-  return (
-    item.kind === "user_message" &&
-    (item.origin?.correlation === undefined ||
-      item.origin.correlation === null ||
-      !notePromptOwners.has(item.origin.extensionId))
-  );
+type UserMessageItem = Extract<ParakeetTimelineItem, { kind: "user_message" }>;
+
+/** A message another Agent sent in: a compact block, not a user surface. */
+function isAgentMessage(item: UserMessageItem): boolean {
+  return item.author?.kind === "agent";
+}
+
+/** A human line on the raised user surface; another Agent's message is not one. */
+function userBlock(item: ParakeetTimelineItem): boolean {
+  return item.kind === "user_message" && !isAgentMessage(item);
 }
 
 /**
@@ -775,22 +776,21 @@ function stacksOnNext(
   item: ParakeetTimelineItem,
   next: ParakeetTimelineItem | undefined,
   hasClientRowsAfter: boolean,
-  notePromptOwners: ReadonlySet<string>,
 ): boolean {
   return (
     next !== undefined &&
     !hasClientRowsAfter &&
-    userBlock(item, notePromptOwners) &&
-    userBlock(next, notePromptOwners)
+    userBlock(item) &&
+    userBlock(next)
   );
 }
 
 /** Pending delivery is presentation-only; confirmed history keeps its theme. */
 function userMessageAppearance(
-  item: Extract<ParakeetTimelineItem, { kind: "user_message" }>,
+  item: UserMessageItem,
   presentation: TuiPresentation,
 ) {
-  const pending = ["pending", "accepted", "queued"].includes(item.status);
+  const pending = item.status === "pending" || item.status === "queued";
   const cue = pending && item.delivery === "followUp";
   return {
     cue,
@@ -809,7 +809,6 @@ function TimelineRowView({
   terminalWidth,
   toggle,
   presentation,
-  notePromptOwners,
   stacksOnNext,
 }: Readonly<{
   item: ParakeetTimelineItem;
@@ -818,12 +817,12 @@ function TimelineRowView({
   terminalWidth: number;
   toggle: ToggleTool;
   presentation: TuiPresentation;
-  notePromptOwners: ReadonlySet<string>;
   /** The next row is a user block too; share one continuous surface. */
   stacksOnNext: boolean;
 }>) {
   const { colors, surface } = presentation;
   const errorSigil = useToolSigils()?.error;
+  const agentSigil = useToolSigils()?.agent;
   if (item.kind === "compaction_divider")
     return (
       <CompactionDividerRow
@@ -856,32 +855,63 @@ function TimelineRowView({
         toggle={toggle}
       />
     );
-  if (item.kind === "user_message") {
-    const { cue, foreground } = userMessageAppearance(item, presentation);
-    if (!userBlock(item, notePromptOwners))
-      return (
+  if (item.kind === "user_message" && isAgentMessage(item)) {
+    const { foreground } = userMessageAppearance(item, presentation);
+    // Collapsed by default; the tool rows' own disclosure state and toggle.
+    const open = disclosureOpen(disclosure, item.id, false);
+    const author = item.author?.name ?? "";
+    const headerWidth = Math.max(
+      0,
+      terminalWidth - 2 * inset - sigilGutterTotalWidth,
+    );
+    return (
+      <box
+        id={rowRenderableId(item.id)}
+        flexShrink={0}
+        marginBottom={1}
+        paddingX={inset}
+      >
         <box
-          id={rowRenderableId(item.id)}
-          flexShrink={0}
+          flexDirection="row"
           height={1}
-          marginBottom={1}
-          paddingX={inset}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            toggle(item.id, false);
+          }}
         >
           <text
-            marginLeft={sigilGutterTotalWidth}
+            selectable={false}
             fg={colors.foreground}
-            attributes={2}
             wrapMode="none"
+            flexGrow={1}
+            flexShrink={1}
+            marginLeft={-1}
+          >
+            <ToolIcon glyph={agentSigil} />
+            <span fg={presentation.dimForeground} attributes={2}>
+              {fitFooterCaption(
+                terminalText(open ? author : `${author} · ${item.text}`),
+                headerWidth,
+              )}
+            </span>
+          </text>
+        </box>
+        {open ? (
+          <text
+            marginLeft={sigilGutterTotalWidth}
+            fg={foreground}
+            attributes={item.status === "confirmed" ? 0 : 2}
             selectionBg={colors.selection}
             selectionFg={colors.selectionForeground}
           >
-            {fitFooterCaption(
-              terminalText(item.text),
-              Math.max(0, terminalWidth - 2 * inset - sigilGutterTotalWidth),
-            )}
+            {terminalText(item.text)}
           </text>
-        </box>
-      );
+        ) : null}
+      </box>
+    );
+  }
+  if (item.kind === "user_message") {
+    const { cue, foreground } = userMessageAppearance(item, presentation);
     return (
       <box
         id={rowRenderableId(item.id)}
@@ -990,7 +1020,6 @@ export type EmptyConversationState = Readonly<{
 
 type TerminalTranscriptProps = Readonly<{
   emptyState: EmptyConversationState;
-  clients: readonly ClientEntryV1[] | undefined;
   detailsRequest: number;
   /** Increments to toggle the focused tool group (Ctrl+G). */
   groupRequest: number;
@@ -1002,15 +1031,19 @@ type TerminalTranscriptProps = Readonly<{
 
 type ToggleTool = (id: string, defaultOpen: boolean) => void;
 
-/** The newest tool group whose row is in the viewport: the Ctrl+G target. */
-function focusedToolGroupId(scroll: ScrollBoxRenderable): string | undefined {
+/** The newest tool group or Agent message in the viewport: the Ctrl+G target. */
+function focusedToggleRowId(
+  scroll: ScrollBoxRenderable,
+  toggleable: ReadonlySet<string>,
+): string | undefined {
   const viewportTop = scroll.viewport.y;
   const viewportBottom = viewportTop + scroll.viewport.height;
   const visible = scroll
     .getChildren()
     .filter(
       (child) =>
-        child.id.startsWith(`${timelineRowPrefix}tools:`) &&
+        child.id.startsWith(timelineRowPrefix) &&
+        toggleable.has(child.id.slice(timelineRowPrefix.length)) &&
         child.y + child.height > viewportTop &&
         child.y < viewportBottom,
     )
@@ -1036,7 +1069,6 @@ function rangeAfterReveal(
 /** Own the terminal-only scroll window and render one continuous transcript. */
 function TerminalTranscriptView({
   emptyState,
-  clients,
   detailsRequest,
   groupRequest,
   inputEnabled,
@@ -1044,22 +1076,18 @@ function TerminalTranscriptView({
   sessionAddress,
   terminalWidth,
 }: TerminalTranscriptProps) {
-  const notePromptOwners = useMemo(
-    () =>
-      new Set(
-        clients
-          ?.filter((entry) => entry.correlatedPrompts === "note")
-          .map((entry) => entry.id),
-      ),
-    [clients],
-  );
   const timeline = useTimeline();
   const composer = useComposer();
   const sessionStatus = useStatus();
   const contributions = useClientContributions();
   const placed = useMemo(
-    () => placeClientTimeline(contributions, timeline.commandAnchors),
-    [contributions, timeline.commandAnchors],
+    () =>
+      placeClientTimeline(
+        contributions,
+        timeline.commandAnchors,
+        timeline.positionAnchors,
+      ),
+    [contributions, timeline.commandAnchors, timeline.positionAnchors],
   );
   const { rendering } = usePaneKit();
   const inset = 1;
@@ -1281,17 +1309,25 @@ function TerminalTranscriptView({
     if (priorGroupRequest.current === groupRequest) return;
     priorGroupRequest.current = groupRequest;
     const viewport = scroll.current;
-    const id = viewport === null ? undefined : focusedToolGroupId(viewport);
-    const group = timeline.settled.find(
-      (item): item is ParakeetToolGroupItem =>
-        item.kind === "tool_group" && item.id === id,
+    const toggleable = new Set(
+      timeline.settled
+        .filter(
+          (item) =>
+            item.kind === "tool_group" ||
+            (item.kind === "user_message" && isAgentMessage(item)),
+        )
+        .map((item) => item.id),
     );
-    if (group !== undefined) {
-      const single = group.calls.length === 1 ? group.calls[0] : undefined;
+    const id =
+      viewport === null ? undefined : focusedToggleRowId(viewport, toggleable);
+    const target = timeline.settled.find((item) => item.id === id);
+    if (target?.kind === "user_message") toggleTool(target.id, false);
+    if (target?.kind === "tool_group") {
+      const single = target.calls.length === 1 ? target.calls[0] : undefined;
       toggleTool(
-        single?.id ?? group.id,
+        single?.id ?? target.id,
         single === undefined
-          ? toolGroupDefaultOpen(group)
+          ? toolGroupDefaultOpen(target)
           : toolCallDefaultOpen(single),
       );
     }
@@ -1384,7 +1420,6 @@ function TerminalTranscriptView({
               item,
               visibleItems[index + 1],
               (placed.after.get(item.id)?.length ?? 0) > 0,
-              notePromptOwners,
             )}
             presentation={presentation}
             key={item.id}
@@ -1393,7 +1428,6 @@ function TerminalTranscriptView({
             inset={inset}
             terminalWidth={terminalWidth}
             toggle={toggleTool}
-            notePromptOwners={notePromptOwners}
           />
           {placed.after.get(item.id)?.map(({ entryId, cell }) => (
             <TerminalClientRows
@@ -1405,15 +1439,7 @@ function TerminalTranscriptView({
           ))}
         </Fragment>
       )),
-    [
-      disclosure,
-      presentation,
-      terminalWidth,
-      toggleTool,
-      visibleItems,
-      placed,
-      notePromptOwners,
-    ],
+    [disclosure, presentation, terminalWidth, toggleTool, visibleItems, placed],
   );
 
   return (
@@ -1445,7 +1471,19 @@ function TerminalTranscriptView({
             retry
           </text>
         ) : null}
-        {visibleItems.length === 0 ? (
+        {visibleRange.start === 0
+          ? placed.before.map(({ entryId, cell }) => (
+              <TerminalClientRows
+                key={JSON.stringify([entryId, cell.id])}
+                id={rowRenderableId(JSON.stringify([entryId, cell.id]))}
+                rows={cell.rows}
+                presentation={presentation}
+              />
+            ))
+          : null}
+        {visibleItems.length === 0 &&
+        placed.before.length === 0 &&
+        !timeline.hasMoreHistory ? (
           <box flexDirection="column" marginX={inset}>
             <text fg={presentation.colors.foreground} attributes={2}>
               Start a conversation.

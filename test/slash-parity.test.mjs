@@ -15,6 +15,7 @@ import {
   slashParityFlow,
 } from "@fungi.computer/parakeet-testing";
 import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
+import { renderTuiConversation } from "@fungi.computer/spore/frame-renderer";
 import { createTuiFixture } from "./fixture.js";
 import { slashRows } from "@fungi.computer/spore/button/slash-completion";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
@@ -61,15 +62,24 @@ async function withGarden(check, { garden = true } = {}) {
           prepareClientExtensions: noOpClientExtensions,
           createServiceManager: () => ({
             discover: async () => ({
-              agentCount: 1,
+              agents: [
+                {
+                  agentId: "one",
+                  databasePath: "/project/one/agent.sqlite",
+                  sessionCount: 1,
+                },
+              ],
               sessions: [],
               problems: [],
             }),
             models: async () => [],
             auth: async () => undefined,
             connect: async () => ({
-              agentId: "agent-fixture",
-              sessionId: "session-fixture",
+              sandboxStatus: async () => ({
+                state: "available",
+                requireSandbox: false,
+              }),
+              ...fixture.identity,
               databasePath: "/tmp/garden.sqlite",
               session: {
                 ...fixture.session,
@@ -83,9 +93,24 @@ async function withGarden(check, { garden = true } = {}) {
           }),
           createWhistle: () => commands,
           enableKeymap: true,
-          createRenderer: async () => {
+          createRenderer: async () => setup.renderer,
+          render: (
+            root,
+            queryClient,
+            session,
+            frameCommands,
+            onExit,
+            theme,
+            controls,
+          ) => {
+            renderTuiConversation(root, queryClient, {
+              ...theme,
+              commands: frameCommands,
+              onExit,
+              session,
+              ...controls,
+            });
             ready.resolve();
-            return setup.renderer;
           },
         },
       );
@@ -189,12 +214,10 @@ test("an advertised command appears mid-Session and runs its flow in the termina
       await capture(setup, "slash-flow");
       await act(async () => setup.mockInput.pressEnter());
       await settle();
-      assert.match(
+      assert.doesNotMatch(
         setup.captureCharFrame(),
         new RegExp(slashParityFlow.notice, "u"),
       );
-      await act(async () => setup.mockInput.pressEnter());
-      await settle();
       assert.doesNotMatch(setup.captureCharFrame(), /Which bed/u);
       assert.equal(fixture.promptCalls(), 0);
     },

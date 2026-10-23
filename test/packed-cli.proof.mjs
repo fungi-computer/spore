@@ -52,6 +52,10 @@ const run = runFungiCli(
   {
     createServiceManager: () => ({
       connect: async () => ({
+        sandboxStatus: async () => ({
+          state: "available",
+          requireSandbox: false,
+        }),
         session,
         close: async () => {
           hostClosed = true;
@@ -109,7 +113,13 @@ await runFungiCli(
   {
     createServiceManager: () => ({
       discover: async () => ({
-        agentCount: 1,
+        agents: [
+          {
+            agentId: "one",
+            databasePath: "/project/one/agent.sqlite",
+            sessionCount: 1,
+          },
+        ],
         sessions: [
           {
             sessionId: inspectionSessionId,
@@ -131,6 +141,12 @@ await runFungiCli(
             messages: [
               {
                 id: "failed-tool",
+                data: {
+                  error: {
+                    kind: "not_found",
+                    message: "Expected lines missing",
+                  },
+                },
                 sequence: 2,
                 commandId: "prompt-1",
                 value: {
@@ -138,12 +154,6 @@ await runFungiCli(
                   toolCallId: "call-1",
                   toolName: "files.edit",
                   content: [{ type: "text", text: "Expected lines missing" }],
-                  details: {
-                    error: {
-                      kind: "not_found",
-                      message: "Expected lines missing",
-                    },
-                  },
                   isError: true,
                   timestamp: 2,
                 },
@@ -166,6 +176,7 @@ await runFungiCli(
               lastModelChoiceSequence: null,
               compaction: null,
             },
+            toolOutput: [],
             progress: null,
             extensions: {},
             attention: [],

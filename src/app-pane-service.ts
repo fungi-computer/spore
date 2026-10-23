@@ -24,9 +24,11 @@ function openBrowser(url: URL): Promise<void> {
   });
 }
 
-/** Account selection is captured lazily when the member first opens Apps. */
+/** Keep the terminal's account path; select its current Team lazily. */
 export function createAppPaneService(
-  open: () => Promise<LocalTeamApps> = openLocalTeamApps,
+  credentialPath: string,
+  open: () => Promise<LocalTeamApps> = () =>
+    openLocalTeamApps({ credentialPath }),
 ) {
   let owned: Promise<LocalTeamApps> | undefined;
   const acquire = () =>
@@ -35,7 +37,8 @@ export function createAppPaneService(
       throw cause;
     }));
   const apps: PaneApps = {
-    signedIn: async () => (await readFungiAccountStatus())?.team !== undefined,
+    signedIn: async () =>
+      (await readFungiAccountStatus({ credentialPath }))?.team !== undefined,
     read: async (signal) => (await acquire()).read(signal),
     requestGill: async (surfaceId, request, signal) =>
       (await acquire()).requestGill(surfaceId, request, signal),

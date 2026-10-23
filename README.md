@@ -57,20 +57,30 @@ Session ID or unique ID prefix. `sessions show --last` reads bounded history.
 `sessions watch --last` follows live state through the Local service.
 
 Type `/` to discover commands. `/help` and `/keys` show available actions and
-bindings. Escape dismisses a dialog or suggestions first. Otherwise, it
-withdraws a waiting prompt or cancels active work. `/cancel` requests that
-withdrawal or cancellation directly. Ctrl+C dismisses an open dialog first. With
-a waiting prompt, it exits the client and leaves the prompt queued. During
-active work, the first Ctrl+C requests cancellation. A second Ctrl+C exits even
-while cancellation is pending. Ctrl+C also exits an idle client. `/exit` closes
-the terminal client. `/reconnect` repairs history observation, not execution.
-`/retry` resends the failed instruction. `/continue` asks for new continuation
-work. Check partial changes before either action.
+bindings. Escape dismisses a visible toast first, then a dialog or suggestions.
+Otherwise, it withdraws a waiting prompt or cancels active work. `/cancel`
+requests that withdrawal or cancellation directly. Ctrl+C dismisses an open
+dialog first. With a waiting prompt, it exits the client and leaves the prompt
+queued. During active work, the first Ctrl+C requests cancellation. A second
+Ctrl+C exits even while cancellation is pending. Ctrl+C also exits an idle
+client. `/exit` closes the terminal client. `/reconnect` repairs history
+observation, not execution. `/retry` resends the failed instruction. `/continue`
+asks for new continuation work. Check partial changes before either action.
 
 Closing the terminal leaves the shared local service running. `fungi stop` stops
 it for every local client while retaining saved Sessions. The next launch starts
 it again. Project data lives in `.fungi/`. Credentials live in the same user's
 home configuration. Do not share credential files.
+
+When an open Session loses the service for more than a second (`fungi stop`, an
+update, a crash), the pane shows "Restarting the service... your session will
+resume" and retries with a bounded backoff. Each retry re-reads
+`~/.fungi/service/service.json`, so a service that returns on a new port or id
+is found; it never starts a service itself. The Session reopens where it was:
+the draft stays and history is not duplicated. A loss that heals within a second
+shows nothing. After thirty seconds the overlay says the service is not
+answering and to run `fungi resume` in another terminal; the pane keeps retrying
+and resumes by itself once the service is back.
 
 Tool rows show the same sigils as Parakeet. The default `"sigils": "auto"`
 enables images only in kitty (`TERM=xterm-kitty` or `TERM_PROGRAM=kitty`),
@@ -206,6 +216,13 @@ through the granted Agent's `execute`.
 
 ## Source setup and contracts
 
+Native command bindings use the installed OpenTUI parser's compact notation:
+`<leader>x` means Ctrl-K, then x; `<leader>gx` means Ctrl-K, then g, then x.
+Spaces in binding strings are literal Space keystrokes, not separators.
+`<leader> g x` therefore requires two extra Space keystrokes. Display labels may
+contain spaces; do not copy those labels back into binding declarations or add a
+whitespace-normalizing compatibility parser.
+
 From a configured repository checkout:
 
 ```sh
@@ -258,12 +275,63 @@ offers horizontal/vertical splitting and main-pane resizing. `Ctrl K x` releases
 only the focused view and its client; it never aborts Session work. Closing the
 last pane leaves the shell and its open/exit commands.
 
+Searchable pickers use fuzzy matching over names and descriptions: `zp` finds
+**Zoom pane**, and `clp` finds **Close pane**. Matched letters are bold; accents
+and joined emoji stay whole when highlighted.
+
 Slash completion starts with available conversation commands. Stop appears while
 work is active or waiting; retry and continue appear when their existing
 recovery conditions apply. Settings remain reachable by their typed slash names.
 Advanced commands, such as `/session`, appear only when their alias prefix is
 typed. Pane controls and Row actions live in the command picker, not slash
 completion.
+
+### Toasts and attention
+
+Transient information appears top-right, not in the footer. It expires after the
+shared `toastDurationMs` (4 seconds), pauses while hovered where the terminal
+reports pointer movement, and dismisses with `x`, a click or Esc. Esc dismisses
+only the visible toast, without also closing a dialog or cancelling work.
+Pending toasts show a count. Successful actions do not announce their own echo:
+copy, collapse/expand, sign-in and successful recovery remain silent.
+
+Inside `src/`, import `useToast` and `ToastInput` from `button/index.js`.
+`useToast().show(input)` and `kit.toast(input)` share one owner. The input is
+`{ variant, message, title?, duration?, action?, key? }`, with variants `info`,
+`success`, `warning` and `error`. Duration is milliseconds or
+`"until-dismissed"`; an action is
+`{ label: string, run: () => void | Promise<void> }`. Return the operation's
+Promise rather than detaching it: while pending, the card shows **Working…** and
+cannot be activated or dismissed again. Completion advances the queue; a thrown
+or rejected action becomes a persistent warning until acknowledged. For example:
+
+```ts
+toast.show({
+  variant: "info",
+  message: "Update ready",
+  duration: "until-dismissed",
+  action: { label: "Restart to update", run: restart },
+});
+```
+
+Command failures, sign-in requirements and waiting questions remain attention
+items until resolved or acknowledged. Pane-operation failures use
+`duration: "until-dismissed"` to keep their toast available. Palette detection
+silently falls back to terminal defaults; it is not an attention item.
+
+The queue retains at most 20 individual pending cards. Transient chatter can
+replace only another transient card, never unresolved attention. A producer can
+give attention a stable `key` to update its one unresolved card instead of
+queuing repeated failures. PaneKit scopes that identity to the pane;
+acknowledging the card releases it. Terminal input and resize each have their
+own identity.
+
+If all individual slots contain attention, additional attention is recorded in
+one bounded overflow record (count plus latest text), visibly flagged on the
+current card. On dismissal it becomes a persistent **Attention capacity
+reached** warning ahead of the individually retained cards. This explicitly says
+that those additional reports could not be listed individually; it does not
+pretend to retain every message or action.
 
 A pane registers a kind in `src/panes/builtins.ts` and receives only `PaneKit`.
 Its target parser and instance key belong to that kind. A kind that can open
@@ -272,12 +340,13 @@ target); **Open pane** (`Ctrl K o`) lists every declared launcher by name, the
 built-in Local terminal first and then the programs an enabled extension
 declares, and opens the chosen target through the registry, so a kind needs no
 menu edit. New and resumed conversations and Apps follow them as host flows,
-because Local supplies their targets. A pane that cannot open reports a notice;
-the next key dismisses it, and no pane loses its keyboard. The registry
-namespaces keys by kind, owns focus and input, and supplies Maosaico's cell
-viewport. `PaneKit.setTitle()` changes only the pane’s sanitized display header,
-never its identity or admission. Conversation targets may carry a display title;
-without one, the header uses the Agent name and “New conversation”, never an id.
+because Local supplies their targets. A pane that cannot open reports an
+attention toast; dismiss it with `x`, a click or Esc. Ordinary typing does not
+clear it, and no pane loses its keyboard. The registry namespaces keys by kind,
+owns focus and input, and supplies Maosaico's cell viewport.
+`PaneKit.setTitle()` changes only the pane’s sanitized display header, never its
+identity or admission. Conversation targets may carry a display title; without
+one, the header uses the Agent name and “New conversation”, never an id.
 Commands, dialogs, status and theme presentation are leases: closing the pane or
 retiring the workspace withdraws them. Narrow and zoomed panes stay mounted, so
 drafts and history do not reset. The shared Agar window lifecycle disposes late
@@ -524,7 +593,7 @@ logs. Linux paste uses `terminalText`; macOS uses OpenTUI's native paste
 encoder. Both remove terminal programs and control characters before sending
 text to the child, so pasted text cannot end bracketed paste early or send
 Ctrl-C. An input larger than the Mac PTY's bounded pending capacity is refused
-with a pane notice; it does not silently terminate a healthy program.
+with an attention toast; it does not silently terminate a healthy program.
 
 The Mac-native check in `test/local-mac-pty.test.ts` exercises controlling
 `/dev/tty`, display, paste, resize, a background job, close and queued-input
@@ -546,11 +615,45 @@ The joined proof creates its own HOME, file-only synthetic account and shadow
 
 ## Update the installed local CLI
 
-Run `fungi update /path/to/Botanical-next -C /path/to/project` through the
-installed bundled launcher. The source checkout defaults to the current
-directory; `-C` selects the project whose Saved Sessions must reopen. The
-command requires Git, pnpm, npm, and the native build tools used by
-`runtimes/local`.
+Run `fungi update` through the installed launcher. Fungi matches its real
+installation against npm and pnpm's global roots or Bun's global bin directory,
+as reported by those managers. It installs the registry's latest release with
+the matching manager, verifies the installed CLI, then runs the new launcher's
+public service stop/start functions. Unknown or ambiguous installations get a
+manual reinstall command instead of a guessed manager.
+
+An exclusive SQLite file lease covers installation, verification and restart. A
+concurrent update is refused; process death releases the lease without PID
+guessing or stale-lock deletion. A failed install/verification restores and
+verifies the previous release without stopping its service. A restart failure
+reports that the new version is installed and tells you how to reopen it.
+
+The notification watcher is prepared behind
+`watchFungiUpdates(notify: (notice: UpdateNotification) => void): () => void`.
+It emits `{ kind: "available", version }` or `{ kind: "restart", version }`,
+once per version and kind for that watcher lifetime. The returned function
+cancels the timer and in-flight registry check. Checks are nonblocking, run
+immediately and every ten minutes, and use a three-second registry deadline. Set
+`"update": "off"` in `~/.config/fungi/tui.json` to disable checks; `"notify"` is
+the default. Failures go to the bounded diagnostic log.
+
+`UpdateToasts` adapts those facts to the shared toast API: an `info` toast with
+`Fungi <version> is available: run fungi update` uses the shared default
+duration; `Update installed: restart to update` remains until dismissed and
+offers **Restart to update**, invoking the supplied restart callback. The
+adapter has no renderer, queue, or duration timer of its own.
+
+**Lifecycle integration is pending.** The adapter is not mounted in the terminal
+yet: its restart callback must use the incoming lifecycle owner's
+version-checked ensure path. The standalone update overlay remains deleted.
+Release clients do not automatically replace the running terminal.
+
+### Developer source builds
+
+Run `fungi update --from-source /path/to/Botanical-next -C /path/to/project`
+through the installed bundled launcher. `-C` selects the project whose Saved
+Sessions must reopen. The command requires Git, pnpm, npm, and the native build
+tools used by `runtimes/local`.
 
 Update fetches `origin/integration/parallel-work-tracking`, freezes that exact
 commit, and builds its CLI in an isolated checkout under the source's ignored

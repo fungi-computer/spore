@@ -11,6 +11,8 @@ import {
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import process from "node:process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { z } from "zod";
 import { acquireNodeStoreLease } from "@fungi.computer/shiitake/node";
 import { buildIntegrationCandidate } from "./update-build.js";
@@ -19,13 +21,21 @@ import {
   type FungiCandidateProof,
 } from "./update-proof.js";
 import { installFungiCandidate, installedFungiLink } from "./update-install.js";
+import { latestFungiVersion, releaseVersion } from "./release-registry.js";
+import type { PrivateLocalServiceManager } from "@fungi.computer/truffle/service";
+
+/** The new launcher's fresh manager owns version-checked replacement under its startup lock. */
+export async function restartUpdatedFungiService(
+  manager: Pick<PrivateLocalServiceManager, "start">,
+): Promise<void> {
+  await manager.start();
+}
 
 /**
- * Spore is the install/update/rollback layer behind `fungi`. A released
- * fungi updates from npm, the channel it is published to: npm resolves the
- * `latest` dist-tag, verifies the tarball's registry integrity, and owns the
- * global install. fungi only stops its service, checks the new version starts,
- * and puts the previous release back when it does not.
+ * Spore owns release install/update/rollback. The detected package manager
+ * owns tarball integrity and global installation; the registry owns latest.
+ * Only the newly installed launcher restarts the service, with its new build
+ * identity, after verification. A failed install leaves the old service alone.
  */
 const releasePackage = "@fungi.computer/spore";
 
@@ -39,18 +49,42 @@ export type CommandRunner = (
   env?: Readonly<Record<string, string>>,
 ) => Promise<CommandResult>;
 
+const execute = promisify(execFile);
+const managerEnvironment = (node: string) => ({
+  PATH: `${dirname(node)}${process.platform === "win32" ? ";" : ":"}${process.env.PATH ?? ""}`,
+});
+const commandFailure = z.object({
+  code: z.union([z.number(), z.string().transform(() => 1)]),
+  stdout: z.string().optional(),
+  stderr: z.string().optional(),
+});
+export function releaseCommandTimeout(command: readonly string[]): number {
+  const operation = command[1];
+  return operation === "root" || operation === "prefix" || operation === "pm"
+    ? 5_000
+    : 300_000;
+}
+
 const runCommand: CommandRunner = async (command, env) => {
-  const child = Bun.spawn([...command], {
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, ...env },
-  });
-  const [code, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  return { code, stdout, stderr };
+  const [program, ...args] = command;
+  if (program === undefined) throw new Error("Missing update command");
+  try {
+    const result = await execute(program, args, {
+      env: { ...process.env, ...env },
+      timeout: releaseCommandTimeout(command),
+      maxBuffer: 1_048_576,
+      encoding: "utf8",
+    });
+    return { code: 0, ...result };
+  } catch (cause) {
+    const failure = commandFailure.safeParse(cause);
+    if (!failure.success) throw cause;
+    return {
+      code: failure.data.code,
+      stdout: failure.data.stdout ?? "",
+      stderr: failure.data.stderr ?? String(cause),
+    };
+  }
 };
 
 const installedPackage = z.looseObject({
@@ -58,63 +92,110 @@ const installedPackage = z.looseObject({
   version: z.string().min(1),
 });
 
-export type ReleaseInstall = Readonly<{
-  /** The npm global prefix that owns this install. */
-  prefix: string;
-  version: string;
-  launcher: string;
-  node: string;
-}>;
+export type ReleaseInstall = Readonly<
+  {
+    version: string;
+    launcher: string;
+    node: string;
+  } & ({ method: "npm"; prefix: string } | { method: "pnpm" | "bun" })
+>;
 
-/** Find the npm global install that launched this process, or explain why not. */
+async function isInstalledLauncher(
+  entry: string,
+  launcher: string,
+): Promise<boolean> {
+  try {
+    return (await realpath(entry)) === launcher;
+  } catch (cause) {
+    if (cause instanceof Error && "code" in cause && cause.code === "ENOENT")
+      return false;
+    throw cause;
+  }
+}
+
+async function probeReleaseManager(
+  method: ReleaseInstall["method"],
+  install: Pick<ReleaseInstall, "launcher" | "node" | "version">,
+  run: CommandRunner,
+): Promise<ReleaseInstall | undefined> {
+  const result = await run(
+    method === "bun" ? ["bun", "pm", "bin", "-g"] : [method, "root", "-g"],
+    managerEnvironment(install.node),
+  );
+  if (result.code !== 0) return undefined;
+  const root = result.stdout.trim();
+  if (!root.startsWith("/")) return undefined;
+  const entry =
+    method === "bun"
+      ? join(root, "fungi")
+      : join(root, releasePackage, "dist/fungi.cjs");
+  if (!(await isInstalledLauncher(entry, install.launcher))) return undefined;
+  if (method !== "npm") return { ...install, method, launcher: entry };
+  const prefix = await run(
+    ["npm", "prefix", "-g"],
+    managerEnvironment(install.node),
+  );
+  if (prefix.code !== 0 || !prefix.stdout.trim().startsWith("/"))
+    return undefined;
+  return {
+    ...install,
+    method,
+    prefix: prefix.stdout.trim(),
+    launcher: entry,
+  };
+}
+
+/** Match manager-owned paths against the actual launcher, never PATH names alone. */
 export async function findReleaseInstall(
   env: Readonly<Record<string, string | undefined>> = process.env,
+  run: CommandRunner = runCommand,
 ): Promise<ReleaseInstall> {
   const launcherPath = env.FUNGI_LAUNCHER;
   const node = env.FUNGI_LAUNCHER_NODE;
+  const guidance =
+    "Could not identify one global npm, pnpm, or bun installation. Reinstall manually with npm install -g @fungi.computer/spore --include=optional. For install.sh, run the install command again.";
+  if (launcherPath === undefined || node === undefined)
+    throw new Error(guidance);
+  const launcher = await realpath(launcherPath).catch((cause: unknown) => {
+    throw new Error(guidance, { cause });
+  });
   if (
-    launcherPath === undefined ||
-    node === undefined ||
-    basename(launcherPath) !== "fungi.cjs" ||
-    basename(dirname(launcherPath)) !== "dist"
+    basename(launcher) !== "fungi.cjs" ||
+    basename(dirname(launcher)) !== "dist"
   )
-    throw new Error(
-      "fungi update updates an npm install of @fungi.computer/spore. If you installed fungi with install.sh, run the install command again.",
-    );
-  const launcher = await realpath(launcherPath);
+    throw new Error(guidance);
   const packageRoot = dirname(dirname(launcher));
-  const scope = dirname(packageRoot);
-  const modules = dirname(scope);
-  const lib = dirname(modules);
-  if (
-    basename(packageRoot) !== "cli" ||
-    basename(scope) !== "@fungi.computer" ||
-    basename(modules) !== "node_modules" ||
-    (basename(lib) !== "lib" && process.platform !== "win32")
-  )
-    throw new Error(
-      `This fungi runs from ${packageRoot}, not a global npm install. Reinstall with npm install -g ${releasePackage}.`,
-    );
   const { version } = installedPackage.parse(
     JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")),
   );
-  return { prefix: dirname(lib), version, launcher, node };
+  const matches: ReleaseInstall[] = [];
+  const methods: readonly ReleaseInstall["method"][] = ["npm", "pnpm", "bun"];
+  for (const method of methods) {
+    const match = await probeReleaseManager(
+      method,
+      { launcher, node, version },
+      run,
+    );
+    if (match !== undefined) matches.push(match);
+  }
+  const match = matches[0];
+  if (matches.length !== 1 || match === undefined) throw new Error(guidance);
+  return match;
 }
 
-const npmVersion = z.string().regex(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u);
-
-/** Update the npm install to the `latest` release, restoring the old one on failure. */
+/** Hold the file lease through install, verification, and new-build service restart. */
 export async function runFungiReleaseUpdate(
   options: Readonly<{
     notify: (message: string) => void;
     run?: CommandRunner;
     install?: ReleaseInstall;
     updates?: string;
+    registry?: () => Promise<string>;
   }>,
 ): Promise<void> {
   const run = options.run ?? runCommand;
   // Reject standalone binaries before creating the update store.
-  if (options.install === undefined) await findReleaseInstall();
+  if (options.install === undefined) await findReleaseInstall(process.env, run);
   const updates = options.updates ?? defaultUpdates();
   await mkdir(updates, { recursive: true, mode: 0o700 });
   const lease = acquireNodeStoreLease(join(updates, "update-owner.sqlite"));
@@ -122,8 +203,9 @@ export async function runFungiReleaseUpdate(
     await updateRelease(
       options.notify,
       run,
-      options.install ?? (await findReleaseInstall()),
+      options.install ?? (await findReleaseInstall(process.env, run)),
       updates,
+      options.registry ?? latestFungiVersion,
     );
   } finally {
     lease.release();
@@ -135,26 +217,17 @@ async function updateRelease(
   run: CommandRunner,
   install: ReleaseInstall,
   updates: string,
+  registry: () => Promise<string>,
 ): Promise<void> {
-  // npm beside the Node that runs fungi, so both agree on the global prefix.
-  const env = {
-    PATH: `${dirname(install.node)}${process.platform === "win32" ? ";" : ":"}${process.env.PATH ?? ""}`,
-  };
-  const npm = async (args: readonly string[], failure: string) => {
-    const result = await run(["npm", ...args], env);
+  const env = managerEnvironment(install.node);
+  const manager = async (args: readonly string[], failure: string) => {
+    const result = await run([install.method, ...args], env);
     if (result.code !== 0)
       throw new Error(`${failure}\n${result.stderr.trim()}`.trim());
     return result.stdout;
   };
   notify("Checking the latest fungi release…");
-  const latest = npmVersion.parse(
-    JSON.parse(
-      await npm(
-        ["view", `${releasePackage}@latest`, "version", "--json"],
-        "Could not read the latest fungi release from npm.",
-      ),
-    ),
-  );
+  const latest = releaseVersion.parse(await registry());
   if (latest === install.version) {
     notify(`fungi ${install.version} is the latest release.`);
     await pruneFungiUpdates(updates);
@@ -162,26 +235,24 @@ async function updateRelease(
   }
   const fungi = async (args: readonly string[]) =>
     run([install.node, install.launcher, ...args], env);
-  const stopped = await fungi(["stop"]);
-  if (stopped.code !== 0)
-    throw new Error(
-      `fungi could not stop its background service; nothing was changed.\n${stopped.stderr.trim()}`,
+  const installVersion = (version: string) => {
+    return manager(
+      install.method === "npm"
+        ? [
+            "install",
+            "--global",
+            "--prefix",
+            install.prefix,
+            "--include=optional",
+            "--no-audit",
+            "--no-fund",
+            `${releasePackage}@${version}`,
+          ]
+        : ["add", "--global", `${releasePackage}@${version}`],
+      `${install.method} could not install fungi ${version}.`,
     );
-  const installVersion = (version: string) =>
-    npm(
-      [
-        "install",
-        "--global",
-        "--prefix",
-        install.prefix,
-        "--include=optional",
-        "--no-audit",
-        "--no-fund",
-        `${releasePackage}@${version}`,
-      ],
-      `npm could not install fungi ${version}.`,
-    );
-  notify(`Installing fungi ${latest} with npm…`);
+  };
+  notify(`Installing fungi ${latest} with ${install.method}…`);
   try {
     await installVersion(latest);
     const started = await fungi(["--version"]);
@@ -204,6 +275,11 @@ async function updateRelease(
       { cause },
     );
   }
+  const restarted = await fungi(["--internal-service-restart"]);
+  if (restarted.code !== 0)
+    throw new Error(
+      `Fungi ${latest} is installed, but its service could not restart. Run fungi stop, then reopen fungi.\n${restarted.stderr.trim()}`,
+    );
   await pruneFungiUpdates(updates);
   notify(`fungi updated ${install.version} → ${latest}.`);
 }

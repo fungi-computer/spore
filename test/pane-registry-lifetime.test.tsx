@@ -2,7 +2,7 @@ import { z } from "zod";
 import { expect, test } from "bun:test";
 import { KeyEvent, PasteEvent, RGBA } from "@opentui/core";
 import { createWhistle } from "@fungi.computer/whistle";
-import { createAppSurfaceCommandHost } from "@fungi.computer/oyster/shell/command-host";
+import { createAppSurfaceCommandHost } from "@fungi.computer/nacre/command-host";
 import {
   definePaneKind,
   type PaneKit,
@@ -12,6 +12,7 @@ import { createPaneRegistry } from "../src/shell/registry.js";
 import { paneValue } from "../src/shell/value.js";
 import { probePane } from "./fixtures/probe-pane/probe-pane.js";
 import { createPresentation } from "../src/button/presentation.js";
+import { createToastStore } from "../src/button/toast-store.js";
 
 function key(name: string) {
   return new KeyEvent({
@@ -55,8 +56,8 @@ function workspace(
   const kits = new Map<string, PaneKit>();
   const received: string[] = [];
   const cleaned: string[] = [];
-  const notices: import("../src/button/index.js").PaneNotice[] = [];
   const overlay = paneValue(false);
+  const toasts = createToastStore();
   // This host fixture has no builtin kind, renderer or Session-specific path.
   const targetSchema = z.object({
     kind: z.literal("fixture"),
@@ -134,9 +135,7 @@ function workspace(
     sessions: {
       acquire: () => Promise.reject(new Error("Fixture has no Session")),
     },
-    notify: (notice) => {
-      notices.push(notice);
-    },
+    toast: toasts.show,
   });
   return {
     registry,
@@ -145,10 +144,11 @@ function workspace(
     kits,
     received,
     cleaned,
-    notices,
     overlay,
+    toasts,
     dispose: async () => {
       await registry.dispose();
+      toasts.dispose();
       commands.dispose();
       whistle.close();
       presentation.syntax.destroy();
@@ -182,13 +182,78 @@ test("pane viewports use every row and reserve only a visible divider column", a
       height: 48,
     });
     host.registry.toggleZoom(beta.paneId);
-    host.registry.split("y");
+    host.registry.setLayout("main-top");
     checkTiled();
     await host.registry.close(beta.paneId);
     expect(host.kits.get("alpha")?.viewport.read()).toEqual({
       width: 160,
       height: 48,
     });
+  } finally {
+    await host.dispose();
+  }
+});
+
+test("named layouts reach live pane viewports without recreating pane kits", async () => {
+  const host = workspace();
+  try {
+    for (const name of ["alpha", "beta", "gamma", "delta"])
+      await host.registry.open({ kind: "fixture", name });
+    const original = new Map(host.kits);
+    host.registry.setLayout("grid");
+    expect(host.registry.read().map((pane) => pane.frame)).toEqual([
+      { x: 0, y: 0, width: 80, height: 24 },
+      { x: 80, y: 0, width: 80, height: 24 },
+      { x: 0, y: 24, width: 80, height: 24 },
+      { x: 80, y: 24, width: 80, height: 24 },
+    ]);
+    expect(host.kits.get("alpha")?.viewport.read()).toEqual({
+      width: 79,
+      height: 24,
+    });
+    expect(host.kits.get("delta")?.viewport.read()).toEqual({
+      width: 80,
+      height: 24,
+    });
+    host.registry.resizeBy(20);
+    expect(host.registry.read()[0]?.frame.width).toBe(80);
+    for (const layout of [
+      "columns",
+      "rows",
+      "main-top",
+      "main-left",
+    ] as const) {
+      host.registry.setLayout(layout);
+      for (const [name, kit] of original) expect(host.kits.get(name)).toBe(kit);
+      expect(host.cleaned).toEqual([]);
+    }
+  } finally {
+    await host.dispose();
+  }
+});
+
+test("repeated terminal attention is deduplicated within its pane, not across panes", async () => {
+  const host = workspace();
+  try {
+    await host.registry.open({ kind: "fixture", name: "alpha" });
+    await host.registry.open({ kind: "fixture", name: "beta" });
+    for (let index = 0; index < 40; index += 1) {
+      for (const name of ["alpha", "beta"])
+        host.kits.get(name)?.toast({
+          key: "terminal-input",
+          variant: "error",
+          message: "Local terminal input was not sent",
+          duration: "until-dismissed",
+        });
+    }
+    expect(host.toasts.snapshot().pending).toBe(1);
+    const first = host.toasts.snapshot().current?.key;
+    host.toasts.dismiss();
+    expect(host.toasts.snapshot().current?.key).not.toBe(first);
+    expect(host.toasts.snapshot().current?.message).toBe(
+      "Local terminal input was not sent",
+    );
+    expect(host.toasts.snapshot().pending).toBe(0);
   } finally {
     await host.dispose();
   }
@@ -387,10 +452,6 @@ test("the shell bounds pane display text and never projects terminal controls", 
   const host = workspace((_name, kit) => {
     rename = kit.setTitle;
     kit.setTitle(title);
-    kit.notify({
-      tone: "error",
-      message: "Notice\x1b[2J\x07" + "b".repeat(600),
-    });
     kit.status.contribute({
       slot: "chips",
       order: 2,
@@ -408,8 +469,6 @@ test("the shell bounds pane display text and never projects terminal controls", 
       text: "Status",
       compact: "Short",
     });
-    expect(host.notices[0]?.message.length).toBeLessThanOrEqual(512);
-    expect(host.notices[0]?.message).not.toMatch(/\p{Cc}/u);
     if (pane === undefined || rename === undefined)
       throw new Error("Pane missing");
     rename("Renamed\x1b[2J");

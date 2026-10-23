@@ -8,7 +8,9 @@ import planClient from "@fungi.computer/shiitake-extensions/plan/client";
 import subagentsClient from "@fungi.computer/shiitake-extensions/subagents/client";
 import corralClient from "@fungi.computer/corral";
 import { createRequire } from "node:module";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
+import { agentsCommandHelp, runAgentsCommand } from "./agents-command.js";
 import {
   runComputersCommand,
   type ComputersCommandOwners,
@@ -16,6 +18,7 @@ import {
 import process from "node:process";
 import { Readable, Writable } from "node:stream";
 import { parseArgs } from "node:util";
+import { privateLocalServiceVersion } from "@fungi.computer/truffle/service";
 import { Cli, isCancel } from "@fungi.computer/lantern";
 import { z } from "zod";
 import { Schema } from "effect";
@@ -30,6 +33,10 @@ import { fungiModelLoginNotice } from "./button/login-notice.js";
 import type { LocalAuthCliOptions } from "@fungi.computer/truffle/auth";
 import {
   createPrivateModels,
+  resolveDefaultCredentialPath,
+  activateSubscriptionCredential,
+  CredentialActivationError,
+  prepareSubscriptionIdentity,
   registerPrivateBundledModelOAuthFlows,
   listPrivateTeamComputers,
   startPrivateTeamComputer,
@@ -44,8 +51,10 @@ import {
   readFungiAccountStatus,
   runFungiAccountCommand,
   parseFungiMcpEndpoint,
+  saveOysterMcpKey,
   type PrivateFungiAccountLoginOptions,
   type PrivateFungiAccountLogoutResult,
+  type PrivateFungiMcpSelection,
 } from "@fungi.computer/truffle";
 import {
   createPrivateLocalServiceManager,
@@ -133,8 +142,11 @@ export type TuiAuthCall = LocalAuthCliOptions & {
   authType?: string;
 };
 
-function authOptionsFromIo(io: FungiCliIo): TuiAuthCall {
-  const options: TuiAuthCall = {};
+function authOptionsFromIo(
+  io: FungiCliIo,
+  credentialPath: string,
+): TuiAuthCall {
+  const options: TuiAuthCall = { credentialPath };
   if (io.stdin !== undefined) options.input = io.stdin;
   if (io.stdout !== undefined)
     options.output = new Writable({
@@ -162,129 +174,199 @@ function isInteractiveStream(
   return "isTTY" in stream && stream.isTTY;
 }
 
+// Node's parseArgs owns argv decoding. These schemas describe only the existing
+// command grammar over its decoded strings; dispatch retains its further checks.
+const fungiCommandSchema = z.enum([
+  "resume",
+  "new",
+  "sessions",
+  "agents",
+  "run",
+  "serve",
+  "stop",
+  "reload",
+  "update",
+  "login",
+  "status",
+  "account",
+  "doctor",
+  "logout",
+  "computers",
+  "computer",
+  "extension",
+  "mcp",
+  "acp",
+  "help",
+]);
+type FungiCommand = z.infer<typeof fungiCommandSchema>;
+
+const noFungiPositionals = z.tuple([]);
+const optionalFungiPositional = z.tuple([z.string().optional()]);
+type FungiArgumentRules = Partial<
+  Record<FungiCommand, Readonly<{ schema: z.ZodType; error: string }>>
+>;
+
+// These three errors precede --last validation in the existing CLI.
+const earlyFungiArgumentRules = {
+  help: {
+    schema: optionalFungiPositional,
+    error: "fungi help accepts at most one command",
+  },
+  run: {
+    schema: optionalFungiPositional,
+    error: "fungi run accepts at most one prompt",
+  },
+  update: {
+    schema: noFungiPositionals,
+    error: "fungi update does not accept positional arguments",
+  },
+} satisfies FungiArgumentRules;
+
+const fungiArgumentRules = {
+  serve: {
+    schema: noFungiPositionals,
+    error: "fungi serve does not accept positional arguments",
+  },
+  computers: {
+    schema: z.union([
+      noFungiPositionals,
+      z.tuple([z.literal("start"), z.string()]),
+    ]),
+    error: "Usage: fungi computers | fungi computers start <name>",
+  },
+  computer: {
+    schema: z.union([
+      z.tuple([z.literal("attach"), z.string(), z.string()]),
+      z.tuple([z.literal("status")]),
+      z.tuple([z.literal("detach"), z.string()]),
+    ]),
+    error:
+      "Usage: fungi computer attach <computer> <folder> | status | detach <computer>",
+  },
+  account: {
+    schema: z.union([
+      noFungiPositionals,
+      z.tuple([z.enum(["teams", "balance"])]),
+      z.tuple([z.literal("use-team"), z.string()]),
+    ]),
+    error:
+      "Usage: fungi account [--json] | teams [--json] | use-team <team-id> | balance [--json]",
+  },
+  extension: {
+    schema: z.union([
+      z.tuple([z.enum(["add", "remove"]), z.string()]),
+      z.tuple([z.literal("list")]),
+      z.tuple([
+        z.enum(["enable", "disable"]),
+        z.literal("project"),
+        z.string(),
+      ]),
+      z.tuple([
+        z.enum(["enable", "disable"]),
+        z.enum(["agent", "skills"]),
+        z.string(),
+        z.string().optional(),
+      ]),
+    ]),
+    error: extensionCommandHelp,
+  },
+  mcp: {
+    schema: z.union([
+      z.tuple([z.enum(["show", "forget"])]),
+      z.tuple([z.literal("use"), z.string()]),
+    ]),
+    error: "Usage: fungi mcp show | use <url> | forget",
+  },
+  agents: {
+    schema: z.union([
+      z.tuple([z.literal("list")]),
+      z.tuple([z.enum(["archive", "unarchive"]), z.string()]),
+    ]),
+    error: agentsCommandHelp,
+  },
+  login: {
+    schema: noFungiPositionals,
+    error: "fungi login does not accept positional arguments",
+  },
+  status: {
+    schema: noFungiPositionals,
+    error: "fungi status does not accept positional arguments",
+  },
+  logout: {
+    schema: noFungiPositionals,
+    error: "fungi logout does not accept positional arguments",
+  },
+} satisfies FungiArgumentRules;
+
+const namedSessionArguments = z.union([
+  z.tuple([z.literal("list")]),
+  z.tuple([z.enum(["resume", "show", "watch"]), z.string()]),
+  z.tuple([z.literal("status"), z.string().optional()]),
+]);
+const lastSessionArguments = z.tuple([
+  z.enum(["resume", "show", "watch", "status"]),
+]);
+const decimalSessionSelector = z.string().regex(/^[0-9]+$/u);
+const listedSessionNumber = z
+  .string()
+  .regex(/^[1-9][0-9]*$/u)
+  .refine((value) => Number.isSafeInteger(Number(value)));
+
+function validateFungiCommandName(
+  command: string | undefined,
+): FungiCommand | undefined {
+  if (command === undefined) return undefined;
+  const parsed = fungiCommandSchema.safeParse(command);
+  if (!parsed.success) throw new Error(`Unknown fungi command: ${command}`);
+  return parsed.data;
+}
+
+function validateFungiArguments(
+  command: FungiCommand | undefined,
+  positionals: readonly string[],
+  rules: FungiArgumentRules,
+): void {
+  const rule = command === undefined ? undefined : rules[command];
+  if (rule !== undefined && !rule.schema.safeParse(positionals).success)
+    throw new Error(rule.error);
+}
+
+function validateFungiSessionArguments(
+  positionals: readonly string[],
+  last: boolean | undefined,
+): void {
+  const schema = last ? lastSessionArguments : namedSessionArguments;
+  const parsed = schema.safeParse(positionals);
+  if (!parsed.success)
+    throw new Error(
+      "Usage: fungi sessions list | resume <number|session-id|prefix>|--last | show|watch <id>|--last | status [id|--last]",
+    );
+  const [action, target] = parsed.data;
+  if (
+    action === "resume" &&
+    target !== undefined &&
+    decimalSessionSelector.safeParse(target).success &&
+    !listedSessionNumber.safeParse(target).success
+  )
+    throw new Error(
+      "Session number must be a positive integer from fungi sessions list",
+    );
+}
+
 function validateFungiCommand(
   command: string | undefined,
   positionals: readonly string[],
   last: boolean | undefined,
 ): void {
-  if (
-    command !== undefined &&
-    command !== "resume" &&
-    command !== "new" &&
-    command !== "sessions" &&
-    command !== "run" &&
-    command !== "serve" &&
-    command !== "stop" &&
-    command !== "update" &&
-    command !== "login" &&
-    command !== "status" &&
-    command !== "account" &&
-    command !== "doctor" &&
-    command !== "logout" &&
-    command !== "computers" &&
-    command !== "computer" &&
-    command !== "extension" &&
-    command !== "mcp" &&
-    command !== "acp" &&
-    command !== "help"
-  )
-    throw new Error(`Unknown fungi command: ${command}`);
-  if (command === "help" && positionals.length > 1)
-    throw new Error("fungi help accepts at most one command");
-  if (command === "run" && positionals.length > 1)
-    throw new Error("fungi run accepts at most one prompt");
-  if (command === "update" && positionals.length > 0)
-    throw new Error("fungi update does not accept positional arguments");
-  if (last && command !== "resume" && command !== "sessions")
+  const recognized = validateFungiCommandName(command);
+  validateFungiArguments(recognized, positionals, earlyFungiArgumentRules);
+  if (last && recognized !== "resume" && recognized !== "sessions")
     throw new Error(
       "--last is only valid with fungi resume or fungi sessions resume",
     );
-  if (command === "serve" && positionals.length > 0)
-    throw new Error("fungi serve does not accept positional arguments");
-  if (
-    command === "computers" &&
-    !(
-      positionals.length === 0 ||
-      (positionals.length === 2 && positionals[0] === "start")
-    )
-  )
-    throw new Error("Usage: fungi computers | fungi computers start <name>");
-  if (command === "computer") {
-    const [action, ...rest] = positionals;
-    const arity = { attach: 2, status: 0, detach: 1 } as const;
-    const expected =
-      action === "attach" || action === "status" || action === "detach"
-        ? arity[action]
-        : undefined;
-    if (expected === undefined || rest.length !== expected)
-      throw new Error(
-        "Usage: fungi computer attach <computer> <folder> | status | detach <computer>",
-      );
-  }
-  if (command === "account") {
-    const [action, ...rest] = positionals;
-    if (
-      !(action === undefined && rest.length === 0) &&
-      !((action === "teams" || action === "balance") && rest.length === 0) &&
-      !(action === "use-team" && rest.length === 1)
-    )
-      throw new Error(
-        "Usage: fungi account [--json] | teams [--json] | use-team <team-id> | balance [--json]",
-      );
-  }
-  if (command === "extension") {
-    const [action, ...rest] = positionals;
-    const valid =
-      (action === "add" && rest.length === 1) ||
-      (action === "list" && rest.length === 0) ||
-      (action === "remove" && rest.length === 1) ||
-      ((action === "enable" || action === "disable") &&
-        ((rest[0] === "project" && rest.length === 2) ||
-          (rest[0] === "agent" && (rest.length === 2 || rest.length === 3))));
-    if (!valid) throw new Error(extensionCommandHelp);
-  }
-  if (command === "mcp") {
-    const [action, ...rest] = positionals;
-    if (
-      !((action === "show" || action === "forget") && rest.length === 0) &&
-      !(action === "use" && rest.length === 1)
-    )
-      throw new Error("Usage: fungi mcp show | use <url> | forget");
-  }
-  if (command === "sessions") {
-    const [action, target, ...rest] = positionals;
-    if (
-      rest.length > 0 ||
-      (action !== "list" &&
-        action !== "resume" &&
-        action !== "show" &&
-        action !== "status" &&
-        action !== "watch") ||
-      (action === "list" && (target !== undefined || last)) ||
-      (action === "resume" &&
-        ((target === undefined && !last) || (target !== undefined && last))) ||
-      ((action === "show" || action === "watch") &&
-        ((target === undefined && !last) || (target !== undefined && last))) ||
-      (action === "status" && target !== undefined && last)
-    )
-      throw new Error(
-        "Usage: fungi sessions list | resume <number|session-id|prefix>|--last | show|watch <id>|--last | status [id|--last]",
-      );
-    if (
-      action === "resume" &&
-      target !== undefined &&
-      /^[0-9]+$/u.test(target) &&
-      (!/^[1-9][0-9]*$/u.test(target) || !Number.isSafeInteger(Number(target)))
-    )
-      throw new Error(
-        "Session number must be a positive integer from fungi sessions list",
-      );
-  }
-  if (
-    (command === "login" || command === "status" || command === "logout") &&
-    positionals.length > 0
-  )
-    throw new Error(`fungi ${command} does not accept positional arguments`);
+  validateFungiArguments(recognized, positionals, fungiArgumentRules);
+  if (recognized === "sessions")
+    validateFungiSessionArguments(positionals, last);
 }
 
 function validateFungiAuthOptions(
@@ -293,6 +375,7 @@ function validateFungiAuthOptions(
     cd?: string | undefined;
     connect?: string | undefined;
     db?: string | undefined;
+    agent?: string | undefined;
     last?: boolean | undefined;
     listen?: string | undefined;
     model?: string | undefined;
@@ -315,6 +398,7 @@ function validateFungiAuthOptions(
     ["--cd", values.cd],
     ["--connect", values.connect],
     ["--db", values.db],
+    ["--agent", values.agent],
     ["--last", values.last],
     ["--listen", values.listen],
     ["--model", values.model],
@@ -344,6 +428,7 @@ function validateFungiConnectedMode(
     cd: string | undefined;
     connect: string | undefined;
     db: string | undefined;
+    agent: string | undefined;
     listen: string | undefined;
     model: string | undefined;
     provider: string | undefined;
@@ -356,6 +441,7 @@ function validateFungiConnectedMode(
   const localOptionNames = new Set([
     "cd",
     "db",
+    "agent",
     "provider",
     "model",
     "reasoning",
@@ -402,7 +488,22 @@ export async function runFungiCli(
       options?: TuiAuthCall,
     ) => Promise<void>;
   } = {},
+  home = homedir(),
 ): Promise<void> {
+  const credentialPath = resolveDefaultCredentialPath(home);
+  const createServiceManager =
+    overrides.createServiceManager ??
+    (() => createPrivateLocalServiceManager({ home }));
+  const readFungiStatus =
+    overrides.readFungiStatus ??
+    (() => readFungiAccountStatus({ credentialPath }));
+  const signOutFungi =
+    overrides.signOutFungi ??
+    ((endpoint?: string) => signOutFungiAccount(endpoint, { credentialPath }));
+  const signInFungi: NonNullable<typeof overrides.signInFungi> =
+    overrides.signInFungi ??
+    ((endpoint, options) =>
+      signInFungiAccount(endpoint, { ...options, credentialPath }));
   const arguments_ = parseArgs({
     args: argv,
     allowPositionals: true,
@@ -410,15 +511,23 @@ export async function runFungiCli(
     options: {
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "V" },
+      // Hidden: installed-launcher identity for Local service replacement.
+      "internal-build-id": { type: "boolean" },
       db: { type: "string" },
+      "require-sandbox": { type: "boolean" },
+      "no-require-sandbox": { type: "boolean" },
+      agent: { type: "string" },
       extension: { type: "string", multiple: true },
       "fungi-mcp": { type: "string" },
       "host-label": { type: "string" },
       hub: { type: "string" },
       team: { type: "string" },
       yes: { type: "boolean" },
+      skills: { type: "boolean" },
+      "no-skills": { type: "boolean" },
       model: { type: "string", short: "m" },
       provider: { type: "string" },
+      "from-file": { type: "string" },
       "auth-type": { type: "string" },
       reasoning: { type: "string" },
       cd: { type: "string", short: "C" },
@@ -428,6 +537,7 @@ export async function runFungiCli(
       workers: { type: "string" },
       method: { type: "string" },
       errors: { type: "boolean" },
+      archived: { type: "boolean" },
       json: { type: "boolean" },
       // Hidden developer option: build fungi from a Botanical checkout.
       "from-source": { type: "string" },
@@ -442,7 +552,7 @@ export async function runFungiCli(
     extensions: readonly string[] | undefined,
   ) => {
     const parts = await projectExtensionParts(
-      overrides.extensions ?? localExtensions(),
+      overrides.extensions ?? localExtensions({ home }),
       invocationRoot,
       (error) => {
         process.stderr.write(`Extension: ${error.message}\n`);
@@ -457,10 +567,34 @@ export async function runFungiCli(
     stdout.write(`fungi ${fungiVersion}\n`);
     return;
   }
+  if (arguments_.values["internal-build-id"]) {
+    stdout.write(`${JSON.stringify(privateLocalServiceVersion())}\n`);
+    return;
+  }
   if (arguments_.values.help) {
     stdout.write(helpFor(command));
     return;
   }
+  if (
+    arguments_.values["require-sandbox"] &&
+    arguments_.values["no-require-sandbox"]
+  )
+    throw new Error(
+      "Choose only one of --require-sandbox and --no-require-sandbox",
+    );
+  const requireSandbox = arguments_.values["require-sandbox"]
+    ? true
+    : arguments_.values["no-require-sandbox"]
+      ? false
+      : undefined;
+  if (
+    requireSandbox !== undefined &&
+    command !== undefined &&
+    !["new", "resume", "run"].includes(command)
+  )
+    throw new Error(
+      "--[no-]require-sandbox is only valid with fungi, new, resume or run",
+    );
   if (command === "git-credential") {
     const [action] = positionals;
     if (
@@ -486,7 +620,65 @@ export async function runFungiCli(
   }
   if (arguments_.values.team !== undefined)
     throw new Error("--team is only valid with git-credential");
+  if (command === "account" && positionals[0] === "prepare-credential") {
+    if (
+      positionals.length !== 1 ||
+      arguments_.values.provider === undefined ||
+      Object.keys(arguments_.values).some((name) => name !== "provider")
+    )
+      throw new Error(
+        "Usage: fungi account prepare-credential --provider anthropic|openai",
+      );
+    await prepareSubscriptionIdentity(arguments_.values.provider, {
+      credentialPath,
+    });
+    stdout.write('{"ok":true}\n');
+    return;
+  }
+  if (command === "account" && positionals[0] === "use-credential") {
+    if (
+      positionals.length !== 1 ||
+      arguments_.values.provider === undefined ||
+      arguments_.values["from-file"] !== "-" ||
+      Object.keys(arguments_.values).some(
+        (name) => name !== "provider" && name !== "from-file",
+      )
+    )
+      throw new Error(
+        "Usage: fungi account use-credential --provider anthropic|openai --from-file -",
+      );
+    try {
+      await activateSubscriptionCredential(
+        arguments_.values.provider,
+        gitCredentialBytes(io.stdin ?? process.stdin),
+        { credentialPath },
+      );
+    } catch (error) {
+      if (error instanceof CredentialActivationError)
+        stdout.write(
+          `${JSON.stringify({ ok: false, error: { category: error.category } })}\n`,
+        );
+      throw error;
+    }
+    stdout.write('{"ok":true}\n');
+    return;
+  }
+  if (
+    arguments_.values["from-file"] !== undefined &&
+    !(command === "mcp" && positionals[0] === "use")
+  )
+    throw new Error(
+      "--from-file is only valid with account use-credential or mcp use",
+    );
   validateFungiCommand(command, positionals, arguments_.values.last);
+  if (
+    command !== "extension" &&
+    (arguments_.values.skills !== undefined ||
+      arguments_.values["no-skills"] !== undefined)
+  )
+    throw new Error(
+      "--skills and --no-skills are only valid with fungi extension add",
+    );
   if (command === "help") {
     stdout.write(helpFor(positionals[0]));
     return;
@@ -509,6 +701,7 @@ export async function runFungiCli(
         argv.filter((_, index) => !projectArguments.has(index)),
         io,
         overrides,
+        home,
       );
       return;
     }
@@ -525,6 +718,7 @@ export async function runFungiCli(
       (await import("@fungi.computer/truffle/acp-stdio"))
         .runPrivateLocalAcpStdio;
     await runAcp({
+      manager: createServiceManager(),
       invocationRoot: resolve(
         io.cwd ?? process.cwd(),
         arguments_.values.cd ?? ".",
@@ -571,6 +765,7 @@ export async function runFungiCli(
       await signInArguments(door, linearCli),
       { ...io, quiet: true },
       overrides,
+      home,
     );
     return;
   }
@@ -613,10 +808,7 @@ export async function runFungiCli(
     )
       throw new Error("Fungi models are paused. Try again later.");
     const target = parseFungiMcpEndpoint(
-      hub ??
-        (await (overrides.readFungiStatus ?? readFungiAccountStatus)())
-          ?.issuer ??
-        "https://fungi.computer",
+      hub ?? (await readFungiStatus())?.issuer ?? "https://fungi.computer",
     );
     if (target.pathname !== "/")
       throw new Error("--hub must be a Fungi origin without a path");
@@ -637,7 +829,8 @@ export async function runFungiCli(
     throw new Error(
       "--fungi-mcp is only valid for a local Session, fungi login, fungi logout or fungi computer or fungi computers",
     );
-  let fungiMcp = endpoint === undefined ? undefined : { endpoint };
+  let fungiMcp: PrivateFungiMcpSelection | undefined =
+    endpoint === undefined ? undefined : { endpoint };
   if (command === "doctor") {
     if (positionals.length > 0)
       throw new Error("fungi doctor does not accept positional arguments");
@@ -645,9 +838,10 @@ export async function runFungiCli(
       resolve(io.cwd ?? process.cwd(), arguments_.values.cd ?? "."),
     );
     const passed = await runDoctor({
-      models: io.authModels ?? createPrivateModels(),
-      fungiAccount: overrides.readFungiStatus ?? readFungiAccountStatus,
-      endpoint: selected,
+      localServiceStatus: () => createServiceManager().status(),
+      models: io.authModels ?? createPrivateModels(credentialPath),
+      fungiAccount: readFungiStatus,
+      endpoint: selected?.endpoint,
       version: fungiVersion,
       interactive: interactiveTerminal(),
       write: (message) => stdout.write(message),
@@ -691,14 +885,24 @@ export async function runFungiCli(
     });
     return;
   }
+  if (command === "reload") {
+    if (
+      positionals.length > 0 ||
+      Object.keys(arguments_.values).some((key) => key !== "cd")
+    )
+      throw new Error("fungi reload accepts only -C <directory>");
+    const manager = createServiceManager();
+    linearCli.info(
+      await manager.reload(
+        resolve(io.cwd ?? process.cwd(), arguments_.values.cd ?? "."),
+      ),
+    );
+    return;
+  }
   if (command === "stop") {
     if (positionals.length > 0 || Object.keys(arguments_.values).length > 0)
       throw new Error("fungi stop does not accept arguments or options");
-    const manager =
-      overrides.createServiceManager?.() ??
-      (
-        await import("@fungi.computer/truffle/service")
-      ).createPrivateLocalServiceManager();
+    const manager = createServiceManager();
     const stopped = await manager.stop();
     linearCli.info(
       stopped.kind === "not-running"
@@ -707,7 +911,9 @@ export async function runFungiCli(
           : "Local service wasn't running. Saved Sessions preserved."
         : stopped.kind === "replaced"
           ? "Local service was replaced; left the new service running."
-          : "Local service stopped. Saved Sessions preserved.",
+          : stopped.kind === "killed"
+            ? "Local service did not stop within 5 seconds, so it was killed. Saved Sessions preserved; interrupted turns resume when the service next starts."
+            : "Local service stopped. Saved Sessions preserved.",
     );
     return;
   }
@@ -722,19 +928,34 @@ export async function runFungiCli(
             action:
               action === "teams" || action === "balance" ? action : "status",
           },
-      { json: arguments_.values.json === true, stdout },
+      { json: arguments_.values.json === true, stdout, credentialPath },
     );
     return;
   }
   if (command === "mcp") {
     const invalid = Object.keys(arguments_.values).filter(
-      (key) => key !== "cd",
+      (key) => key !== "cd" && key !== "from-file",
     );
     if (invalid.length > 0)
-      throw new Error("fungi mcp accepts only -C or --cd");
+      throw new Error("fungi mcp accepts only -C or --cd and --from-file -");
     const root = resolve(io.cwd ?? process.cwd(), arguments_.values.cd ?? ".");
     if (positionals[0] === "use" && positionals[1] !== undefined) {
-      const selected = await saveProjectMcpConnection(root, positionals[1]);
+      const fromFile = arguments_.values["from-file"];
+      if (fromFile !== undefined && fromFile !== "-")
+        throw new Error(
+          "Oyster keys must be supplied on stdin with --from-file -",
+        );
+      if (fromFile === "-")
+        await saveOysterMcpKey(
+          parseFungiMcpEndpoint(positionals[1]),
+          gitCredentialBytes(io.stdin ?? process.stdin),
+          { credentialPath },
+        );
+      const selected = await saveProjectMcpConnection(
+        root,
+        positionals[1],
+        fromFile === "-" ? "oyster-key" : undefined,
+      );
       stdout.write(
         `Team MCP for ${root}: ${selected}\nRun fungi stop before switching a running Local service.\n`,
       );
@@ -748,9 +969,34 @@ export async function runFungiCli(
       stdout.write(
         selected === undefined
           ? `No Team MCP selected for ${root}.\n`
-          : `Team MCP for ${root}: ${selected}\n`,
+          : `Team MCP for ${root}: ${selected.endpoint}\n`,
       );
     }
+    return;
+  }
+  if (arguments_.values.archived === true && command !== "agents")
+    throw new Error("--archived is only valid with fungi agents list");
+  if (command === "agents") {
+    const [action, agentId] = positionals;
+    const invalid = Object.keys(arguments_.values).filter(
+      (key) => key !== "cd" && !(key === "archived" && action === "list"),
+    );
+    if (
+      invalid.length > 0 ||
+      (action !== "list" && action !== "archive" && action !== "unarchive")
+    )
+      throw new Error(agentsCommandHelp);
+    await runAgentsCommand({
+      action,
+      agentId,
+      archived: arguments_.values.archived === true,
+      invocationRoot: resolve(
+        io.cwd ?? process.cwd(),
+        arguments_.values.cd ?? ".",
+      ),
+      manager: createServiceManager(),
+      stdout,
+    });
     return;
   }
   if (command === "sessions") {
@@ -773,8 +1019,7 @@ export async function runFungiCli(
       io.cwd ?? process.cwd(),
       arguments_.values.cd ?? ".",
     );
-    const manager =
-      overrides.createServiceManager?.() ?? createPrivateLocalServiceManager();
+    const manager = createServiceManager();
     const discovery = await manager.discover(invocationRoot);
     if (
       discovery.problems.length > 0 &&
@@ -896,15 +1141,15 @@ export async function runFungiCli(
           : `No Session matching ${selector ?? "--last"}; run fungi sessions list -C ${invocationRoot}`,
       );
     const { runTuiCli } = await import("./cli-runtime.js");
-    const savedEndpoint = await readProjectMcpConnection(invocationRoot);
+    const savedConnection = await readProjectMcpConnection(invocationRoot);
     await runTuiCli(
       {
         invocationRoot,
         sessionChoice: selected,
         clients: sessionClients,
+        questionExtensionId: questionClient.id,
         ...(await projectExtensions(invocationRoot, undefined)),
-        fungiMcp:
-          savedEndpoint === undefined ? undefined : { endpoint: savedEndpoint },
+        fungiMcp: savedConnection,
       },
       overrides,
     );
@@ -915,9 +1160,11 @@ export async function runFungiCli(
   if (command === "computers") {
     const selected =
       endpoint ??
-      (await readProjectMcpConnection(
-        resolve(io.cwd ?? process.cwd(), arguments_.values.cd ?? "."),
-      ));
+      (
+        await readProjectMcpConnection(
+          resolve(io.cwd ?? process.cwd(), arguments_.values.cd ?? "."),
+        )
+      )?.endpoint;
     if (selected === undefined)
       throw new Error(
         "fungi computers requires --fungi-mcp <url> or a saved project endpoint (fungi mcp use <url>)",
@@ -930,18 +1177,33 @@ export async function runFungiCli(
         signals: io.signals,
       },
       {
-        list: listPrivateTeamComputers,
-        start: startPrivateTeamComputer,
+        list: (endpoint, options) =>
+          listPrivateTeamComputers(endpoint, { ...options, credentialPath }),
+        start: (endpoint, name, options) =>
+          startPrivateTeamComputer(endpoint, name, {
+            ...options,
+            credentialPath,
+          }),
         ...overrides.computersOwners,
       },
     );
     return;
   }
   if (command === "extension") {
-    for (const name of Object.keys(arguments_.values))
-      if (name !== "cd")
-        throw new Error(`--${name} is not valid with fungi extension`);
     const [action, ...rest] = positionals;
+    for (const name of Object.keys(arguments_.values))
+      if (
+        name !== "cd" &&
+        !(action === "add" && (name === "skills" || name === "no-skills"))
+      )
+        throw new Error(
+          `--${name} is not valid with fungi extension ${action ?? ""}`.trim(),
+        );
+    if (
+      arguments_.values.skills === true &&
+      arguments_.values["no-skills"] === true
+    )
+      throw new Error("Choose one of --skills and --no-skills");
     if (
       action !== "add" &&
       action !== "list" &&
@@ -956,8 +1218,17 @@ export async function runFungiCli(
         arguments: rest,
         cwd: resolve(io.cwd ?? process.cwd(), arguments_.values.cd ?? "."),
         stdout,
+        skills:
+          arguments_.values.skills === true
+            ? true
+            : arguments_.values["no-skills"] === true
+              ? false
+              : undefined,
+        confirm: interactiveTerminal()
+          ? (question) => confirm(io, question, true)
+          : undefined,
       },
-      overrides.extensions ?? localExtensions(),
+      overrides.extensions ?? localExtensions({ home }),
     );
     return;
   }
@@ -983,10 +1254,23 @@ export async function runFungiCli(
           : undefined,
       },
       {
-        attach: attachPrivateLocalComputer,
-        detach: detachPrivateLocalComputer,
-        list: listPrivateLocalComputers,
-        run: runPrivateLocalComputer,
+        attach: (endpoint, input, options) =>
+          attachPrivateLocalComputer(endpoint, input, {
+            ...options,
+            credentialPath,
+          }),
+        detach: (endpoint, computer, options) =>
+          detachPrivateLocalComputer(endpoint, computer, {
+            ...options,
+            credentialPath,
+          }),
+        list: (options) =>
+          listPrivateLocalComputers({ ...options, credentialPath }),
+        run: (endpoint, computer, options) =>
+          runPrivateLocalComputer(endpoint, computer, {
+            ...options,
+            credentialPath,
+          }),
         ...overrides.computerOwners,
       },
     );
@@ -1006,9 +1290,7 @@ export async function runFungiCli(
           `--fungi-mcp ${command} cannot be combined with provider login options`,
         );
       if (command === "logout") {
-        const result = await (overrides.signOutFungi ?? signOutFungiAccount)(
-          signInEndpoint,
-        );
+        const result = await signOutFungi(signInEndpoint);
         stdout.write(`${result.message}\n`);
         return;
       }
@@ -1041,17 +1323,14 @@ export async function runFungiCli(
               description: team.handle,
             })),
           });
-      await (overrides.signInFungi ?? signInFungiAccount)(
-        signInEndpoint,
-        loginOptions,
-      );
+      await signInFungi(signInEndpoint, loginOptions);
       stdout.write(
         "Fungi login complete. Models and Team MCP use this account.\n",
       );
       return;
     }
     if (command === "logout" && arguments_.values.provider === "fungi") {
-      const result = await (overrides.signOutFungi ?? signOutFungiAccount)();
+      const result = await signOutFungi();
       stdout.write(`${result.message}\n`);
       return;
     }
@@ -1067,7 +1346,7 @@ export async function runFungiCli(
         if (method !== undefined) args.push("--method", method);
         await runLocalAuthCli(args, authOptions);
       });
-    const authCall = authOptionsFromIo(io);
+    const authCall = authOptionsFromIo(io, credentialPath);
     if (command === "login")
       authCall.interaction = linearAuthInteraction(
         interactiveTerminal(),
@@ -1086,7 +1365,7 @@ export async function runFungiCli(
     ) {
       const { chooseLoginProvider } =
         await import("./login-provider-picker.js");
-      const models = authCall.models ?? createPrivateModels();
+      const models = authCall.models ?? createPrivateModels(credentialPath);
       authCall.models = models;
       authCall.providerId = await chooseLoginProvider(
         linearCli,
@@ -1101,9 +1380,7 @@ export async function runFungiCli(
       command === "status" &&
       (authCall.providerId === undefined || authCall.providerId === "fungi")
     ) {
-      const login = await (
-        overrides.readFungiStatus ?? readFungiAccountStatus
-      )();
+      const login = await readFungiStatus();
       stdout.write(
         login === undefined
           ? "Fungi account: not signed in. Run fungi login.\n"
@@ -1125,6 +1402,7 @@ export async function runFungiCli(
       arguments_.values.connect !== undefined ||
       arguments_.values.last ||
       arguments_.values.db !== undefined ||
+      arguments_.values.agent !== undefined ||
       arguments_.values.provider !== undefined ||
       arguments_.values.model !== undefined ||
       arguments_.values.reasoning !== undefined ||
@@ -1138,6 +1416,7 @@ export async function runFungiCli(
       arguments_.values.listen,
       {
         cwd: io.cwd ?? process.cwd(),
+        home,
         stdout: io.stdout,
         signals: io.signals,
       },
@@ -1150,6 +1429,7 @@ export async function runFungiCli(
     cd: arguments_.values.cd,
     connect: arguments_.values.connect,
     db: arguments_.values.db,
+    agent: arguments_.values.agent,
     listen: arguments_.values.listen,
     provider: arguments_.values.provider,
     model: arguments_.values.model,
@@ -1159,19 +1439,17 @@ export async function runFungiCli(
     io.cwd ?? process.cwd(),
     arguments_.values.cd ?? ".",
   );
-  if (fungiMcp === undefined) {
-    const savedEndpoint = await readProjectMcpConnection(invocationRoot);
-    if (savedEndpoint !== undefined) fungiMcp = { endpoint: savedEndpoint };
-  }
+  fungiMcp ??= await readProjectMcpConnection(invocationRoot);
   const common = {
     fungiMcp,
     invocationRoot,
     databasePath: arguments_.values.db,
+    requireSandbox,
     providerId: arguments_.values.provider,
     modelId: arguments_.values.model,
     reasoning,
   };
-  const models = () => io.authModels ?? createPrivateModels();
+  const models = () => io.authModels ?? createPrivateModels(credentialPath);
   if (
     command === undefined &&
     arguments_.values.connect === undefined &&
@@ -1189,6 +1467,7 @@ export async function runFungiCli(
           await signInArguments(door, cli),
           { ...io, quiet: true },
           overrides,
+          home,
         ),
     });
     if (!start) return;
@@ -1205,13 +1484,14 @@ export async function runFungiCli(
       await runOneShotCli(
         {
           ...common,
+          agentId: arguments_.values.agent,
           prompt: positionals[0],
           stdin: io.stdin,
           stdout: io.stdout,
           signals: io.signals,
           connect: arguments_.values.connect,
         },
-        overrides,
+        { ...overrides, createServiceManager },
       );
     } catch (cause) {
       if (await modelLoginMissing(models(), arguments_.values.provider))
@@ -1220,9 +1500,7 @@ export async function runFungiCli(
     }
   } else {
     if (command === "resume" && arguments_.values.connect === undefined) {
-      const manager =
-        overrides.createServiceManager?.() ??
-        createPrivateLocalServiceManager();
+      const manager = createServiceManager();
       const { sessions } = await manager.discover(invocationRoot);
       if (sessions.length === 0) {
         stdout.write(
@@ -1240,6 +1518,7 @@ export async function runFungiCli(
           arguments_.values.extension,
         )),
         clients: sessionClients,
+        questionExtensionId: questionClient.id,
         resume: command === "resume",
         entry:
           command === "new"
@@ -1253,7 +1532,8 @@ export async function runFungiCli(
         connect: arguments_.values.connect,
         listen: arguments_.values.listen,
       },
-      overrides,
+      { ...overrides, createServiceManager },
+      home,
     );
   }
   if (endpoint !== undefined)
@@ -1273,7 +1553,11 @@ async function signInArguments(
 }
 
 /** Ask one yes/no question on the command's own terminal streams. */
-async function confirm(io: FungiCliIo, question: string): Promise<boolean> {
+async function confirm(
+  io: FungiCliIo,
+  question: string,
+  initialValue = false,
+): Promise<boolean> {
   const cli = new Cli({
     brand: "fungi",
     interactive: true,
@@ -1285,7 +1569,7 @@ async function confirm(io: FungiCliIo, question: string): Promise<boolean> {
       },
     }),
   });
-  const answer = await cli.confirm({ message: question, initialValue: false });
+  const answer = await cli.confirm({ message: question, initialValue });
   return !isCancel(answer) && answer;
 }
 
@@ -1296,19 +1580,31 @@ function validateFungiConnectionOptions(
     cd: string | undefined;
     connect: string | undefined;
     db: string | undefined;
+    agent: string | undefined;
     listen: string | undefined;
     provider: string | undefined;
     model: string | undefined;
     reasoning: string | undefined;
   }>,
 ): void {
+  if (options.agent !== undefined) {
+    if (command !== "run")
+      throw new Error("--agent is only valid with fungi run");
+    if (options.db !== undefined)
+      throw new Error("--agent and --db cannot be combined");
+  }
   validateFungiListenerMode(command, last, options.listen);
   validateFungiConnectedMode(command, last, options);
 }
 
 if (import.meta.main) {
   try {
-    if (process.argv[2] === "--internal-service") {
+    if (process.argv[2] === "--internal-service-restart") {
+      const { createPrivateLocalServiceManager } =
+        await import("@fungi.computer/truffle/service");
+      const { restartUpdatedFungiService } = await import("./update.js");
+      await restartUpdatedFungiService(createPrivateLocalServiceManager());
+    } else if (process.argv[2] === "--internal-service") {
       const { runPrivateLocalService } =
         await import("@fungi.computer/truffle/service-process");
       const directory = process.argv[3];

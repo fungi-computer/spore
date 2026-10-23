@@ -7,13 +7,14 @@ import { reportFailure, type PaneKit } from "../../button/index.js";
 export async function admitTerminalTermination(
   hasRunningJobs: () => Promise<boolean>,
   confirm: () => Promise<boolean>,
-  notify: PaneKit["notify"],
+  toast: PaneKit["toast"],
 ): Promise<boolean> {
   try {
     return !(await hasRunningJobs()) || (await confirm());
   } catch (cause) {
-    notify({
-      tone: "error",
+    toast({
+      variant: "error",
+      duration: "until-dismissed",
       message:
         "Could not check shell jobs. Shells are still running; try again.",
     });

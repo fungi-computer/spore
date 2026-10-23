@@ -6,6 +6,9 @@ import { testRender } from "@opentui/react/test-utils";
 import { createWhistle } from "@fungi.computer/whistle";
 import { TuiFrame } from "@fungi.computer/spore/frame";
 import { act, createElement } from "react";
+import { RGBA } from "@opentui/core";
+import { terminalPalette } from "@fungi.computer/stipe";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 
 import {
   createDesignTuiFixture,
@@ -40,10 +43,23 @@ try {
   });
   const frame = setup.captureCharFrame();
   assert.match(frame, /5 calls/u);
-  assert.match(frame, /✓ Read apps\/tui\/src\/frame\.tsx/u);
-  assert.match(frame, /◌ Running pnpm --dir apps\/tui run typecheck/u);
+  const palette = terminalPalette("mocha");
+  for (const [pattern, color] of [
+    [/^ +Read apps\/tui\/src\/frame\.tsx +42ms ● ▸ *$/u, palette.success],
+    [/^ +Running pnpm --dir apps\/tui run typecheck +● ▸ *$/u, palette.info],
+  ]) {
+    const row = setup
+      .captureSpans()
+      .lines.find((line) =>
+        pattern.test(line.spans.map((span) => span.text).join("")),
+      );
+    assert.ok(row, `Missing completed/active tool row: ${pattern}`);
+    const dot = row.spans.find((span) => span.text.includes("●"));
+    assert.ok(dot, "Each tool row keeps its trailing status dot.");
+    assert.deepEqual(dot.fg.toInts(), RGBA.fromHex(color).toInts());
+  }
 } finally {
-  await act(async () => setup.renderer.destroy());
+  await destroyTestRenderer(setup);
   client.clear();
   commands.close();
 }

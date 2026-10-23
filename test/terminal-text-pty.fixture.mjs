@@ -47,10 +47,13 @@ const fixture = createDesignTuiFixture({
         },
       },
     ],
+    toolOutput: [],
     progress: null,
   },
 });
 const signals = new EventEmitter();
+const databasePath = join(process.env.HOME, "fixture.sqlite");
+let discoveries = 0;
 let deadline;
 try {
   await runFungiCli(
@@ -58,36 +61,86 @@ try {
     { cwd: process.env.HOME },
     {
       signals,
-      clientBuildId: undefined,
       loadThemePreference: async () => ({ theme: "mocha" }),
-      createServiceManager: () => ({
-        connect: async () => {
-          deadline = setTimeout(() => signals.emit("SIGTERM"), 1_500);
-          return {
-            agentId: "agent-fixture",
-            sessionId: "session-fixture",
-            session: {
-              ...fixture.session,
-              modelPreference: {
-                read: async () => null,
-                set: async () => undefined,
+      createServiceManager: () => {
+        const manager = {
+          // Match Local's discovery projection: saved identities resume through
+          // this manager's connect door, rather than opening another Session.
+          discover: async (invocationRoot, request) => {
+            request?.signal?.throwIfAborted();
+            discoveries += 1;
+            return {
+              agents: [
+                {
+                  agentId: "agent-fixture",
+                  databasePath,
+                  sessionCount: 1,
+                },
+              ],
+              sessions: [
+                {
+                  databasePath,
+                  sessionId: "session-fixture",
+                  title: "Terminal sanitizer fixture",
+                  createdAt: 1,
+                  updatedAt: 1,
+                  resume: (options) =>
+                    manager.connect(
+                      {
+                        invocationRoot,
+                        databasePath,
+                        sessionId: "session-fixture",
+                        fungiMcp: options?.fungiMcp,
+                      },
+                      options,
+                    ),
+                },
+              ],
+              problems: [],
+            };
+          },
+          connect: async () => {
+            deadline = setTimeout(() => signals.emit("SIGTERM"), 1_500);
+            return {
+              agentId: "agent-fixture",
+              sessionId: "session-fixture",
+              session: {
+                ...fixture.session,
+                modelPreference: {
+                  read: async () => null,
+                  set: async () => undefined,
+                },
               },
-            },
-            effectiveModel: async () => ({
-              providerId: "fixture",
-              modelId: "fixture",
-            }),
-            databasePath: join(process.env.HOME, "fixture.sqlite"),
-            close: () => Promise.resolve(),
-          };
-        },
-        models: async () => [],
-      }),
+              effectiveModel: async () => ({
+                agentName: "Shiitake",
+                providerId: "fixture",
+                providerName: "Fixture",
+                modelId: "fixture",
+                modelName: "Fixture",
+                credential: { kind: "api_key", source: "Fixture key" },
+                label: "Shiitake · Fixture · Fixture key",
+              }),
+              sandboxStatus: async () => ({
+                state: "available",
+                requireSandbox: false,
+              }),
+              databasePath,
+              close: () => Promise.resolve(),
+            };
+          },
+          models: async () => [],
+        };
+        return manager;
+      },
     },
   );
 } finally {
   clearTimeout(deadline);
 }
+assert.ok(
+  discoveries > 0,
+  "resume discovered the saved fixture Session through the current manager contract",
+);
 assert.ok(
   fixture.watchCalls() > 0,
   "the real conversation observed its fixture Session",

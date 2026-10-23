@@ -4,7 +4,7 @@ import { test } from "bun:test";
 import { createWhistle } from "@fungi.computer/whistle";
 import { contributeTerminalCommands } from "../src/panes/conversation/terminal-commands.js";
 
-test("/reconnect reports connected, recovered, and failed outcomes", async () => {
+test("/reconnect reports connected and failed outcomes and stays quiet on recovery", async () => {
   const commands = createWhistle();
   const notices = [];
   const outcomes = [
@@ -32,15 +32,13 @@ test("/reconnect reports connected, recovered, and failed outcomes", async () =>
         origin: "slash",
         interaction,
       });
-      assert.equal(result.status, "handled");
+      assert.equal(result.status, index === 2 ? "failed" : "handled");
+      if (index === 2)
+        assert.match(result.error.message, /Reconnect failed: socket reset/u);
     }
     assert.deepEqual(
       notices.map((notice) => notice.message),
-      [
-        "Session history is already connected.",
-        "Session history reconnected.",
-        "Reconnect failed: socket reset. Check the connection, then try /reconnect again.",
-      ],
+      ["Session history is already connected."],
     );
   } finally {
     lease.dispose();

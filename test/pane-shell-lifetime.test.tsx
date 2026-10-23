@@ -64,8 +64,10 @@ for (const [width, height] of [
     const services = {
       describe: () => ({ themeName: "mocha" as const }),
       acquire: (target: { agentId: string }) => {
-        if (target.agentId === "alpha") return Promise.resolve(sessions.alpha);
-        if (target.agentId === "beta") return Promise.resolve(sessions.beta);
+        if (target.agentId === alpha.identity.agentId)
+          return Promise.resolve(sessions.alpha);
+        if (target.agentId === beta.identity.agentId)
+          return Promise.resolve(sessions.beta);
         throw new Error("Session fixture unavailable");
       },
     };
@@ -91,9 +93,8 @@ for (const [width, height] of [
       name: Parameters<typeof setup.mockInput.pressKey>[0],
       options?: Parameters<typeof setup.mockInput.pressKey>[1],
     ) => {
-      await act(async () => {
+      await pressDecodedKey(setup, () => {
         setup.mockInput.pressKey(name, options);
-        await setup.renderOnce();
       });
     };
     try {
@@ -106,8 +107,7 @@ for (const [width, height] of [
       await act(async () => {
         await panes.open({
           kind: "conversation",
-          agentId: "alpha",
-          sessionId: "one",
+          ...alpha.identity,
         });
       });
       await frame((text) => text.includes("Ask anything"));
@@ -118,8 +118,7 @@ for (const [width, height] of [
       await act(async () => {
         await panes.open({
           kind: "conversation",
-          agentId: "beta",
-          sessionId: "two",
+          ...beta.identity,
         });
       });
       await act(async () => {
@@ -152,7 +151,6 @@ for (const [width, height] of [
       ).toBe(true);
       // The real production keymap and shared leader drive the registry.
       await key("k", { ctrl: true });
-      await frame((text) => text.includes("All commands"));
       await key("z");
       await frame(
         (text) => text.includes("beta draft") && !text.includes("alpha draft"),
@@ -176,12 +174,11 @@ for (const [width, height] of [
           text.includes("alpha draft kept") && text.includes("beta draft"),
       );
       act(() => {
-        panes.split("y");
+        panes.setLayout("main-top");
         panes.resizeBy(2);
       });
       expect(panes.read()).toHaveLength(2);
       await key("k", { ctrl: true });
-      await frame((text) => text.includes("All commands"));
       await key("x");
       await frame(
         (text) =>
@@ -209,14 +206,15 @@ for (const [width, height] of [
       await act(async () => {
         await panes.open({
           kind: "conversation",
-          agentId: "alpha",
-          sessionId: "one",
+          ...alpha.identity,
         });
       });
       await frame(
         (text) =>
-          text.includes("Ask anything") && !text.includes("No panes open"),
+          text.includes("alpha draft kept") && !text.includes("No panes open"),
       );
+      // Reopening this same logical Session must hydrate its unsent draft,
+      // rather than returning the empty composer's placeholder.
       expect(panes.read()).toHaveLength(1);
     } finally {
       await act(async () => {
@@ -340,7 +338,7 @@ test("real pane keymap cancels only the focused conversation", async () => {
 test("the native shell omits pane chrome and bounds visible notices and metadata", async () => {
   const commands = createWhistle();
   const { createAppSurfaceCommandHost } =
-    await import("@fungi.computer/oyster/shell/command-host");
+    await import("@fungi.computer/nacre/command-host");
   const host = createAppSurfaceCommandHost(commands);
   const kits = new Map<string, import("../src/button/index.js").PaneKit>();
   let registry: ReturnType<typeof createPaneRegistry> | undefined;
@@ -390,7 +388,7 @@ test("the native shell omits pane chrome and bounds visible notices and metadata
       await panes.open({ kind: "display-fixture", id: "second" });
       kits
         .get("second")
-        ?.notify({ tone: "info", message: "Notice\x1b]0;unsafe\x07" });
+        ?.toast({ variant: "info", message: "Notice\x1b]0;unsafe\x07" });
     });
     await waitForFrame(setup, () =>
       setup.captureCharFrame().includes("Notice"),

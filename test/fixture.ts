@@ -1,4 +1,7 @@
-import type { ParakeetSession } from "@fungi.computer/parakeet/headless";
+import type {
+  ParakeetSession,
+  ParakeetDraftIdentity,
+} from "@fungi.computer/parakeet/headless";
 import type {
   AbortCommand,
   Accepted,
@@ -64,6 +67,8 @@ const decodeLoopCommand = Schema.decodeUnknownSync(
 const encodeCatalog = Schema.encodeUnknownSync(Schema.Json);
 
 const encodeGoal = Schema.encodeUnknownSync(Goal);
+/** When fixture goals start: 14:02 UTC, shown in the viewer's local time. */
+export const fixtureGoalStartedAt = Date.parse("2026-10-18T14:02:00.000Z");
 const encodeLoop = Schema.encodeUnknownSync(Loop);
 const decodeGoalSet = Schema.decodeUnknownSync(goalContract.commands.set.input);
 const decodeLoopStart = Schema.decodeUnknownSync(
@@ -118,6 +123,7 @@ function frameQueue(): FrameQueue {
 }
 
 export type TuiFixture = Readonly<{
+  identity: ParakeetDraftIdentity;
   /** Active-run abort requests received by the disposable Session. */
   abortCalls: () => number;
   /** Roster the test garden extension mid-Session; its catalog arrives in a frame. */
@@ -134,6 +140,7 @@ export type TuiFixture = Readonly<{
 }>;
 
 export type TuiFixtureOptions = Readonly<{
+  beforePrompt?: (() => Promise<void>) | undefined;
   autoConfirm?: boolean | undefined;
   goal?: Goal | null | undefined;
   loop?: Loop | null | undefined;
@@ -144,7 +151,9 @@ export type TuiFixtureOptions = Readonly<{
 }>;
 
 /** Build one deterministic typed Session without a transport or provider event. */
+let nextFixture = 0;
 export function createTuiFixture({
+  beforePrompt,
   autoConfirm = false,
   goal: initialGoal = null,
   loop: initialLoop = null,
@@ -152,15 +161,23 @@ export function createTuiFixture({
   messages = [],
   garden = false,
 }: TuiFixtureOptions = {}): TuiFixture {
+  const fixtureId = `${String(process.pid)}-${String(++nextFixture)}`;
+  const identity = {
+    agentId: `fixture-agent-${fixtureId}`,
+    sessionId: `fixture-session-${fixtureId}`,
+  };
   const frames = frameQueue();
+  const admittedRequests = new Set<string>();
+  const withdrawnRequests = new Set<string>();
   const snapshot: SessionSnapshot = {
     pending: { total: 0, prompts: [], hasMore: false },
     cursor: null,
     hasMore: false,
     messages,
     terminals: [],
+    toolOutput: [],
     progress: null,
-    sessionId: "tui-fixture",
+    sessionId: identity.sessionId,
     activity: idleActivity,
     extensions: {},
     attention: [],
@@ -209,7 +226,7 @@ export function createTuiFixture({
       value:
         currentGoal === null
           ? null
-          : encodeGoalProjection({ goal: currentGoal, history: emptyHistory }),
+          : encodeGoalProjection({ goal: currentGoal, ended: [], omitted: 0 }),
       catalog: encodeCatalog(goalCatalog),
     },
     [loopContract.id]: {
@@ -262,38 +279,44 @@ export function createTuiFixture({
   ): Promise<Accepted | CancelResult | ForkedSession | undefined> {
     if (input.type === "prompt") {
       promptCalls += 1;
-      latestPrompt = input;
-      if (
-        !pending.prompts.some(
-          (prompt) => prompt.commandId === `owner-${input.requestId}`,
-        )
-      ) {
-        pending = {
-          total: pending.total + 1,
-          prompts: [
-            ...pending.prompts,
-            {
-              commandId: `owner-${input.requestId}`,
-              delivery: input.delivery,
-              text: input.text,
-            },
-          ],
-          hasMore: false,
-        };
-        frames.push({
-          kind: "update",
-          delivery: "live",
-          cursor: null,
-          messages: [],
-          terminals: [],
-          activity: queuedActivity(`owner-${input.requestId}`),
-          extensions: slots(),
-          attention: snapshot.attention,
-          pending,
-        });
-      }
-      if (autoConfirm) setTimeout(confirmLatestPrompt, 120);
-      return Promise.resolve(accepted(input.requestId));
+      return (beforePrompt?.() ?? Promise.resolve()).then(() => {
+        if (withdrawnRequests.has(input.requestId))
+          throw new Error("Request was withdrawn");
+        admittedRequests.add(input.requestId);
+        latestPrompt = input;
+        if (
+          !pending.prompts.some(
+            (prompt) => prompt.commandId === `owner-${input.requestId}`,
+          )
+        ) {
+          pending = {
+            total: pending.total + 1,
+            prompts: [
+              ...pending.prompts,
+              {
+                requestId: input.requestId,
+                commandId: `owner-${input.requestId}`,
+                delivery: input.delivery,
+                text: input.text,
+              },
+            ],
+            hasMore: false,
+          };
+          frames.push({
+            kind: "update",
+            delivery: "live",
+            cursor: null,
+            messages: [],
+            terminals: [],
+            activity: queuedActivity(`owner-${input.requestId}`),
+            extensions: slots(),
+            attention: snapshot.attention,
+            pending,
+          });
+        }
+        if (autoConfirm) setTimeout(confirmLatestPrompt, 120);
+        return accepted(input.requestId);
+      });
     }
     if (input.type === "compact")
       return Promise.resolve(accepted(input.requestId));
@@ -348,6 +371,7 @@ export function createTuiFixture({
       messages: [
         {
           id: messageId,
+          requestId: prompt.requestId,
           commandId: `owner-${prompt.requestId}`,
           sequence: 1,
           value: { content: prompt.text, role: "user", timestamp: 0 },
@@ -411,13 +435,21 @@ export function createTuiFixture({
     });
   };
   const admit = (requestId: string, text: string): Accepted => {
+    if (withdrawnRequests.has(requestId))
+      throw new Error("Request was withdrawn");
+    admittedRequests.add(requestId);
     const acceptedCommand = accepted(requestId);
     latestPrompt = { requestId, type: "prompt", delivery: "followUp", text };
     pending = {
       total: pending.total + 1,
       prompts: [
         ...pending.prompts,
-        { commandId: acceptedCommand.commandId, text, delivery: "followUp" },
+        {
+          requestId,
+          commandId: acceptedCommand.commandId,
+          text,
+          delivery: "followUp",
+        },
       ],
       hasMore: false,
     };
@@ -433,14 +465,7 @@ export function createTuiFixture({
         return Promise.reject(
           new Error("Fixture supports pause, resume and clear goal actions"),
         );
-      return goalCall(request.action, {}).then(() =>
-        currentGoal === null
-          ? {
-              type: "done",
-              notice: { type: "success", message: "Goal cleared." },
-            }
-          : { type: "done" },
-      );
+      return goalCall(request.action, {}).then(() => ({ type: "done" }));
     }
     if (name === "clear") {
       currentGoal = null;
@@ -453,7 +478,8 @@ export function createTuiFixture({
         revision: acceptedCommand.commandId,
         objective: request.objective,
         state: "active",
-        stopReason: null,
+        startedAt: fixtureGoalStartedAt,
+        pauseCause: null,
       };
       return Promise.resolve({
         goal: encodeGoal(currentGoal),
@@ -467,6 +493,7 @@ export function createTuiFixture({
     currentGoal = {
       ...currentGoal,
       state: name === "pause" ? "paused" : "active",
+      pauseCause: null,
     };
     return Promise.resolve(encodeGoal(currentGoal));
   };
@@ -518,6 +545,7 @@ export function createTuiFixture({
 
   return {
     abortCalls: () => abortCalls,
+    identity,
     advertiseGarden: () => {
       gardened = true;
       observe();
@@ -528,7 +556,14 @@ export function createTuiFixture({
     promptCalls: () => promptCalls,
     pushFrame: frames.push,
     session: {
-      address: "fixture://tui/session",
+      latestPending: () => Promise.resolve(pending.prompts.at(-1) ?? null),
+      withdraw: (requestId) => {
+        if (admittedRequests.has(requestId))
+          return Promise.resolve(accepted(requestId));
+        withdrawnRequests.add(requestId);
+        return Promise.resolve({ status: "unknown" });
+      },
+      address: `fixture://tui/${fixtureId}`,
       command: commandHandler,
       extension: (extensionId) => ({
         call: (name, input) => {

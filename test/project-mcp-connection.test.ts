@@ -1,13 +1,22 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import {
+  mkdtemp,
+  rm,
+  writeFile,
+  mkdir,
+  readFile,
+  stat,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { test } from "bun:test";
 import {
   createPrivateLocalServiceManager,
   type PrivateLocalServiceConnection,
 } from "@fungi.computer/truffle/service";
 import { runFungiCli } from "../src/cli.js";
+import { createPrivateCredentialStore } from "@fungi.computer/truffle";
 import {
   forgetProjectMcpConnection,
   readProjectMcpConnection,
@@ -16,6 +25,74 @@ import {
 
 const endpoint = "http://localhost:8787/api/teams/team_test/mcp";
 
+test("CLI reads an Oyster key from stdin and saves only its authentication selection in the project", async () => {
+  const root = await mkdtemp(join(tmpdir(), "fungi-oyster-mcp-cli-"));
+  const home = join(root, "home");
+  const key = "oyk_disposable-cli-test-key";
+  let output = "";
+  try {
+    await runFungiCli(
+      ["mcp", "use", "https://oyster.test/mcp", "--from-file", "-"],
+      {
+        cwd: root,
+        stdin: Readable.from([`${key}\n`]),
+        stdout: {
+          write: (chunk: string) => {
+            output += chunk;
+            return true;
+          },
+        },
+      },
+      {},
+      home,
+    );
+    const project = await readFile(
+      join(root, ".fungi", "team-mcp.json"),
+      "utf8",
+    );
+    assert.deepEqual(JSON.parse(project), {
+      endpoint: "https://oyster.test/mcp",
+      authentication: "oyster-key",
+    });
+    assert.equal(project.includes(key), false);
+    assert.equal(output.includes(key), false);
+    const credentialPath = join(home, ".config", "fungi", "credentials.json");
+    assert.deepEqual(
+      await createPrivateCredentialStore(credentialPath).read(
+        "oyster-mcp:https://oyster.test",
+      ),
+      { type: "api_key", key },
+    );
+    assert.equal((await stat(credentialPath)).mode & 0o777, 0o600);
+    const stop = new Error("Oyster selection observed");
+    let connected = false;
+    await assert.rejects(
+      runFungiCli(
+        ["run", "check"],
+        { cwd: root, stdout: { write: () => true } },
+        {
+          createServiceManager: () => ({
+            ...createPrivateLocalServiceManager(),
+            connect: (selection) => {
+              assert.deepEqual(selection.fungiMcp, {
+                endpoint: "https://oyster.test/mcp",
+                authentication: "oyster-key",
+              });
+              connected = true;
+              return Promise.reject(stop);
+            },
+          }),
+        },
+        home,
+      ),
+      (cause) => cause === stop,
+    );
+    assert.equal(connected, true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("project MCP selection survives restart, switches, and stays local to the project", async () => {
   const root = await mkdtemp(join(tmpdir(), "fungi-project-mcp-"));
   try {
@@ -23,14 +100,14 @@ test("project MCP selection survives restart, switches, and stays local to the p
     await mkdir(other);
     assert.equal(await readProjectMcpConnection(root), undefined);
     await saveProjectMcpConnection(root, endpoint);
-    assert.equal(await readProjectMcpConnection(root), endpoint);
+    assert.deepEqual(await readProjectMcpConnection(root), { endpoint });
     assert.equal(await readProjectMcpConnection(other), undefined);
     await saveProjectMcpConnection(
       root,
       "https://hub.example/api/teams/next/mcp",
     );
     assert.equal(
-      await readProjectMcpConnection(root),
+      (await readProjectMcpConnection(root))?.endpoint,
       "https://hub.example/api/teams/next/mcp",
     );
     await forgetProjectMcpConnection(root);
@@ -112,6 +189,11 @@ test("a successful explicit one-shot selection becomes the next default", async 
             Promise.resolve(
               // SAFETY: The injected runOneShot stub does not inspect the fake connection's Session.
               {
+                sandboxStatus: () =>
+                  Promise.resolve({
+                    state: "available",
+                    requireSandbox: false,
+                  }),
                 session: {},
                 close: () => Promise.resolve(),
               } as PrivateLocalServiceConnection,
@@ -120,7 +202,7 @@ test("a successful explicit one-shot selection becomes the next default", async 
         runOneShot: () => Promise.resolve(),
       },
     );
-    assert.equal(await readProjectMcpConnection(root), endpoint);
+    assert.deepEqual(await readProjectMcpConnection(root), { endpoint });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

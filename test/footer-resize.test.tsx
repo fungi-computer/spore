@@ -1,11 +1,16 @@
 import { representativeDesignSnapshot } from "./design-fixture.js";
 import { expect, test } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createWhistle } from "@fungi.computer/whistle";
 import { act } from "react";
 
-import { createTuiFixture, fixtureClients } from "./fixture.js";
+import {
+  createTuiFixture,
+  fixtureClients,
+  fixtureGoalStartedAt,
+} from "./fixture.js";
 import { sigilGutterText } from "../src/button/index.js";
 import { TuiFrame } from "../src/frame.js";
 import { rendererInteraction } from "../src/renderer-interaction.js";
@@ -41,7 +46,8 @@ test("the goal indicator survives resizing the pane between widths", async () =>
       revision: "resize-goal",
       objective: "Keep the footer honest",
       state: "active",
-      stopReason: null,
+      startedAt: fixtureGoalStartedAt,
+      pauseCause: null,
     },
   });
   const client = new QueryClient({
@@ -64,7 +70,7 @@ test("the goal indicator survives resizing the pane between widths", async () =>
     await act(async () =>
       setup.waitForFrame(
         (frame) =>
-          frame.includes("Goal · active") &&
+          frame.includes("Pursuing goal since") &&
           footer(frame).includes("openai/gpt-6-sol"),
       ),
     );
@@ -76,14 +82,14 @@ test("the goal indicator survives resizing the pane between widths", async () =>
       await act(async () =>
         setup.waitForFrame(
           (frame) =>
-            frame.includes("Goal · active") &&
+            frame.includes("Pursuing goal since") &&
             footer(frame).includes("openai/gpt-6-sol"),
         ),
       );
       const frame = setup.captureCharFrame();
-      expect(frame).toContain("Goal · active");
+      expect(frame).toContain("Pursuing goal since");
       expect(frame.indexOf(footer(frame))).toBeLessThan(
-        frame.indexOf("Keep the footer honest"),
+        frame.indexOf("Pursuing goal since"),
       );
       expect(footer(frame), `width ${String(width)}\n${frame}`).toContain(
         "openai/gpt-6-sol",
@@ -91,9 +97,7 @@ test("the goal indicator survives resizing the pane between widths", async () =>
       expect(footer(setup.captureCharFrame())).not.toContain("Alt+Enter");
     }
   } finally {
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     commands.close();
     client.clear();
     await fixture.waitForClose();

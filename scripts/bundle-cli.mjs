@@ -8,7 +8,8 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
+import console from "node:console";
 import { transform } from "esbuild";
 import { writeCliNotices } from "./package-notices.mjs";
 
@@ -34,6 +35,7 @@ const output = resolve(repository, ".botanical/fungi-cli-package");
 const metafile = resolve(repository, ".botanical/fungi-cli-metafile.json");
 await rm(output, { recursive: true, force: true });
 await mkdir(resolve(output, "dist/internal"), { recursive: true });
+await mkdir(resolve(output, "dist/seatbelt"), { recursive: true });
 await mkdir(resolve(output, "native/apply-patch"), { recursive: true });
 const build = spawnSync(
   "bun",
@@ -44,6 +46,9 @@ const build = spawnSync(
     // Ship one minified file: no comments or module paths from the private
     // source tree, and no source map.
     "--minify",
+    // Minification alone leaves React DEV performance timing tracks enabled.
+    "--define",
+    'process.env.NODE_ENV="production"',
     "--sourcemap=none",
     "--outfile",
     resolve(output, "dist/cli.js"),
@@ -64,9 +69,22 @@ await transformFile(
   ),
   resolve(output, "dist/internal/private-workerd-sandbox-worker.mjs"),
 );
+// Local shrinks each image in a throwaway worker thread, loaded from this
+// path beside dist/cli.js; it carries Photon's inlined WebAssembly.
+await transformFile(
+  resolve(
+    repository,
+    "runtimes/local/dist/internal/local-image-fit-worker.mjs",
+  ),
+  resolve(output, "dist/internal/local-image-fit-worker.mjs"),
+);
 await copyFile(
   resolve(repository, "packages/cordyceps/dist/computerd.cjs"),
   resolve(output, "dist/internal/computerd.cjs"),
+);
+await copyFile(
+  resolve(repository, "runtimes/local/dist/seatbelt/safe-base.sbpl"),
+  resolve(output, "dist/seatbelt/safe-base.sbpl"),
 );
 await copyFile(
   resolve(root, "scripts/fungi.cjs"),
@@ -99,9 +117,11 @@ await writeFile(
         "README.md",
         "THIRD_PARTY_NOTICES",
         "dist/cli.js",
+        "dist/seatbelt/safe-base.sbpl",
         "dist/tool-sigil-images.json",
         "dist/fungi.cjs",
         "dist/internal/private-workerd-sandbox-worker.mjs",
+        "dist/internal/local-image-fit-worker.mjs",
         "dist/internal/computerd.cjs",
         "native/apply-patch/LICENSE.codex",
         "computerd-loopback.cjs",
@@ -141,7 +161,10 @@ await writeFile(
 // layout; fail the build rather than ship them.
 // Bun inlines a CommonJS module's absolute `__filename`; write-file-atomic
 // uses it only to seed temporary file names. Keep it package-relative.
-for (const file of ["dist/internal/private-workerd-sandbox-worker.mjs"]) {
+for (const file of [
+  "dist/internal/private-workerd-sandbox-worker.mjs",
+  "dist/internal/local-image-fit-worker.mjs",
+]) {
   const text = await readFile(resolve(output, file), "utf8");
   if (text.includes("runtimes/local") || text.includes(repository))
     throw new Error(`${file} contains a private path`);
@@ -180,6 +203,7 @@ async function writeSizeReport(packageRoot, metafilePath) {
     "dist/fungi.cjs",
     "dist/tool-sigil-images.json",
     "dist/internal/private-workerd-sandbox-worker.mjs",
+    "dist/internal/local-image-fit-worker.mjs",
     "dist/internal/computerd.cjs",
   ])
     files[file] = (await stat(resolve(packageRoot, file))).size;

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { createQueryClient } from "@fungi.computer/agar/query";
 import {
   QueryClientProvider,
@@ -33,6 +34,7 @@ const slots: SessionExtensionSlots = {
         },
       ],
       more: 0,
+      expanded: true,
     }),
   },
 };
@@ -101,9 +103,7 @@ test("a pane opened beside carries the shell theme, not the launch theme", async
     expect(left).toBeDefined();
     expect(right).toBe(left);
   } finally {
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     commands.close();
     query.clear();
     await fixture.waitForClose();

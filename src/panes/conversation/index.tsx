@@ -52,6 +52,9 @@ export const conversationPane: PaneKindEntry = {
         let createRequestId: string | undefined;
         const session = await kit.sessions.acquire(target, kit.signal);
         if (kit.signal.aborted) return null;
+        // Creation targets carry an intent, not the resulting Session identity.
+        const sessionId = target.sessionId ?? (await session.read()).sessionId;
+        kit.signal.throwIfAborted();
         const details = kit.sessions.describe?.(session);
         const resume = details?.resume;
         const forked = details?.forked;
@@ -85,6 +88,7 @@ export const conversationPane: PaneKindEntry = {
           { kit },
           createElement(TuiFrameContent, {
             session,
+            draftIdentity: { agentId: target.agentId, sessionId },
             commands,
             applicationCommands: { lease, exit: kit.exit },
             onExit: kit.exit,
@@ -93,7 +97,10 @@ export const conversationPane: PaneKindEntry = {
             themeError: details?.themeError,
             clients: details?.clients,
             interactionStore: details?.interactions,
+            mcpApprovals: details?.mcpApprovals,
             modelSource: details?.models,
+            sandboxSource: details?.sandbox,
+            onStopAll: details?.stopAll,
             folder: details?.folder,
             onTitled: async (saved: string | null) => {
               if (saved === null) await ownerTitle();
@@ -106,6 +113,7 @@ export const conversationPane: PaneKindEntry = {
               observationUnavailable === undefined
                 ? undefined
                 : () => observationUnavailable(kit.paneId),
+            onRebindService: details?.rebindService,
             inputHandoff: details?.inputHandoff,
             onResume:
               resume === undefined ? undefined : () => resume(kit.paneId),
@@ -143,7 +151,11 @@ export const conversationPane: PaneKindEntry = {
                 })
                 .then((outcome) => {
                   if (outcome.kind === "refused")
-                    kit.notify({ tone: "error", message: outcome.reason });
+                    kit.toast({
+                      variant: "error",
+                      duration: "until-dismissed",
+                      message: outcome.reason,
+                    });
                 }),
           }),
         );

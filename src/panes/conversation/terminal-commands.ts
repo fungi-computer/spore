@@ -4,11 +4,16 @@ import type {
   WhistleExecutionOrigin,
 } from "@fungi.computer/whistle";
 import type { ParakeetReconnectOutcome } from "@fungi.computer/parakeet/headless";
+import { z } from "../../button/index.js";
+import { WhistleActionError } from "@fungi.computer/whistle";
+
+const stopArguments = z.strictObject({ scope: z.literal("all") });
 
 export type TerminalActions = {
   canCancel: boolean;
   canRetry: boolean;
   canContinue: boolean;
+  stopAll?: (() => Promise<void>) | undefined;
   cancel: (origin: WhistleExecutionOrigin) => Promise<void>;
   reconnect: () => Promise<ParakeetReconnectOutcome>;
   retry: () => boolean;
@@ -22,6 +27,34 @@ export function terminalCommandDefinitions(
   actions: Readonly<TerminalActions>,
 ): readonly WhistleCommand<never>[] {
   return [
+    {
+      id: "stop",
+      title: "Stop this Agent and its helpers",
+      category: "Conversation",
+      projections: {
+        slash: {
+          aliases: ["stop"],
+          arguments: {
+            hint: "all",
+            words: [{ word: "all", arguments: { scope: "all" } }],
+          },
+        },
+      },
+      availability: () =>
+        actions.stopAll === undefined
+          ? {
+              status: "unavailable",
+              reason: "This connection cannot stop an Agent tree.",
+            }
+          : { status: "available" },
+      handler: async ({ arguments: args }) => {
+        if (!stopArguments.safeParse(args).success)
+          throw new Error("Use /stop all");
+        if (actions.stopAll === undefined)
+          throw new Error("Stop all is unavailable");
+        await actions.stopAll();
+      },
+    },
     {
       id: "escape",
       title: "Dismiss or stop",
@@ -53,18 +86,20 @@ export function terminalCommandDefinitions(
       availability: () => ({ status: "available" }),
       handler: async ({ interaction }) => {
         const outcome = await actions.reconnect();
-        const message =
-          outcome.kind === "reconnected"
-            ? "Session history reconnected."
-            : outcome.kind === "nothing_to_reconnect"
-              ? outcome.state === "connected"
+        if (outcome.kind === "failed")
+          throw new WhistleActionError(
+            "reconnect_failed",
+            `Reconnect failed: ${outcome.cause}. Check the connection, then try /reconnect again.`,
+          );
+        // A reconnect that worked is visible in the history: no echo.
+        if (outcome.kind === "nothing_to_reconnect")
+          interaction?.notify({
+            type: "info",
+            message:
+              outcome.state === "connected"
                 ? "Session history is already connected."
-                : "Session history is connecting; wait for it to finish."
-              : `Reconnect failed: ${outcome.cause}. Check the connection, then try /reconnect again.`;
-        interaction?.notify({
-          type: outcome.kind === "reconnected" ? "success" : "info",
-          message,
-        });
+                : "Session history is connecting; wait for it to finish.",
+          });
         return outcome;
       },
     },
@@ -82,12 +117,12 @@ export function terminalCommandDefinitions(
             },
       handler: ({ interaction }) => {
         const started = actions.retry();
-        interaction?.notify({
-          type: started ? "success" : "info",
-          message: started
-            ? "Retrying the failed instruction."
-            : "There is no failed instruction to retry; type a new instruction.",
-        });
+        if (!started)
+          interaction?.notify({
+            type: "info",
+            message:
+              "There is no failed instruction to retry; type a new instruction.",
+          });
         return started;
       },
     },
@@ -105,12 +140,12 @@ export function terminalCommandDefinitions(
             },
       handler: async ({ interaction }) => {
         const started = await actions.continue();
-        interaction?.notify({
-          type: started ? "success" : "info",
-          message: started
-            ? "Asked Shiitake to continue the previous task."
-            : "There is no stopped run to continue; type a new instruction.",
-        });
+        if (!started)
+          interaction?.notify({
+            type: "info",
+            message:
+              "There is no stopped run to continue; type a new instruction.",
+          });
         return started;
       },
     },
@@ -126,7 +161,7 @@ export function terminalCommandDefinitions(
     },
     {
       id: "tool-group",
-      title: "Toggle the focused tool group",
+      title: "Toggle the focused tool group or Agent message",
       category: "Conversation",
       projections: { bindings: { values: ["ctrl+g"], order: 2 } },
       handler: actions.toolGroup,

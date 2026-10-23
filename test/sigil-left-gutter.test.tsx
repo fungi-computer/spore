@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { expect, test } from "bun:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createWhistle } from "@fungi.computer/whistle";
 import { sigilGutterTotalWidth } from "../src/button/index.js";
@@ -99,9 +100,7 @@ for (const width of [80, 160])
           ?.text,
       ).toBe("L");
     } finally {
-      act(() => {
-        setup.renderer.destroy();
-      });
+      await destroyTestRenderer(setup);
       client.clear();
       commands.close();
       await fixture.waitForClose();

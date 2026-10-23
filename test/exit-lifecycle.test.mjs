@@ -5,6 +5,9 @@ import { createWhistle } from "@fungi.computer/whistle";
 import assert from "node:assert/strict";
 import { test } from "bun:test";
 import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
+import { LocalServiceUpdated } from "@fungi.computer/truffle/service";
+import { liveServiceStatusSchema } from "../../../runtimes/local/src/private-local-service-discovery.js";
+import { localServiceIds } from "../../../runtimes/local/src/private-local-service-ids.js";
 
 test("external renderer destruction closes the client without destroying twice", async () => {
   let destroys = 0;
@@ -24,6 +27,10 @@ test("external renderer destruction closes the client without destroying twice",
     {
       createServiceManager: () => ({
         connect: async () => ({
+          sandboxStatus: async () => ({
+            state: "available",
+            requireSandbox: false,
+          }),
           agentId: "agent-fixture",
           sessionId: "session-fixture",
           databasePath: "/fixture/agent.sqlite",
@@ -70,6 +77,10 @@ for (const signal of ["SIGHUP", "SIGTERM"]) {
         signals,
         createServiceManager: () => ({
           connect: async () => ({
+            sandboxStatus: async () => ({
+              state: "available",
+              requireSandbox: false,
+            }),
             agentId: "agent-fixture",
             sessionId: "session-fixture",
             databasePath: "/fixture/agent.sqlite",
@@ -174,6 +185,10 @@ test("rejected theme preference reaches the mounted frame as a visible error", a
       },
       createServiceManager: () => ({
         connect: async () => ({
+          sandboxStatus: async () => ({
+            state: "available",
+            requireSandbox: false,
+          }),
           agentId: "agent-fixture",
           sessionId: "session-fixture",
           databasePath: "/fixture/agent.sqlite",
@@ -212,6 +227,7 @@ function applicationFixture(
   onRender = () => undefined,
   onRecovery = () => undefined,
   openClientExtensions = () => undefined,
+  renderPicker = (_root, _sessions, _onSelect, cancel) => cancel(),
 ) {
   const commands = createWhistle();
   const mounted = Promise.withResolvers();
@@ -252,7 +268,7 @@ function applicationFixture(
       renderRecovery: (_root, error, retry, exit) =>
         onRecovery(error, retry, exit),
       enableKeymap: false,
-      renderPicker: (_root, _sessions, _onSelect, cancel) => cancel(),
+      renderPicker,
       render: (_root, _query, _session, _commands, onExit, _theme, next) => {
         onRender(_session);
         controls = next;
@@ -281,6 +297,10 @@ function applicationFixture(
 
 function selectedClient(closed, id) {
   return {
+    sandboxStatus: async () => ({
+      state: "available",
+      requireSandbox: false,
+    }),
     agentId: "agent-fixture",
     sessionId: id,
     databasePath: "/fixture/agent.sqlite",
@@ -294,178 +314,17 @@ function selectedClient(closed, id) {
   };
 }
 
-test("one service upgrade reconnects a newer client after another turn finishes", async () => {
-  const events = [];
-  const heldTurn = Promise.withResolvers();
-  let serviceBuildId = "b".repeat(64);
-  let connects = 0;
-  const app = runTuiCli(
-    {
-      invocationRoot: "/fixture",
-      databasePath: "/fixture/agent.sqlite",
-      sessionId: "session-123",
-    },
-    {
-      clientBuildId: "a".repeat(64),
-      createServiceManager: () => ({
-        connect: async () => {
-          connects++;
-          events.push(`connected ${serviceBuildId}`);
-          return selectedClient([], "session-123");
-        },
-        stop: async () => {
-          events.push("service draining");
-          await heldTurn.promise;
-          events.push("other turn finished");
-          events.push("service stopped");
-        },
-        start: async () => {
-          serviceBuildId = "a".repeat(64);
-          events.push("service started");
-          return {
-            serviceId: "new-service",
-            baseUrl: "http://127.0.0.1:1235",
-            buildId: serviceBuildId,
-          };
-        },
-        status: async () => ({
-          serviceId: "service",
-          baseUrl: "http://127.0.0.1:1234",
-          buildId: serviceBuildId,
-        }),
-      }),
-      createWhistle,
-      loadThemePreference: async () => ({ theme: "terminal" }),
-      prepareClientExtensions: () =>
-        Effect.succeed({
-          entries: Effect.succeed([]),
-          attach: () => Effect.void,
-        }),
-      createQueryClient: () => ({ clear: () => undefined }),
-      createRenderer: async () => ({
-        destroy: () => events.push("terminal closed"),
-      }),
-      createRoot: () => ({ render: () => undefined, unmount: () => undefined }),
-      renderConnecting: () => undefined,
-      renderRecovery: (_root, error) => {
-        throw error;
-      },
-      renderServiceMismatch: (_root, message, upgrade) => {
-        events.push(message);
-        if (upgrade !== undefined) void upgrade();
-      },
-      enableKeymap: false,
-      render: (_root, _query, _session, _commands, exit, _theme, controls) => {
-        if (connects === 1) void controls.onObservationUnavailable();
-        else exit();
-      },
-    },
-  );
-  setTimeout(() => heldTurn.resolve(), 20);
-  await app;
-  assert.match(events[1], /different builds/u);
-  assert.equal(connects, 2, JSON.stringify(events));
-  assert.deepEqual(events.slice(3, 8), [
-    "service draining",
-    "other turn finished",
-    "service stopped",
-    "service started",
-    `connected ${"a".repeat(64)}`,
-  ]);
-});
-
-test("initial connection failure upgrades the service before reopening the saved Session", async () => {
-  const events = [];
-  let buildId = "b".repeat(64);
-  let attempts = 0;
-  await runTuiCli(
-    {
-      invocationRoot: "/fixture",
-      databasePath: "/fixture/agent.sqlite",
-      sessionId: "saved",
-    },
-    {
-      clientBuildId: "a".repeat(64),
-      createServiceManager: () => ({
-        connect: async () => {
-          attempts++;
-          if (buildId !== "a".repeat(64))
-            throw new Error("Session wire could not be decoded");
-          events.push("saved Session connected");
-          return selectedClient([], "saved");
-        },
-        status: async () => ({
-          serviceId: "service",
-          baseUrl: "http://127.0.0.1:1234",
-          buildId,
-        }),
-        stop: async () => events.push("service stopped"),
-        start: async () => {
-          buildId = "a".repeat(64);
-          events.push("service started");
-          return {
-            serviceId: "new-service",
-            baseUrl: "http://127.0.0.1:1235",
-            buildId,
-          };
-        },
-      }),
-      createWhistle,
-      loadThemePreference: async () => ({ theme: "terminal" }),
-      prepareClientExtensions: () =>
-        Effect.succeed({
-          entries: Effect.succeed([]),
-          attach: () => Effect.void,
-        }),
-      createQueryClient: () => ({ clear: () => undefined }),
-      createRenderer: async () => ({
-        destroy: () => events.push("terminal closed"),
-      }),
-      createRoot: () => ({ render: () => undefined, unmount: () => undefined }),
-      renderConnecting: () => undefined,
-      renderRecovery: (_root, error, _retry, exit) => {
-        events.push(error.message);
-        exit();
-      },
-      renderServiceMismatch: (_root, message, upgrade) => {
-        events.push(message);
-        if (upgrade !== undefined) void upgrade();
-      },
-      enableKeymap: false,
-      render: (_root, _query, _session, _commands, exit) => exit(),
-    },
-  );
-  assert.match(events[0], /Session wire could not be decoded/u);
-  assert.match(events[0], /Upgrade waits for active turns/u);
-  assert.equal(attempts, 2);
-  assert.deepEqual(events.slice(2, 5), [
-    "service stopped",
-    "service started",
-    "saved Session connected",
-  ]);
-});
-
-test("failed service drain gives an exit and a manual recovery path without retrying itself", async () => {
+test("a pane connect that meets a replaced protocol shows only the restart message and waits for exit", async () => {
   const notices = [];
+  const recoveries = [];
   let connects = 0;
-  let stops = 0;
   await runTuiCli(
     { invocationRoot: "/fixture", sessionId: "saved" },
     {
-      clientBuildId: "a".repeat(64),
       createServiceManager: () => ({
         connect: async () => {
           connects++;
-          throw new Error("Old service wire");
-        },
-        status: async () => ({
-          serviceId: "old-service",
-          baseUrl: "http://127.0.0.1:1234",
-          buildId: "b".repeat(64),
-        }),
-        stop: async () => {
-          stops++;
-          throw new Error("Local service refused shutdown");
+          throw new LocalServiceUpdated();
         },
       }),
       loadThemePreference: async () => ({ theme: "terminal" }),
@@ -478,33 +337,43 @@ test("failed service drain gives an exit and a manual recovery path without retr
       createRenderer: async () => ({ destroy: () => undefined }),
       createRoot: () => ({ render: () => undefined, unmount: () => undefined }),
       renderConnecting: () => undefined,
-      renderServiceMismatch: (_root, message, upgrade, exit) => {
+      renderRecovery: (_root, error, _retry, exit) => {
+        recoveries.push(error.message);
+        exit();
+      },
+      renderServiceUpdated: (_root, message, exit) => {
         notices.push(message);
-        if (notices.length === 1) upgrade();
-        else if (notices.length === 3) exit();
+        setTimeout(exit, 20);
       },
       enableKeymap: false,
     },
   );
   assert.equal(connects, 1);
-  assert.equal(stops, 1);
-  assert.match(notices[2], /Local service refused shutdown/u);
-  assert.match(notices[2], /fungi stop, then fungi resume/u);
+  assert.deepEqual(notices, [
+    "The Fungi service was updated. Restart this window.",
+  ]);
+  assert.deepEqual(recoveries, []);
 });
 
-test("an unavailable stream on the same build keeps ordinary reconnect available", async () => {
-  let mismatches = 0;
+test("an unavailable stream on the same protocol keeps ordinary reconnect available", async () => {
+  let restartMessages = 0;
+  let reconnectHandled;
+  // Decode eagerly so reconnect's error boundary cannot swallow a stale shape.
+  const serviceStatus = liveServiceStatusSchema.parse({
+    protocol: 3,
+    version: "b".repeat(64),
+    serviceId: localServiceIds.service.generate(),
+    pid: 1,
+    baseUrl: "http://127.0.0.1:1234",
+    startedAt: "fixture-process-start",
+    diagnostics: { state: "active" },
+  });
   await runTuiCli(
     { invocationRoot: "/fixture", databasePath: "/fixture/agent.sqlite" },
     {
-      clientBuildId: "a".repeat(64),
       createServiceManager: () => ({
         connect: async () => selectedClient([], "session-123"),
-        status: async () => ({
-          serviceId: "service",
-          baseUrl: "http://127.0.0.1:1234",
-          buildId: "a".repeat(64),
-        }),
+        status: async () => serviceStatus,
       }),
       createWhistle,
       loadThemePreference: async () => ({ theme: "terminal" }),
@@ -517,16 +386,20 @@ test("an unavailable stream on the same build keeps ordinary reconnect available
       createRenderer: async () => ({ destroy: () => undefined }),
       createRoot: () => ({ render: () => undefined, unmount: () => undefined }),
       renderConnecting: () => undefined,
-      renderServiceMismatch: () => {
-        mismatches++;
+      renderServiceUpdated: () => {
+        restartMessages++;
       },
       enableKeymap: false,
       render: (_root, _query, _session, _commands, exit, _theme, controls) => {
-        void controls.onObservationUnavailable().then(exit);
+        void controls.onObservationUnavailable().then((handled) => {
+          reconnectHandled = handled;
+          exit();
+        });
       },
     },
   );
-  assert.equal(mismatches, 0);
+  assert.equal(restartMessages, 0);
+  assert.equal(reconnectHandled, false);
 });
 
 test("extension cleanup failure preserves selected client cleanup", async () => {
@@ -616,6 +489,120 @@ test("opening a peer retains both reporters until their own views close", async 
   assert.equal(events.at(-1), "release fixture://replacement");
 });
 
+test("the workspace Open action starts a conversation in the live pane's Agent after the first pane closed", async () => {
+  const closed = [];
+  const databasePaths = [];
+  const app = applicationFixture(
+    {
+      connect: async () => selectedClient(closed, "original"),
+      createSession: async (creation) => {
+        databasePaths.push(creation.databasePath);
+        return {
+          ...selectedClient(closed, `created-${databasePaths.length}`),
+          databasePath: "/fixture/agent-b.sqlite",
+        };
+      },
+    },
+    () => undefined,
+    () => undefined,
+    () => ({ close: async () => undefined }),
+  );
+  try {
+    await tick();
+    const original = app.controls;
+    await original.onNew();
+    assert.equal(app.renders, 2);
+    await original.onClose();
+    // The frame keeps the first render's workspace configuration.
+    const placement = { direction: "below", afterPaneId: "focused-pane" };
+    await original.openConversation(placement);
+    assert.equal(app.renders, 3, "Open > New conversation rendered a pane");
+    assert.deepEqual(app.controls.openPlacement, placement);
+    await app.controls.openConversation();
+    assert.equal(app.controls.openPlacement, undefined);
+    assert.deepEqual(databasePaths, [
+      "/fixture/agent.sqlite",
+      "/fixture/agent-b.sqlite",
+      "/fixture/agent-b.sqlite",
+    ]);
+  } finally {
+    app.exit();
+    await app.running;
+  }
+});
+
+test("workspace resume carries placement through selection to admission", async () => {
+  const closed = [];
+  const app = applicationFixture(
+    {
+      connect: async () => selectedClient(closed, "original"),
+      discover: async () => ({
+        agents: [
+          {
+            agentId: "one",
+            databasePath: "/project/one/agent.sqlite",
+            sessionCount: 1,
+          },
+        ],
+        problems: [],
+        sessions: [
+          {
+            title: "saved",
+            updatedAt: 0,
+            resume: async () => selectedClient(closed, "resumed"),
+          },
+        ],
+      }),
+    },
+    () => undefined,
+    () => undefined,
+    () => undefined,
+    (_root, _sessions, select) => select(0),
+  );
+  try {
+    await app.mounted;
+    await tick();
+    const placement = { direction: "beside", afterPaneId: "focused-pane" };
+    await app.controls.chooseConversation(placement);
+    assert.equal(app.renders, 2);
+    assert.deepEqual(app.controls.openPlacement, placement);
+    assert.deepEqual(closed, []);
+  } finally {
+    app.exit();
+    await app.running;
+  }
+});
+
+test("failed placed creation cannot place a later ordinary conversation", async () => {
+  const closed = [];
+  let attempts = 0;
+  const app = applicationFixture({
+    connect: async () => selectedClient(closed, "original"),
+    createSession: async () => {
+      if (++attempts === 1) throw Error("creation unavailable");
+      return selectedClient(closed, "ordinary");
+    },
+  });
+  try {
+    await app.mounted;
+    await tick();
+    await assert.rejects(
+      app.controls.openConversation({
+        direction: "below",
+        afterPaneId: "focused-pane",
+      }),
+      /creation unavailable/u,
+    );
+    await app.controls.openConversation();
+    assert.equal(attempts, 2);
+    assert.equal(app.renders, 2);
+    assert.equal(app.controls.openPlacement, undefined);
+  } finally {
+    app.exit();
+    await app.running;
+  }
+});
+
 test("local Ctrl+C is admitted before service connection and never stops the service", async () => {
   const connecting = Promise.withResolvers();
   let stops = 0;
@@ -647,7 +634,13 @@ test("cancelled resume and rejected replacement retain the current client", asyn
   const app = applicationFixture({
     connect: async () => selectedClient(closed, "original"),
     discover: async () => ({
-      agentCount: 1,
+      agents: [
+        {
+          agentId: "one",
+          databasePath: "/project/one/agent.sqlite",
+          sessionCount: 1,
+        },
+      ],
       problems: [],
       sessions: [
         {
@@ -668,6 +661,11 @@ test("cancelled resume and rejected replacement retain the current client", asyn
     await app.mounted;
     await tick();
     await app.controls.onResume("fixture-pane");
+    await app.controls.chooseConversation({
+      direction: "beside",
+      afterPaneId: "fixture-pane",
+    });
+    assert.equal(app.controls.openPlacement, undefined);
     assert.deepEqual(closed, []);
     await assert.rejects(
       app.controls.onNew("fixture-pane"),

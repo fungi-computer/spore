@@ -1,7 +1,7 @@
 import {
   createAppSurfaceCommandHost,
   type AppSurfaceCommandHost,
-} from "@fungi.computer/oyster/shell/command-host";
+} from "@fungi.computer/nacre/command-host";
 import { useEffect, useRef, useState, useCallback } from "react";
 import type {
   PaneTarget,
@@ -12,19 +12,23 @@ import type {
   ConversationPaneTarget,
   PaneSessionAcquisition,
   PaneSessionTarget,
+  PaneSessions,
 } from "./button/index.js";
 import {
   Picker,
   useTerminalTheme,
   CopySurface,
-  copySurfaceColors,
   useDialog,
   reportFailure,
   type DialogController,
 } from "./button/index.js";
 import { ToolSigilContext, type ToolSigils } from "./button/index.js";
 import { PaneWorkspace } from "./shell/workspace.js";
-import type { createPaneRegistry } from "./shell/registry.js";
+import type {
+  createPaneRegistry,
+  PaneOpenDirection,
+  PaneOpenPlacement,
+} from "./shell/registry.js";
 import type { TuiFrameProps as ConversationProps } from "./panes/conversation/frame.js";
 
 export type TuiFrameProps = Omit<
@@ -43,12 +47,15 @@ export type TuiFrameProps = Omit<
     target?: ConversationPaneTarget;
     /** Initial launch and explicit pane commands omit this; Session switches retain their pane. */
     replacePaneId?: string | undefined;
+    openPlacement?: PaneOpenPlacement | undefined;
     onResume?: PaneSessionContext["resume"];
     onNew?: PaneSessionContext["create"];
     onForked?: PaneSessionContext["forked"];
     onObservationUnavailable?: PaneSessionContext["observationUnavailable"];
-    openConversation?: (() => void | Promise<void>) | undefined;
-    chooseConversation?: (() => void | Promise<void>) | undefined;
+    openConversation?:
+      ((placement?: PaneOpenPlacement) => void | Promise<void>) | undefined;
+    chooseConversation?:
+      ((placement?: PaneOpenPlacement) => void | Promise<void>) | undefined;
     commandHost?: AppSurfaceCommandHost;
     setQuitGuard?:
       ((guard: (() => Promise<boolean>) | undefined) => void) | undefined;
@@ -126,11 +133,15 @@ function describe(props: TuiFrameProps): PaneSessionContext {
   return {
     clients: props.clients,
     interactions: props.interactionStore,
+    mcpApprovals: props.mcpApprovals,
     models: props.modelSource,
+    sandbox: props.sandboxSource,
+    stopAll: props.onStopAll,
     sessionTitle: props.sessionTitle,
     folder: props.folder,
     reload: props.reloadSources,
     observationUnavailable: props.onObservationUnavailable,
+    rebindService: props.onRebindService,
     themeName: props.initialTheme,
     saveTheme: props.onThemeConfirm,
     themeError: props.themeError,
@@ -160,7 +171,9 @@ export function TuiWorkspace({
   requested,
   dialog,
   configuration,
+  registerDraftCheckpoint,
 }: Readonly<{
+  registerDraftCheckpoint?: PaneSessions["registerDraftCheckpoint"];
   configuration?: TuiWorkspaceConfiguration | undefined;
   entries: readonly TuiWorkspaceEntry[];
   requested: number;
@@ -174,6 +187,7 @@ export function TuiWorkspace({
     throw new Error("Workspace requires its host configuration");
   return (
     <WorkspaceHost
+      registerDraftCheckpoint={registerDraftCheckpoint}
       initial={initial}
       entries={entries}
       requested={requested}
@@ -187,7 +201,9 @@ function WorkspaceHost({
   entries,
   requested,
   dialog,
+  registerDraftCheckpoint,
 }: Readonly<{
+  registerDraftCheckpoint?: PaneSessions["registerDraftCheckpoint"];
   initial: TuiWorkspaceConfiguration;
   entries: readonly TuiWorkspaceEntry[];
   requested: number;
@@ -240,6 +256,7 @@ function WorkspaceHost({
     },
   });
   const [sessions] = useState(() => ({
+    registerDraftCheckpoint,
     acquire: async (
       target: PaneSessionTarget,
       signal: AbortSignal,
@@ -294,17 +311,22 @@ function WorkspaceHost({
     if (registry === undefined || entry === undefined) return;
     const operation =
       entry.props.replacePaneId === undefined
-        ? registry.open(targetFor(entry.props))
+        ? registry.open(targetFor(entry.props), true, entry.props.openPlacement)
         : registry.replace(entry.props.replacePaneId, targetFor(entry.props));
     void operation
       .then((outcome) => {
         if (outcome.kind === "refused")
-          registry.notify({ tone: "error", message: outcome.reason });
+          registry.toast({
+            variant: "error",
+            duration: "until-dismissed",
+            message: outcome.reason,
+          });
       })
       .catch((cause: unknown) => {
         reportFailure("conversation-pane-open", cause);
-        registry.notify({
-          tone: "error",
+        registry.toast({
+          variant: "error",
+          duration: "until-dismissed",
           message:
             cause instanceof Error
               ? cause.message
@@ -324,7 +346,15 @@ function WorkspaceHost({
    * installed-program launchers come from the registry; conversations and
    * Apps are host flows.
    */
-  const openPane = async () => {
+  const openPane = async (direction?: PaneOpenDirection) => {
+    const placement: PaneOpenPlacement | undefined =
+      direction === undefined
+        ? undefined
+        : {
+            direction,
+            afterPaneId:
+              registry?.read().find((pane) => pane.focused)?.paneId ?? null,
+          };
     pickerRequest.current?.abort();
     const controller = new AbortController();
     pickerRequest.current = controller;
@@ -337,7 +367,7 @@ function WorkspaceHost({
               description: "Start a conversation in a new pane",
               open: async (handle: ReturnType<DialogController["show"]>) => {
                 handle.dismiss();
-                await initial.openConversation?.();
+                await initial.openConversation?.(placement);
               },
             },
           ]),
@@ -349,7 +379,7 @@ function WorkspaceHost({
               description: "Open a saved conversation",
               open: async (handle: ReturnType<DialogController["show"]>) => {
                 handle.dismiss();
-                await initial.chooseConversation?.();
+                await initial.chooseConversation?.(placement);
               },
             },
           ]),
@@ -359,7 +389,7 @@ function WorkspaceHost({
       description: launcher.description,
       open: async (handle: ReturnType<DialogController["show"]>) => {
         handle.dismiss();
-        const outcome = await registry?.open(launcher.target);
+        const outcome = await registry?.open(launcher.target, true, placement);
         if (outcome?.kind === "refused") throw new Error(outcome.reason);
       },
     }));
@@ -367,13 +397,13 @@ function WorkspaceHost({
     // Only choices that can work now: signed out, Apps is not offered.
     if (apps === undefined || !(await apps.signedIn(controller.signal))) {
       if (controller.signal.aborted) return;
-      showChoices("Open pane", [...launcherOptions, ...conversationOptions]);
+      showChoices("Open pane", [...conversationOptions, ...launcherOptions]);
       return;
     }
     if (controller.signal.aborted) return;
     const options = [
-      ...launcherOptions,
       ...conversationOptions,
+      ...launcherOptions,
       {
         name: "Apps",
         description: "Open an App pane or hand off to its App",
@@ -404,12 +434,16 @@ function WorkspaceHost({
                     handle: ReturnType<DialogController["show"]>,
                   ) => {
                     handle.dismiss();
-                    const outcome = await registry?.open({
-                      kind: "gill",
-                      surfaceId: app.surfaceId,
-                      viewId: gill.id,
-                      title: gill.title,
-                    });
+                    const outcome = await registry?.open(
+                      {
+                        kind: "gill",
+                        surfaceId: app.surfaceId,
+                        viewId: gill.id,
+                        title: gill.title,
+                      },
+                      true,
+                      placement,
+                    );
                     if (outcome?.kind === "refused")
                       throw new Error(outcome.reason);
                   },
@@ -433,6 +467,7 @@ function WorkspaceHost({
         <Picker
           title={title}
           choices={choices}
+          searchable
           colors={presentation.colors}
           onCancel={() => {
             controller.abort();
@@ -445,8 +480,9 @@ function WorkspaceHost({
               if (controller.signal.aborted) return { kind: "retired", cause };
               handle.dismiss();
               reportFailure("pane-picker-open", cause);
-              registry?.notify({
-                tone: "error",
+              registry?.toast({
+                variant: "error",
+                duration: "until-dismissed",
                 message:
                   cause instanceof Error
                     ? cause.message
@@ -462,7 +498,7 @@ function WorkspaceHost({
   };
   return (
     <ToolSigilContext.Provider value={initial.toolSigils}>
-      <CopySurface colors={copySurfaceColors}>
+      <CopySurface>
         <PaneWorkspace
           commandHost={commandHost}
           sessions={sessions}

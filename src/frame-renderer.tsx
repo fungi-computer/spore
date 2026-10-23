@@ -17,9 +17,12 @@ import {
 } from "./session-picker.js";
 import { Picker } from "./button/picker.js";
 import { useTerminalTheme } from "./button/terminal-theme.js";
-import { CopySurface, copySurfaceColors } from "./button/copy-surface.js";
+import { CopySurface } from "./button/copy-surface.js";
 import { Placeholder } from "./button/placeholder.js";
 import { Landing, type LandingProps } from "./landing.js";
+import { UpdateToasts } from "./update-toasts.js";
+import type { PaneSessions } from "./button/index.js";
+import { createUpdateDraftCheckpointBarrier } from "./update-restart.js";
 
 type FrameProjection = Readonly<{
   entries?: readonly TuiWorkspaceEntry[];
@@ -29,23 +32,24 @@ type FrameProjection = Readonly<{
   picker?: SessionPickerProps;
   landing?: LandingProps & Pick<SessionPickerProps, "initialTheme">;
   recovery?: Readonly<{ message: string; retry: () => void; exit: () => void }>;
-  serviceMismatch?: Readonly<{
-    message: string;
-    upgrade: (() => void) | undefined;
-    exit: () => void;
-  }>;
+  serviceUpdated?: Readonly<{ message: string; exit: () => void }>;
 }>;
 type FrameStore = Readonly<{
   read: () => FrameProjection;
   subscribe: (listener: () => void) => () => void;
   update: (projection: FrameProjection) => void;
+  restartUpdate: () => Promise<void>;
+  bindUpdateRestart: (restart: () => Promise<void>) => () => void;
+  registerCheckpoint: NonNullable<PaneSessions["registerDraftCheckpoint"]>;
+  checkpointDrafts: (addresses: readonly string[]) => void;
 }>;
 const mountedFrames = new WeakMap<ReturnType<typeof createRoot>, FrameStore>();
 
 function MountedFrame({ store }: Readonly<{ store: FrameStore }>) {
   return (
-    <CopySurface colors={copySurfaceColors}>
+    <CopySurface>
       <MountedFrameContent store={store} />
+      <UpdateToasts restart={store.restartUpdate} />
     </CopySurface>
   );
 }
@@ -89,11 +93,11 @@ function MountedFrameContent({ store }: Readonly<{ store: FrameStore }>) {
       handle.dismiss();
     };
   }, [projection.picker, dialog.show, store]);
-  // Over a live workspace, recovery and a build mismatch are Dialogs: the
+  // Over a live workspace, recovery and a replaced service are Dialogs: the
   // one modal surface, drawn and dismissed like every other.
   const live = entries !== undefined && projection.queryClient !== undefined;
   const recovery = live ? projection.recovery : undefined;
-  const mismatch = live ? projection.serviceMismatch : undefined;
+  const updated = live ? projection.serviceUpdated : undefined;
   useEffect(() => {
     if (recovery === undefined) return;
     const handle = dialog.show(() => <ConnectionRecovery {...recovery} />, {
@@ -105,26 +109,26 @@ function MountedFrameContent({ store }: Readonly<{ store: FrameStore }>) {
     };
   }, [recovery, dialog.show]);
   useEffect(() => {
-    if (mismatch === undefined) return;
-    const handle = dialog.show(() => <ServiceMismatch {...mismatch} />, {
+    if (updated === undefined) return;
+    const handle = dialog.show(() => <ServiceUpdated {...updated} />, {
       onDismiss: () => {
-        if (store.read().serviceMismatch === mismatch) mismatch.exit();
+        if (store.read().serviceUpdated === updated) updated.exit();
       },
     });
     return () => {
       handle.dismiss();
     };
-  }, [mismatch, dialog.show, store]);
+  }, [updated, dialog.show, store]);
   if (entries === undefined && projection.recovery !== undefined)
     return (
       <HostColorsContext.Provider value={initialPresentation.colors}>
         <ConnectionRecovery {...projection.recovery} />
       </HostColorsContext.Provider>
     );
-  if (entries === undefined && projection.serviceMismatch !== undefined)
+  if (entries === undefined && projection.serviceUpdated !== undefined)
     return (
       <HostColorsContext.Provider value={initialPresentation.colors}>
-        <ServiceMismatch {...projection.serviceMismatch} />
+        <ServiceUpdated {...projection.serviceUpdated} />
       </HostColorsContext.Provider>
     );
   if (entries === undefined && projection.landing !== undefined)
@@ -149,6 +153,7 @@ function MountedFrameContent({ store }: Readonly<{ store: FrameStore }>) {
   return (
     <QueryClientProvider client={projection.queryClient}>
       <TuiWorkspace
+        registerDraftCheckpoint={store.registerCheckpoint}
         entries={entries}
         configuration={projection.configuration}
         requested={projection.requested ?? 0}
@@ -158,54 +163,33 @@ function MountedFrameContent({ store }: Readonly<{ store: FrameStore }>) {
   );
 }
 
-function ServiceMismatch({
+/** The one thing a running window says once a newer client replaced its service. */
+function ServiceUpdated({
   message,
-  upgrade,
   exit,
-}: Readonly<{
-  message: string;
-  upgrade: (() => void) | undefined;
-  exit: () => void;
-}>) {
+}: Readonly<{ message: string; exit: () => void }>) {
   const colors = useHostColors();
   return (
     <box flexDirection="column" flexGrow={1}>
       <text fg={colors.warning}>{message}</text>
       <Picker
-        title="Client and service builds differ"
+        title="Fungi was updated"
         colors={colors}
-        choices={
-          upgrade === undefined
-            ? [{ name: "Exit this client" }]
-            : [
-                { name: "Upgrade service and reopen Session" },
-                { name: "Exit this client" },
-              ]
-        }
-        onSelect={(index) => {
-          if (index === 0 && upgrade !== undefined) upgrade();
-          else exit();
-        }}
+        choices={[{ name: "Exit this window" }]}
+        onSelect={exit}
         onCancel={exit}
       />
-      <text>
-        Your saved conversation and running turns stay with the service.
-      </text>
     </box>
   );
 }
 
-export function renderTuiServiceMismatch(
+export function renderTuiServiceUpdated(
   root: ReturnType<typeof createRoot>,
   message: string,
-  upgrade: (() => void) | undefined,
   exit: () => void,
 ) {
   const store = frameStore(root);
-  store.update({
-    ...store.read(),
-    serviceMismatch: { message, upgrade, exit },
-  });
+  store.update({ ...store.read(), serviceUpdated: { message, exit } });
 }
 
 function ConnectionRecovery({
@@ -260,8 +244,29 @@ function frameStore(root: ReturnType<typeof createRoot>): FrameStore {
   const existing = mountedFrames.get(root);
   if (existing !== undefined) return existing;
   let current: FrameProjection = {};
+  let mounted = false;
+  let restartUpdate: (() => Promise<void>) | undefined;
+  const checkpoints = createUpdateDraftCheckpointBarrier();
   const listeners = new Set<() => void>();
   const store: FrameStore = {
+    registerCheckpoint: (session, checkpoint) =>
+      checkpoints.register(session.address, checkpoint),
+    checkpointDrafts: checkpoints.checkpoint,
+    restartUpdate: async () => {
+      if (restartUpdate === undefined)
+        throw new Error(
+          "Restart is unavailable in this window. Your current draft has not been changed.",
+        );
+      await restartUpdate();
+    },
+    bindUpdateRestart: (restart) => {
+      if (restartUpdate !== undefined)
+        throw new Error("This terminal already owns an update restart action");
+      restartUpdate = restart;
+      return () => {
+        if (restartUpdate === restart) restartUpdate = undefined;
+      };
+    },
     read: () => current,
     subscribe: (listener) => {
       listeners.add(listener);
@@ -271,16 +276,35 @@ function frameStore(root: ReturnType<typeof createRoot>): FrameStore {
     },
     update: (next) => {
       current = next;
+      if (!mounted) {
+        mounted = true;
+        root.render(<MountedFrame store={store} />);
+      }
       for (const listener of listeners) listener();
     },
   };
   mountedFrames.set(root, store);
-  root.render(<MountedFrame store={store} />);
   return store;
 }
 
 export function renderTuiConnecting(root: ReturnType<typeof createRoot>): void {
   frameStore(root).update({});
+}
+
+/** The application owns restart; frame transitions never replace its binding. */
+export function bindTuiUpdateRestart(
+  root: ReturnType<typeof createRoot>,
+  restart: () => Promise<void>,
+): () => void {
+  return frameStore(root).bindUpdateRestart(restart);
+}
+
+/** Synchronous public checkpoint barrier; never consumes or restores a draft. */
+export function checkpointTuiUpdateDrafts(
+  root: ReturnType<typeof createRoot>,
+  addresses: readonly string[],
+): void {
+  frameStore(root).checkpointDrafts(addresses);
 }
 
 export function renderTuiConversation(

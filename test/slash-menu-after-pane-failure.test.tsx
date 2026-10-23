@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "@fungi.computer/agar/query";
-import { createAppSurfaceCommandHost } from "@fungi.computer/oyster/shell/command-host";
+import { createAppSurfaceCommandHost } from "@fungi.computer/nacre/command-host";
 import { createWhistle } from "@fungi.computer/whistle";
 import { TuiFrame } from "../src/frame.js";
 import { createTuiFixture } from "./fixture.js";
@@ -72,17 +73,20 @@ test("typing / opens the command menu, including after a pane fails to open", as
       setup,
       (frame) => reads === 1 && !frame.includes("Open pane"),
     );
-    // The reason is a notice, not a dialog; the next key dismisses it.
+    // The reason is a toast, not a dialog: it never holds the keyboard, so the
+    // slash menu opens under it, and Esc then dismisses the toast alone.
     await waitForFrame(setup, (frame) => frame.includes(signedOut));
 
     await typeSlash();
-    expect(setup.captureCharFrame()).not.toContain(signedOut);
     await waitForFrame(setup, (frame) => frame.includes("/plan"));
+    expect(setup.captureCharFrame()).toContain(signedOut);
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressEscape();
+    });
+    await waitForFrame(setup, (frame) => !frame.includes(signedOut));
     expect(setup.captureCharFrame()).toContain("/plan");
   } finally {
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     host.dispose();
     client.clear();
   }

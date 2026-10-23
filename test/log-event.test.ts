@@ -20,6 +20,13 @@ const failureReport = z.strictObject({
   operation: z.string(),
   errorKind: z.enum(["error", "non-error"]),
   errorName: z.string().optional(),
+  chain: z.array(
+    z.strictObject({
+      name: z.string(),
+      code: z.string().optional(),
+      issues: z.array(z.string()).optional(),
+    }),
+  ),
   cause: z.literal("<redacted>"),
 });
 
@@ -64,6 +71,66 @@ test("failure reports persist only redacted metadata in a private log, not the t
     expect(messages).toEqual([]);
   } finally {
     console.error = originalError;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a wrapped schema failure logs its error classes and which keys the schema refused, never a value", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "fungi-diagnostic-chain-"));
+  const path = join(directory, "tui.jsonl");
+  try {
+    const refused = z.strictObject({ agents: z.array(z.strictObject({})) });
+    const parsed = refused.safeParse({
+      agents: [{}, { name: "Scout", "token=private-cause-marker": 1 }],
+    });
+    if (parsed.success) throw new Error("The fixture must be refused");
+    const mount = new Error("Pane mount failed private-cause-marker", {
+      cause: parsed.error,
+    });
+    const system = Object.assign(new Error("private-cause-marker"), {
+      code: "ENOENT",
+    });
+    expect(reportFailure("client-row-open", mount, path)).toBe(true);
+    expect(reportFailure("client-extension", system, path)).toBe(true);
+    const text = await readFile(path, "utf8");
+    const [wrapped, errno] = text
+      .trimEnd()
+      .split("\n")
+      .map((line) => failureReport.parse(JSON.parse(line)));
+    expect(wrapped?.chain).toEqual([
+      { name: "Error" },
+      {
+        name: "ZodError",
+        issues: ["unrecognized_keys at agents.1 [name,*]"],
+      },
+    ]);
+    expect(errno?.chain).toEqual([{ name: "Error", code: "ENOENT" }]);
+    expect(text).not.toContain("private-cause-marker");
+    expect(text).not.toContain("Scout");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a token-shaped key or path segment logs as *, never as itself", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "fungi-diagnostic-token-"));
+  const path = join(directory, "tui.jsonl");
+  try {
+    const token = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
+    const short = "sk-proj-abc123";
+    const refused = z.record(z.string(), z.strictObject({}));
+    const parsed = refused.safeParse({ [token]: { [short]: 1 } });
+    if (parsed.success) throw new Error("The fixture must be refused");
+    expect(reportFailure("client-row-open", parsed.error, path)).toBe(true);
+    const text = await readFile(path, "utf8");
+    const [report] = text
+      .trimEnd()
+      .split("\n")
+      .map((line) => failureReport.parse(JSON.parse(line)));
+    expect(report?.chain[0]?.issues).toEqual(["unrecognized_keys at * [*]"]);
+    expect(text).not.toContain("ghp_");
+    expect(text).not.toContain("sk-proj");
+  } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });

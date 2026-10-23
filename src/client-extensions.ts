@@ -21,6 +21,7 @@ export function clientActivity(
   queryClient: QueryClient,
   interactions: ParakeetInteractions | undefined,
   signal: AbortSignal,
+  questionExtensionId: string | undefined,
 ) {
   return Stream.toAsyncIterable(
     Stream.callback<ClientActivityV0>(
@@ -32,22 +33,28 @@ export function clientActivity(
             };
             signal.addEventListener("abort", end, { once: true });
             if (signal.aborted) end();
-            let activity: ClientActivityV0 = "unknown";
+            let activity: ClientActivityV0 = { state: "unknown" };
             let delivered: ClientActivityV0 | undefined;
             let unsubscribeHost: (() => void) | undefined;
             const report = () => {
               const interaction = interactions
                 ?.snapshot()
                 .open?.host.snapshot();
-              const next =
+              const next: ClientActivityV0 =
                 interaction?.status === "prompting" ||
                 (interaction?.status === "working" &&
                   interaction.handoff !== undefined)
-                  ? "blocked"
-                  : interaction?.status === "working"
-                    ? "working"
-                    : activity;
-              if (next === delivered) return;
+                  ? { state: "blocked" }
+                  : activity.state === "blocked"
+                    ? activity
+                    : interaction?.status === "working"
+                      ? { state: "working" }
+                      : activity;
+              if (
+                next.state === delivered?.state &&
+                next.header === delivered.header
+              )
+                return;
               delivered = next;
               Queue.offerUnsafe(queue, next);
             };
@@ -67,6 +74,7 @@ export function clientActivity(
                 activity = state;
                 report();
               },
+              questionExtensionId,
             );
             observeInteraction();
             return () => {
@@ -89,6 +97,8 @@ export function prepareClientExtensions(
     invocationRoot: string;
     entries: readonly string[];
     clients?: readonly ClientEntryV1[] | undefined;
+    /** The only Session extension whose attention headers may reach clients. */
+    questionExtensionId?: string | undefined;
     queryClient: QueryClient;
     onError: (error: Error) => void;
   }>,
@@ -157,6 +167,7 @@ export function prepareClientExtensions(
                             options.queryClient,
                             interactions,
                             controller.signal,
+                            options.questionExtensionId,
                           ),
                           signal: controller.signal,
                           onError: options.onError,

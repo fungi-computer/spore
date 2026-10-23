@@ -9,6 +9,7 @@ export type ThemeName = (typeof themeNames)[number];
 const preferencesSchema = z.strictObject({
   theme: z.enum(themeNames).default("terminal"),
   sigils: z.enum(["auto", "on", "off"]).optional(),
+  update: z.enum(["off", "notify"]).optional(),
 });
 const fileErrorSchema = z.object({ code: z.string() });
 const defaultPath = () => join(homedir(), ".config", "fungi", "tui.json");
@@ -16,6 +17,7 @@ const defaultPath = () => join(homedir(), ".config", "fungi", "tui.json");
 export type ThemePreference = Readonly<{
   theme: ThemeName;
   sigils?: "auto" | "on" | "off" | undefined;
+  update?: "off" | "notify" | undefined;
   error?: string;
 }>;
 
@@ -28,7 +30,7 @@ export async function loadThemePreference(
     const parsed = preferencesSchema.safeParse(value);
     if (!parsed.success)
       throw new Error(
-        "expected theme terminal, mocha, or latte; sigils auto, on, or off",
+        "expected theme terminal, mocha, or latte; sigils auto, on, or off; update off or notify",
       );
     return parsed.data;
   } catch (error) {
@@ -49,10 +51,7 @@ export async function saveThemePreference(
 ): Promise<void> {
   const current = await loadThemePreference(path);
   if (current.error) throw new Error(current.error);
-  const value: ThemePreference =
-    current.sigils === undefined
-      ? { theme }
-      : { theme, sigils: current.sigils };
+  const value: ThemePreference = { ...current, theme };
   await mkdir(dirname(path), { recursive: true });
   await writeFileAtomic(path, `${JSON.stringify(value)}\n`, {
     mode: 0o600,

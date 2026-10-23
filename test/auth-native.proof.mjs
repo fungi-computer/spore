@@ -39,6 +39,7 @@ let commands;
 let running;
 let promptArrived = Promise.withResolvers();
 let authFinished = Promise.withResolvers();
+let statusFinished = Promise.withResolvers();
 const ready = Promise.withResolvers();
 const mounted = Promise.withResolvers();
 let loginRun;
@@ -48,7 +49,9 @@ const serviceRun = runPrivateLocalService(
   directory,
   undefined,
   undefined,
-  async (_args, options) => {
+  async (args, options) => {
+    // /login reads configured access first; that is a status call, not a sign-in.
+    if (args[0] === "status") return { kind: "status", providers: [] };
     authCalls += 1;
     assert.equal(setup.renderer.isDestroyed, false);
     assert.equal(clientCloses, 0);
@@ -88,9 +91,13 @@ async function login() {
     .snapshot()
     .slash.find((entry) => entry.alias === "login");
   assert.ok(row, "missing login");
+  statusFinished = Promise.withResolvers();
   await act(() => {
     loginRun = commands.execute(row.commandId, { origin: "slash" });
   });
+  // /login reads configured access over the Local door before it asks; frame
+  // passes are not time, so wait for that round trip.
+  await bounded(statusFinished.promise, "account status");
   await setup.waitForFrame((frame) =>
     frame.includes("Choose a model provider"),
   );
@@ -148,7 +155,7 @@ try {
       ...manager,
       auth: async (request, interaction) => {
         try {
-          await manager.auth(request, {
+          return await manager.auth(request, {
             ...interaction,
             prompt: (request) => {
               const answer = interaction.prompt(request);
@@ -157,7 +164,8 @@ try {
             },
           });
         } finally {
-          authFinished.resolve();
+          if (request.command === "status") statusFinished.resolve();
+          else authFinished.resolve();
         }
       },
       connect: async (selection) => {
@@ -208,9 +216,11 @@ try {
   await act(async () => setup.mockInput.pressEnter());
   await bounded(authFinished.promise, "auth completion");
   await bounded(loginRun, "login completion");
-  await setup.waitForFrame((frame) => frame.includes("Signed in to OpenAI."));
-  await act(async () => setup.mockInput.pressEnter());
   await setup.waitForFrame((frame) => frame.includes("keep this draft"));
+  assert.equal(
+    setup.captureCharFrame().includes("Signed in to OpenAI."),
+    false,
+  );
   assert.equal(authCalls, 1);
 
   behavior = "failure";
@@ -274,7 +284,8 @@ try {
       await act(async () => setup.renderer.destroy());
     if (running) await bounded(running, "cleanup TUI");
   } finally {
-    await manager.stop();
+    // fungi stop SIGTERMs the service; this listener shares the proof process.
+    process.emit("SIGTERM", "SIGTERM");
     await serviceRun;
     await rm(root, { recursive: true, force: true });
     globalThis.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;

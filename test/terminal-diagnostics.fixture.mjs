@@ -22,8 +22,9 @@ async function runSession() {
   assert.ok(home, "the parent supplies an isolated fixture home");
   assert.equal(process.stdout.isTTY, true, "the fixture runs on its own PTY");
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  const content =
-    "const nested = " + "[".repeat(3000) + "0" + "]".repeat(3000) + ";";
+  // Incomplete streamed tool code reliably exercises source preservation.
+  // Valid deeply nested code may format successfully; stack depth is not a law.
+  const content = "return await files.read({";
   const message = runningToolsDesignSnapshot.messages.at(-1);
   const fixture = createDesignTuiFixture({
     snapshot: {
@@ -36,7 +37,7 @@ async function runSession() {
             content: [
               {
                 type: "toolCall",
-                id: "nested-code",
+                id: "incomplete-code",
                 name: "execute",
                 arguments: { code: content },
               },
@@ -75,7 +76,6 @@ async function runSession() {
             : [],
         },
         {
-          clientBuildId: undefined,
           loadThemePreference: async () => ({ theme: "terminal" }),
           prepareClientExtensions: (options) => {
             if (realAttach) return prepareClientExtensions(options);
@@ -91,6 +91,10 @@ async function runSession() {
           createWhistle: () => commands,
           createServiceManager: () => ({
             connect: async () => ({
+              sandboxStatus: async () => ({
+                state: "available",
+                requireSandbox: false,
+              }),
               agentId: "agent-fixture",
               sessionId: "session-fixture",
               session: {

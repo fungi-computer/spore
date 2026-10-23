@@ -1,16 +1,17 @@
 import { defineIdFamily } from "@fungi.computer/cairn/id";
 import type { KeyEvent, PasteEvent } from "@opentui/core";
 import type { ReactNode } from "react";
-import type { AppSurfaceCommandHost } from "@fungi.computer/oyster/shell/command-host";
+import type { AppSurfaceCommandHost } from "@fungi.computer/nacre/command-host";
 import {
   createWindowManager,
   type WindowHost,
-} from "@fungi.computer/oyster/shell/window-manager";
+} from "@fungi.computer/nacre/window-manager";
 import {
   arrangeTiles,
   createMaosaicoState,
   type Frame,
   type Minima,
+  type TilingLayout,
   type TilingOptions,
 } from "@fungi.computer/maosaico/headless";
 import type {
@@ -18,7 +19,6 @@ import type {
   PaneInstance,
   PaneKit,
   PaneKindEntry,
-  PaneNotice,
   PaneOpenOutcome,
   PaneSessions,
   PaneStatusItem,
@@ -26,7 +26,7 @@ import type {
   PaneValue,
   PaneViewport,
 } from "../button/index.js";
-import { reportFailure } from "../button/index.js";
+import { reportFailure, type ToastInput } from "../button/index.js";
 import { displayText } from "./display-text.js";
 import { paneValue } from "./value.js";
 
@@ -35,6 +35,20 @@ const paneIds = defineIdFamily({
   version: 1,
   kinds: { pane: { prefix: "tui_pane" } },
 });
+
+const nextLayout = {
+  "main-left": "main-top",
+  "main-top": "columns",
+  columns: "rows",
+  rows: "grid",
+  grid: "main-left",
+} satisfies Readonly<Record<TilingLayout, TilingLayout>>;
+
+export type PaneOpenDirection = "beside" | "below";
+export type PaneOpenPlacement = Readonly<{
+  direction: PaneOpenDirection;
+  afterPaneId: string | null;
+}>;
 
 type PaneContainer = Readonly<{ paneId: string }>;
 type PaneLaunch = Readonly<{
@@ -68,7 +82,7 @@ export type PaneRegistryOptions = Readonly<{
   sessions: PaneSessions;
   apps?: PaneKit["apps"];
   theme: PaneKit["theme"];
-  notify: (notice: PaneNotice) => void;
+  toast: (input: ToastInput) => void;
 }>;
 
 type MountedPane = {
@@ -100,12 +114,12 @@ export function createPaneRegistry(options: PaneRegistryOptions) {
   let disposed = false;
   const retired = () => disposed;
   let disposal: Promise<void> | undefined;
-  let axis: "x" | "y" = "x";
+  let layoutName: TilingLayout = "main-left";
   let mountGeneration = 0;
   const lifetime = new AbortController();
 
   const refresh = () => {
-    const tiling: TilingOptions = { axis, gap: 0 };
+    const tiling: TilingOptions = { layout: layoutName, gap: 0 };
     if (layout.mainSize !== undefined) tiling.mainSize = layout.mainSize;
     const arrangement = arrangeTiles(
       layout.tiles,
@@ -317,9 +331,17 @@ export function createPaneRegistry(options: PaneRegistryOptions) {
         live
           ? open(target)
           : Promise.resolve({ kind: "refused", reason: "Pane has closed" }),
-      notify: (notice) => {
+      toast: (input) => {
         if (live)
-          options.notify({ ...notice, message: displayText(notice.message) });
+          options.toast({
+            ...input,
+            // Attention belongs to this pane, not another terminal that happens
+            // to report the same failure. No identity survives acknowledgement.
+            key:
+              input.duration === "until-dismissed"
+                ? JSON.stringify([paneId, input.key ?? input.message])
+                : undefined,
+          });
       },
       apps:
         apps === undefined
@@ -510,6 +532,7 @@ export function createPaneRegistry(options: PaneRegistryOptions) {
   async function open(
     target: PaneTarget,
     focus = true,
+    placement?: PaneOpenPlacement,
   ): Promise<PaneOpenOutcome> {
     if (disposed) return { kind: "refused", reason: "Workspace has closed" };
     const instance = kinds.get(target.kind)?.instantiate(target);
@@ -533,6 +556,22 @@ export function createPaneRegistry(options: PaneRegistryOptions) {
       instances.delete(identity);
       await windows.close(paneId);
       throw new Error("Pane mount failed", { cause: window.error });
+    }
+    if (placement !== undefined) {
+      const anchor =
+        placement.afterPaneId === null
+          ? -1
+          : layout.tiles.indexOf(placement.afterPaneId);
+      for (
+        let index = layout.tiles.indexOf(paneId);
+        anchor >= 0 && index > anchor + 1;
+        index -= 1
+      ) {
+        const previous = layout.tiles[index - 1];
+        if (previous !== undefined) layout.swap(paneId, previous);
+      }
+      layoutName = placement.direction === "beside" ? "columns" : "rows";
+      refresh();
     }
     return { kind: "opened", paneId };
   }
@@ -584,8 +623,8 @@ export function createPaneRegistry(options: PaneRegistryOptions) {
 
   const focusedMount = () => mounts.get(layout.order.at(-1) ?? "");
   return {
-    /** The shell's non-modal notice, shared with every pane's kit. */
-    notify: options.notify,
+    /** The shell toast, shared with every pane kit. */
+    toast: options.toast,
     /** **Open pane** rows, in registration order, as each kind declares them. */
     launchers: options.kinds.flatMap((entry) =>
       entry.launcher === undefined ? [] : [entry.launcher],
@@ -604,7 +643,7 @@ export function createPaneRegistry(options: PaneRegistryOptions) {
       layout.zoom(layout.zoomed === paneId ? null : paneId);
     },
     resizeBy: (delta: number) => {
-      const tiling: TilingOptions = { axis, gap: 0 };
+      const tiling: TilingOptions = { layout: layoutName, gap: 0 };
       if (layout.mainSize !== undefined) tiling.mainSize = layout.mainSize;
       const arrangement = arrangeTiles(
         layout.tiles,
@@ -625,8 +664,15 @@ export function createPaneRegistry(options: PaneRegistryOptions) {
     resize: (size: number) => {
       layout.resizeMain(Math.max(0, size));
     },
-    split: (nextAxis: "x" | "y") => {
-      axis = nextAxis;
+    equalize: () => {
+      layout.resizeMain(undefined);
+    },
+    setLayout: (next: TilingLayout) => {
+      layoutName = next;
+      refresh();
+    },
+    cycleLayout: () => {
+      layoutName = nextLayout[layoutName];
       refresh();
     },
     viewport: (next: PaneViewport) => {

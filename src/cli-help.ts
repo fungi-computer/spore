@@ -1,4 +1,5 @@
 import { fungiAccountCommandHelp } from "@fungi.computer/truffle";
+import { agentsCommandHelp } from "./agents-command.js";
 import { computerCommandHelp } from "./computer-command.js";
 import { computersCommandHelp } from "./computers-command.js";
 import { extensionCommandHelp } from "./extension-command.js";
@@ -14,6 +15,7 @@ Start here:
 Conversations:
   fungi resume [--last]          Reopen a saved conversation
   fungi sessions <action>        List, resume or inspect saved conversations
+  fungi agents <action>          List, archive or restore this folder's Agents
   fungi run [prompt]             Run one prompt and print the answer
   fungi acp                      Connect an editor (Zed, Neovim) via ACP
 
@@ -34,6 +36,7 @@ Team Computers:
 Fungi itself:
   fungi extension <action>       Add, list, remove, enable or disable extensions
   fungi stop                     Stop the local background service
+  fungi reload                   Reload configuration for the next turn
   fungi update                   Update fungi to the latest release
   fungi help [command]           Show help for one command
 
@@ -44,12 +47,16 @@ Options:
       --extension <entry>        Enable an installed client extension
                                  (repeatable)
       --yes                      Skip setup prompts; continue local-only
+      --require-sandbox          Require the Local sandbox for this Agent
+      --no-require-sandbox       Allow fallback if its sandbox is unavailable
 
 Choose models and thinking levels inside fungi with /model and /thinking.
 Saved conversations remain after fungi stop.
 `;
 
 const sessionOptions = `  -C, --cd <path>                Project directory (default: current folder)
+      --require-sandbox          Refuse work if the Local sandbox is unavailable
+      --no-require-sandbox       Restore automatic attempt with fallback
       --fungi-mcp <url>          Select and remember a hosted Team Computer
       --extension <entry>
                                  Enable an installed client extension
@@ -76,6 +83,8 @@ and uses the ordinary Fungi login flow.
 Start a new conversation in this folder, skipping the conversation list.
 
   -C, --cd <path>                Project directory (default: current folder)
+      --require-sandbox          Refuse work if the Local sandbox is unavailable
+      --no-require-sandbox       Restore automatic attempt with fallback
       --extension <entry>        Enable an installed client extension
                                  (repeatable)
 `,
@@ -105,6 +114,9 @@ Run one prompt in a local Session and print the answer. Reads the prompt from
 stdin when it is omitted.
 
   -C, --cd <path>                Project directory (default: current folder)
+      --require-sandbox          Refuse work if the Local sandbox is unavailable
+      --no-require-sandbox       Restore automatic attempt with fallback
+      --agent <id>               Agent to run in when the folder has several
       --fungi-mcp <url>          Give the Agent tools on a Team Computer
 `,
     login: `Usage: fungi login
@@ -161,21 +173,31 @@ Installed with install.sh? Run the install command again instead.
 Git credential helper for a Fungi Team's tracker. Git runs it for you; it is
 not meant to be run by hand.
 `,
+    reload: `Usage: fungi reload [-C <directory>]
+
+Validate Team MCP connections, extension rosters and the invoking shell's PATH.
+Configuration reloaded; applies from the next turn. In-flight turns keep their
+captured configuration. Invalid input keeps the entire old configuration.
+Changed versions/configuration of an existing extension need a restart:
+run fungi stop, then reopen fungi.`,
     stop: `Usage: fungi stop
 
 Stop the shared local background service. Saved Sessions remain.
 `,
     mcp: `Usage: fungi mcp show [-C <path>]
-       fungi mcp use <url> [-C <path>]
+       fungi mcp use <url> [--from-file -] [-C <path>]
        fungi mcp forget [-C <path>]
 
-Show, switch, or forget this project's Team MCP endpoint. The project stores
-only the address; fungi login owns credentials. A running Local service keeps
-its existing connection until fungi stop.
+Show, switch, or forget this project's MCP endpoint. For an Oyster, use
+--from-file - to read its oyk_ key from stdin, never a command-line argument.
+The project stores only the address and authentication selection. Local owns
+credentials; fungi login remains the Hub sign-in path. A running Local service
+keeps its existing connection until fungi stop.
 `,
     computer: computerCommandHelp,
     extension: extensionCommandHelp,
     computers: computersCommandHelp,
+    agents: agentsCommandHelp,
     account: fungiAccountCommandHelp,
   }),
 );

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import assert from "node:assert/strict";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
 import { waitForLiveFrame } from "./native-readiness.js";
@@ -6,24 +7,31 @@ import { waitForLiveFrame } from "./native-readiness.js";
 /**
  * The gate hang: a PTY wait rendered frame after frame with no delay and no
  * deadline, so a line that never arrived kept a core busy forever. A live
- * wait must fail on time and leave the CPU to the work it waits for.
+ * wait must reject at its own deadline without spinning. Gate load can delay
+ * delivery of that deadline; elapsed time and process-wide CPU are not its law.
  */
-test("a live-frame wait for output that never comes fails on time, without spinning", async () => {
+test("a live-frame wait for output that never comes rejects at its deadline, without spinning", async () => {
   const setup = await testRender(<text>idle</text>, { width: 40, height: 5 });
   try {
-    const started = Date.now();
-    const cpu = process.cpuUsage();
-    const outcome = await waitForLiveFrame(
-      setup,
-      (frame) => frame.includes("never shown"),
-      600,
-    ).catch((cause: unknown) => cause);
-    const used = process.cpuUsage(cpu);
-    const elapsed = Date.now() - started;
-    expect(outcome).toBeInstanceOf(Error);
-    expect(elapsed).toBeLessThan(3_000);
-    // A spin uses about one core for the whole wait; a paced wait far less.
-    expect((used.user + used.system) / 1000).toBeLessThan(elapsed * 0.5);
+    let renders = 0;
+    await assert.rejects(
+      waitForLiveFrame(
+        {
+          ...setup,
+          renderOnce: async () => {
+            renders += 1;
+            await setup.renderOnce();
+          },
+        },
+        (frame) => frame.includes("never shown"),
+        600,
+      ),
+      /Expected live frame was not rendered:/u,
+    );
+    // The existing waiter paces renders at 20 ms: at most 30 intervals in
+    // 600 ms, plus the initial render and the deadline-observing render.
+    expect(renders).toBeGreaterThan(0);
+    expect(renders).toBeLessThanOrEqual(32);
   } finally {
     act(() => {
       setup.renderer.destroy();

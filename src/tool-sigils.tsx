@@ -71,6 +71,8 @@ export async function loadToolSigils(
     search: install("search"),
     // The run-error gutter mark; installed last so tool ids stay stable.
     error: install("error"),
+    // Another Agent's message; appended so earlier ids stay stable.
+    agent: install("agent"),
   };
 }
 

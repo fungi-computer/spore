@@ -5,12 +5,26 @@ import assert from "node:assert/strict";
 import * as Effect from "effect/Effect";
 import { createWhistle } from "@fungi.computer/whistle";
 import { runTuiCli } from "../src/cli-runtime.js";
+import { liveServiceStatusSchema } from "../../../runtimes/local/src/private-local-service-discovery.js";
+import { localServiceIds } from "../../../runtimes/local/src/private-local-service-ids.js";
 
 test("an updated idle client closes the old terminal and Session before resuming that Session in the installed build", async () => {
   const events = [];
   let controls;
   let exit;
   let idle = false;
+  let statusChecks = 0;
+  // Validate before starting the client: a stale fixture must fail the test,
+  // not be caught as an unavailable service inside the reconnect boundary.
+  const serviceStatus = liveServiceStatusSchema.parse({
+    serviceId: localServiceIds.service.generate(),
+    baseUrl: "http://127.0.0.1:1234",
+    protocol: 3,
+    version: "b".repeat(64),
+    pid: 1,
+    startedAt: "fixture-process-start",
+    diagnostics: { state: "active" },
+  });
   const restart = {
     kind: "restart",
     launcher: "/installed/new-fungi",
@@ -23,7 +37,11 @@ test("an updated idle client closes the old terminal and Session before resuming
       sessionId: "session-original",
     },
     {
-      clientBuildId: "a".repeat(64),
+      automaticInstalledRestart: true,
+      checkpointDrafts: (_root, addresses) => {
+        assert.deepEqual(addresses, ["fixture://session-original"]);
+        events.push("draft checkpoint");
+      },
       checkInstalledUpdate: async (sessions) => {
         assert.deepEqual(sessions, [restart.session]);
         events.push(idle ? "idle" : "running");
@@ -35,6 +53,10 @@ test("an updated idle client closes the old terminal and Session before resuming
       },
       createServiceManager: () => ({
         connect: async () => ({
+          sandboxStatus: async () => ({
+            state: "available",
+            requireSandbox: false,
+          }),
           agentId: "agent-fixture",
           sessionId: "session-original",
           databasePath: "/fixture/agent.sqlite",
@@ -49,11 +71,10 @@ test("an updated idle client closes the old terminal and Session before resuming
             events.push("old Session closed");
           },
         }),
-        status: async () => ({
-          serviceId: "updated-service",
-          baseUrl: "http://127.0.0.1:1234",
-          buildId: "b".repeat(64),
-        }),
+        status: async () => {
+          statusChecks += 1;
+          return serviceStatus;
+        },
       }),
       createWhistle,
       loadThemePreference: async () => ({ theme: "terminal" }),
@@ -71,7 +92,7 @@ test("an updated idle client closes the old terminal and Session before resuming
       renderRecovery: (_root, error) => {
         throw error;
       },
-      renderServiceMismatch: () => events.push("manual upgrade prompt"),
+      renderServiceUpdated: () => events.push("restart message"),
       enableKeymap: false,
       render: (_root, _query, _session, _commands, onExit, _theme, next) => {
         controls = next;
@@ -82,11 +103,16 @@ test("an updated idle client closes the old terminal and Session before resuming
   const timeout = setTimeout(() => exit?.(), 2_500);
   try {
     while (controls === undefined) await delay(1);
-    await controls.onObservationUnavailable();
+    assert.equal(await controls.onObservationUnavailable(), false);
     assert.deepEqual(events, ["running"]);
+    assert.equal(statusChecks, 1);
     idle = true;
     await app;
     assert.ok(events.includes("new client resumed"));
+    assert.ok(
+      events.indexOf("draft checkpoint") <
+        events.indexOf("old terminal closed"),
+    );
     assert.ok(
       events.indexOf("old terminal closed") <
         events.indexOf("new client resumed"),
@@ -95,7 +121,7 @@ test("an updated idle client closes the old terminal and Session before resuming
       events.indexOf("old Session closed") <
         events.indexOf("new client resumed"),
     );
-    assert.equal(events.includes("manual upgrade prompt"), false);
+    assert.equal(events.includes("restart message"), false);
   } finally {
     clearTimeout(timeout);
     exit?.();

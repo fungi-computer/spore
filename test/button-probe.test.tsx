@@ -131,7 +131,7 @@ function fakeKit() {
       return Promise.resolve({ kind: "opened", paneId: "probe-1" });
     },
     open: () => Promise.reject(new Error("not used by the probe")),
-    notify: () => undefined,
+    toast: () => undefined,
     sessions: {
       acquire: () => Promise.reject(new Error("not used by the probe")),
     },

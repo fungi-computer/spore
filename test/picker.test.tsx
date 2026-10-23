@@ -30,7 +30,6 @@ function Failure({ host }: { host: WhistleInteractionHost }) {
       <InteractionView
         host={host}
         colors={colors}
-        onRetry={() => undefined}
         onClose={() => {
           host.cancel();
         }}
@@ -63,7 +62,7 @@ for (const width of [80, 48]) {
           act(() => {
             setup.mockInput.pressArrow("down");
           });
-        await setup.renderOnce();
+        await act(async () => setup.renderOnce());
         const frame = setup.captureCharFrame();
         for (const label of labels) expect(frame).toContain(label);
         expect(frame).toContain(`▶ ${labels[index] ?? ""}`);
@@ -83,13 +82,23 @@ for (const width of [80, 48]) {
     const host = createWhistleInteractionHost({
       title: "Sign in to a model provider",
     });
-    host
-      .begin()
-      .settle({ status: "failed", message: "The provider refused this key." });
+    const session = host.begin();
+    session.interaction.notify({ type: "progress", message: "Signing in" });
     const setup = await testRender(<Failure host={host} />, {
       width,
       height: 24,
     });
+    const { failed } = await act(() =>
+      Promise.resolve({
+        // The run remains pending for Retry/Close. Join its initial failure
+        // publication here, then settle the actual run through cancellation below.
+        failed: Promise.allSettled([
+          session.interaction.run(() =>
+            Promise.reject(new Error("The provider refused this key.")),
+          ),
+        ]),
+      }),
+    );
     try {
       await act(async () => setup.renderOnce());
       const frame = setup.captureCharFrame();
@@ -106,6 +115,10 @@ for (const width of [80, 48]) {
       expect(lines[error + 1]?.trim()).toBe("");
       expect(lines[close + 1]?.trim()).toBe("");
     } finally {
+      act(() => {
+        host.cancel();
+      });
+      expect(await failed).toMatchObject([{ status: "rejected" }]);
       act(() => {
         setup.renderer.destroy();
       });
@@ -138,12 +151,12 @@ test("expand and filter reveal grouped choices and select their original answer"
       setup.mockInput.pressArrow("down");
       setup.mockInput.pressEnter();
     });
-    await setup.renderOnce();
+    await act(async () => setup.renderOnce());
     expect(selected).toEqual([]);
     expect(setup.captureCharFrame()).toContain("MORE PROVIDERS");
     expect(setup.captureCharFrame()).toContain("▶ DeepSeek");
     await act(async () => setup.mockInput.typeText("router"));
-    await setup.renderOnce();
+    await act(async () => setup.renderOnce());
     expect(setup.captureCharFrame()).toContain("▶ OpenRouter");
     expect(setup.captureCharFrame()).not.toContain("DeepSeek");
     act(() => {
@@ -193,12 +206,12 @@ test("the command picker filters every collapsed group and keeps descriptions on
       setup.mockInput.pressArrow("down");
       setup.mockInput.pressEnter();
     });
-    await setup.renderOnce();
+    await act(async () => setup.renderOnce());
     expect(setup.captureCharFrame()).toContain("PANES");
     expect(setup.captureCharFrame()).toContain("ADVANCED");
     expect(setup.captureCharFrame()).toContain("▶ Split panes");
     await act(async () => setup.mockInput.typeText("status"));
-    await setup.renderOnce();
+    await act(async () => setup.renderOnce());
     expect(setup.captureCharFrame()).toContain("▶ Session status");
     act(() => {
       setup.mockInput.pressEnter();

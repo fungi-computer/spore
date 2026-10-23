@@ -14,11 +14,15 @@ test("mounted account dispatch does not reconnect or close client resources", as
   const interaction = createWhistleInteractionHost({ title: "Sign in" }).begin()
     .interaction;
   const service = {
-    discover: async () => ({ agentCount: 0, sessions: [], problems: [] }),
+    discover: async () => ({ agents: [], sessions: [], problems: [] }),
     models: async () => [],
     connect: async () => {
       events.push("connect");
       return {
+        sandboxStatus: async () => ({
+          state: "available",
+          requireSandbox: false,
+        }),
         agentId: "agent-fixture",
         sessionId: "session-fixture",
         databasePath: "/tmp/fixture.sqlite",

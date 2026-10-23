@@ -1,3 +1,5 @@
+import { Fzf } from "fzf";
+
 export type TerminalChoice = Readonly<{
   name: string;
   description?: string | undefined;
@@ -7,7 +9,13 @@ export type TerminalChoice = Readonly<{
 export type PickerRow =
   | Readonly<{ kind: "heading"; label: string }>
   | Readonly<{ kind: "blank" }>
-  | Readonly<{ kind: "choice"; choice: TerminalChoice; index: number }>
+  | Readonly<{
+      kind: "choice";
+      choice: TerminalChoice;
+      index: number;
+      /** UTF-16 offsets into NFC-normalized `name + " " + description`. */
+      positions: ReadonlySet<number>;
+    }>
   | Readonly<{ kind: "expand"; label: string }>;
 
 /** Preserve answer indexes while grouping, filtering and hiding optional choices. */
@@ -29,31 +37,25 @@ export function pickerRows(
     expanded?: boolean;
   }> = {},
 ): readonly PickerRow[] {
-  const needle = query.trim().toLocaleLowerCase();
-  const ranked = choices
-    .map((choice, index) => {
-      const name = choice.name.toLocaleLowerCase();
-      const rank =
-        !needle || name.startsWith(needle)
-          ? 0
-          : name.includes(needle)
-            ? 1
-            : (choice.description ?? "").toLocaleLowerCase().includes(needle)
-              ? 2
-              : 3;
-      return { choice, index, rank };
-    })
-    .filter((entry) => entry.rank < 3)
-    .sort((a, b) => a.rank - b.rank || a.index - b.index);
-  const groups = new Map<string | undefined, typeof ranked>();
-  for (const entry of ranked) {
+  const needle = query.trim();
+  const matches = new Fzf(
+    choices.map((choice, index) => ({ choice, index })),
+    {
+      selector: ({ choice }) => `${choice.name} ${choice.description ?? ""}`,
+      casing: "case-insensitive",
+    },
+  )
+    .find(needle)
+    .map(({ item, positions }) => ({ ...item, positions }));
+  const groups = new Map<string | undefined, typeof matches>();
+  for (const entry of matches) {
     const group = groups.get(entry.choice.group) ?? [];
     group.push(entry);
     groups.set(entry.choice.group, group);
   }
   const visible = new Set<number>();
   const visibleGroups = new Set<string | undefined>();
-  for (const entry of ranked) {
+  for (const entry of matches) {
     if (!expanded && !needle) {
       if (
         entry.choice.group !== undefined &&
@@ -65,7 +67,7 @@ export function pickerRows(
         (group) => group !== undefined,
       ).length;
       const spacing = Math.max(0, nextGroups.size - 1);
-      const expansion = visible.size + 1 < ranked.length ? 2 : 0;
+      const expansion = visible.size + 1 < matches.length ? 2 : 0;
       if (
         visible.size >= visibleLimit ||
         visible.size + 1 + headings + spacing + expansion > rowLimit
@@ -76,15 +78,15 @@ export function pickerRows(
     visibleGroups.add(entry.choice.group);
   }
   const rows: PickerRow[] = [];
-  const hidden = ranked.length - visible.size;
+  const hidden = matches.length - visible.size;
   for (const [group, entries] of groups) {
     const shown = entries.filter(({ index }) => visible.has(index));
     if (shown.length === 0) continue;
     if (rows.length > 0) rows.push({ kind: "blank" });
     if (group !== undefined)
       rows.push({ kind: "heading", label: group.toLocaleUpperCase() });
-    for (const { choice, index } of shown)
-      rows.push({ kind: "choice", choice, index });
+    for (const { choice, index, positions } of shown)
+      rows.push({ kind: "choice", choice, index, positions });
   }
   if (hidden > 0) {
     if (rows.length > 0) rows.push({ kind: "blank" });

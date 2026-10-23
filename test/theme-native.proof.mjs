@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { pressDecodedKey } from "./native-readiness.js";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import process from "node:process";
@@ -350,7 +351,9 @@ async function runFrame({ width, mode, interactive = false }) {
     { width, height: 28, stdin: input, stdout: output },
   );
   try {
-    await setup.renderer.setupTerminal();
+    await act(async () => {
+      await setup.renderer.setupTerminal();
+    });
     setRendererCapabilities(setup.renderer, {
       ansi256: true,
       rgb: false,
@@ -490,9 +493,7 @@ async function runFrame({ width, mode, interactive = false }) {
     });
     assert.match(setup.captureCharFrame(), /after escape/u);
   } finally {
-    await act(async () => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     assert.equal(setup.renderer.listenerCount("palette"), 0);
     assert.equal(setup.renderer.listenerCount("theme_mode"), 0);
     client.clear();

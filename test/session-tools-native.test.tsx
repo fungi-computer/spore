@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { expect, test } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import {
   QueryClient,
   QueryClientProvider,
@@ -11,7 +12,11 @@ import { createWhistle } from "@fungi.computer/whistle";
 import { act } from "react";
 import { sigilGutterText } from "../src/button/index.js";
 import { TuiFrame } from "../src/frame.js";
-import { createTuiFixture, fixtureClients } from "./fixture.js";
+import {
+  createTuiFixture,
+  fixtureClients,
+  fixtureGoalStartedAt,
+} from "./fixture.js";
 import { captureFrame } from "./frame-capture.js";
 
 test("renders a checklist and waiting-loop footer at 80 and 120 columns", async () => {
@@ -23,7 +28,11 @@ test("renders a checklist and waiting-loop footer at 80 and 120 columns", async 
           revision: "run:one",
           objective: "Check",
           state: "paused",
-          stopReason: "Stalled: no progress for 3 turns",
+          startedAt: fixtureGoalStartedAt,
+          pauseCause: {
+            kind: "stalled",
+            detail: "Stalled: no progress for 3 turns",
+          },
         },
         loop: {
           loopId: "one",
@@ -68,7 +77,7 @@ test("renders a checklist and waiting-loop footer at 80 and 120 columns", async 
           ),
         );
         const frame = setup.captureCharFrame();
-        expect(frame).toContain("Goal · paused");
+        expect(frame).toContain("Goal paused (/goal resume) · Check");
         expect(frame).toContain("Stalled: no progress for 3 turns");
         expect(frame).not.toContain("Esc stop loop");
         const loopRows = frame
@@ -104,9 +113,7 @@ test("renders a checklist and waiting-loop footer at 80 and 120 columns", async 
           await captureFrame(setup, output, "session-tools-" + String(width));
         }
       } finally {
-        act(() => {
-          setup.renderer.destroy();
-        });
+        await destroyTestRenderer(setup);
         commands.close();
         client.clear();
         await fixture.waitForClose();

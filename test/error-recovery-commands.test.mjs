@@ -44,10 +44,8 @@ test("failed-run choices retry or deliberately continue and report the result", 
       assert.equal(outcome.status, "handled");
     }
     assert.deepEqual(calls, ["retry", "continue"]);
-    assert.deepEqual(notices, [
-      "Retrying the failed instruction.",
-      "Asked Shiitake to continue the previous task.",
-    ]);
+    // Starting what the person asked for is not announced.
+    assert.deepEqual(notices, []);
   } finally {
     lease.dispose();
   }

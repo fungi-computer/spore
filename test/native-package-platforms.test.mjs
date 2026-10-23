@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
   copyFile,
@@ -18,8 +19,14 @@ import { test } from "bun:test";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
 
-for (const cpu of ["arm64", "x64"]) {
-  test(`native macOS ${cpu} package resolves its patch engine and retains notices`, async () => {
+for (const platform of [
+  "darwin-arm64",
+  "darwin-x64",
+  "linux-x64",
+  "linux-arm64",
+]) {
+  const [os, cpu] = platform.split("-");
+  test(`native ${platform} package resolves its engines and retains notices`, async () => {
     const root = await mkdtemp(join(tmpdir(), "fungi-native-package-"));
     try {
       for (const file of [
@@ -28,6 +35,7 @@ for (const cpu of ["arm64", "x64"]) {
         "apps/tui/scripts/package-notices.mjs",
         "packages/cordyceps/native/apply-patch/notices.mjs",
         "packages/cordyceps/native/apply-patch/LICENSE.codex",
+        "packages/cordyceps/native/bwrap/pin.mjs",
       ]) {
         const target = join(root, file);
         await mkdir(dirname(target), { recursive: true });
@@ -38,7 +46,6 @@ for (const cpu of ["arm64", "x64"]) {
         join(root, "apps/tui/npm/licenses"),
         { recursive: true },
       );
-      const platform = `darwin-${cpu}`;
       // Cached compiler output is the packager's input. No compiler or native
       // executable is claimed by this fixture; real cross-build proofs are separate.
       for (const bin of [
@@ -61,6 +68,51 @@ for (const cpu of ["arm64", "x64"]) {
             ],
           }),
         );
+        if (os === "linux") {
+          const { bwrapPin, seccompPin } =
+            await import("../../../packages/cordyceps/native/bwrap/pin.mjs");
+          const payload = "BWRAP_FIXTURE";
+          const sha256 = createHash("sha256").update(payload).digest("hex");
+          await writeFile(join(bin, "fungi-bwrap"), payload, { mode: 0o755 });
+          await writeFile(join(bin, "fungi-bwrap.sha256"), `${sha256}\n`);
+          const filter = "SECCOMP_FILTER_FIXTURE";
+          const filterSha256 = createHash("sha256")
+            .update(filter)
+            .digest("hex");
+          await writeFile(join(bin, "fungi-seccomp.bpf"), filter);
+          await writeFile(
+            join(bin, "fungi-seccomp.bpf.sha256"),
+            `${filterSha256}\n`,
+          );
+          await writeFile(
+            join(bin, "bwrap-build.json"),
+            JSON.stringify({
+              platform,
+              upstream: bwrapPin,
+              sha256,
+              seccomp: { generator: seccompPin, sha256: filterSha256 },
+              packages: [
+                { name: "bubblewrap", texts: ["Fixture bubblewrap terms"] },
+                {
+                  name: "sandbox-runtime-seccomp-generator",
+                  texts: ["Fixture seccomp terms"],
+                },
+              ],
+            }),
+          );
+          for (const file of [
+            "LICENSE.bubblewrap",
+            "LICENSE.libcap",
+            "LICENSE.sandbox-runtime",
+            "SOURCE.bubblewrap.tar.xz",
+          ])
+            await writeFile(join(bin, file), "fixture distribution input");
+          await mkdir(join(bin, "bwrap-build-source"));
+          await writeFile(
+            join(bin, "bwrap-build-source", "Dockerfile"),
+            "fixture recipe",
+          );
+        }
       }
       const result = spawnSync(
         "node",
@@ -72,9 +124,9 @@ for (const cpu of ["arm64", "x64"]) {
       const manifestPath = join(output, "package.json");
       const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
       assert.equal(manifest.name, `@fungi.computer/spore-native-${platform}`);
-      assert.deepEqual(manifest.os, ["darwin"]);
+      assert.deepEqual(manifest.os, [os]);
       assert.deepEqual(manifest.cpu, [cpu]);
-      assert.equal(manifest.libc, undefined);
+      assert.deepEqual(manifest.libc, os === "linux" ? ["glibc"] : undefined);
       assert.equal(
         manifest.bin["fungi-apply-patch"],
         "./bin/fungi-apply-patch",
@@ -89,8 +141,69 @@ for (const cpu of ["arm64", "x64"]) {
         /Fixture upstream terms/,
       );
       const readme = await readFile(join(output, "README.md"), "utf8");
-      assert.match(readme, /macOS 13\.5/);
-      assert.match(readme, cpu === "arm64" ? /Apple Silicon/ : /Intel Mac/);
+      if (os === "linux") {
+        assert.match(readme, /glibc 2\.35/);
+        const bwrap = createRequire(manifestPath).resolve(
+          `${manifest.name}/bin/fungi-bwrap`,
+        );
+        assert.equal(await readFile(bwrap, "utf8"), "BWRAP_FIXTURE");
+        const filter = join(dirname(bwrap), "fungi-seccomp.bpf");
+        assert(manifest.files.includes("bin/fungi-seccomp.bpf"));
+        assert.equal(await readFile(filter, "utf8"), "SECCOMP_FILTER_FIXTURE");
+        assert.match(
+          await readFile(join(output, "THIRD_PARTY_NOTICES"), "utf8"),
+          /Fixture bubblewrap terms/,
+        );
+        assert.match(
+          await readFile(join(output, "THIRD_PARTY_NOTICES"), "utf8"),
+          /Fixture seccomp terms/,
+        );
+        for (const bin of [
+          join(root, `.botanical/native-build/${platform}/bin`),
+          join(root, "runtimes/local/native/bin"),
+        ])
+          await writeFile(join(bin, "fungi-seccomp.bpf"), "TAMPERED_FILTER");
+        const tamperedFilter = spawnSync(
+          "node",
+          [join(root, "apps/tui/scripts/bundle-native.mjs"), platform],
+          { encoding: "utf8" },
+        );
+        assert.equal(
+          tamperedFilter.status,
+          1,
+          "A changed filter must refuse packaging",
+        );
+        assert.match(tamperedFilter.stderr, /fungi-seccomp.bpf.*digest/);
+        for (const bin of [
+          join(root, `.botanical/native-build/${platform}/bin`),
+          join(root, "runtimes/local/native/bin"),
+        ])
+          await writeFile(
+            join(bin, "fungi-seccomp.bpf"),
+            "SECCOMP_FILTER_FIXTURE",
+          );
+        for (const bin of [
+          join(root, `.botanical/native-build/${platform}/bin`),
+          join(root, "runtimes/local/native/bin"),
+        ])
+          await writeFile(join(bin, "fungi-bwrap"), "TAMPERED_FIXTURE");
+        const tampered = spawnSync(
+          "node",
+          [join(root, "apps/tui/scripts/bundle-native.mjs"), platform],
+          { encoding: "utf8" },
+        );
+        assert.equal(
+          tampered.status,
+          1,
+          "A changed payload must refuse packaging",
+        );
+        assert.match(tampered.stderr, /digest/);
+      } else {
+        assert.match(readme, /macOS 13\.5/);
+        assert.match(readme, cpu === "arm64" ? /Apple Silicon/ : /Intel Mac/);
+        assert.equal(manifest.exports["./bin/fungi-bwrap"], undefined);
+        assert(!manifest.files.includes("bin/fungi-bwrap"));
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }

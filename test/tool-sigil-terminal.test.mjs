@@ -194,10 +194,10 @@ for (const [
       if (!enabled) expect(graphics).toEqual([]);
       expect(
         graphics.filter((sequence) => sequence.includes("a=t,")),
-      ).toHaveLength(enabled ? 7 : 0);
+      ).toHaveLength(enabled ? 8 : 0);
       expect(
         graphics.filter((sequence) => sequence.includes("a=p,")),
-      ).toHaveLength(enabled ? 7 : 0);
+      ).toHaveLength(enabled ? 8 : 0);
       // Direct Ghostty/Kitty/herdr stay byte-identical: no tmux DCS framing
       // ever appears outside tmux. Inside tmux, every transmitted sequence
       // carries it so tmux forwards the bytes instead of swallowing them.

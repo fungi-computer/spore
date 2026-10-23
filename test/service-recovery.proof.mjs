@@ -8,6 +8,8 @@ import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 import { act } from "react";
 import { CodeRenderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
+import { notifyManager } from "@tanstack/query-core";
+import { createQueryClient } from "@fungi.computer/agar/query";
 import { createWhistle } from "@fungi.computer/whistle";
 import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 
@@ -28,12 +30,33 @@ export async function proveServiceRecovery({
   const commands = createWhistle();
   const mounted = Promise.withResolvers();
   const watchReady = Promise.withResolvers();
-  const watchClosed = Promise.withResolvers();
+  const queryClient = createQueryClient();
   let setup;
   let watchCloses = 0;
   let watchAttempts = 0;
   let running;
   let selected;
+  // Native frame waits stop at renderer idle; first join the real stream-query error.
+  async function failObservation(failure, cause) {
+    const settled = Promise.withResolvers();
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (
+        event.query.state.status === "error" &&
+        event.query.state.error === cause
+      )
+        settled.resolve();
+    });
+    try {
+      await act(async () => {
+        failure.reject(cause);
+        await settled.promise;
+        await new Promise((resolve) => notifyManager.schedule(resolve));
+        await setup.renderOnce();
+      });
+    } finally {
+      unsubscribe();
+    }
+  }
   async function capture(state) {
     const directory = process.env.TUI_PROOF_FRAME_DIR;
     if (directory === undefined) return;
@@ -43,6 +66,8 @@ export async function proveServiceRecovery({
       setup.captureCharFrame(),
     );
   }
+  const previousActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   try {
     await owner.session.command({
       type: "prompt",
@@ -103,56 +128,60 @@ export async function proveServiceRecovery({
           close: async () => {
             watchCloses += 1;
             await watch.close();
-            watchClosed.resolve();
           },
         };
       },
     };
-    running = runTuiCli(
-      {
-        invocationRoot: root,
-        databasePath: owner.databasePath,
-        sessionId: owner.sessionId,
-      },
-      {
-        prepareClientExtensions: noOpClientExtensions,
-        createServiceManager: () => ({
-          ...manager,
-          connect: async () => ({ ...selected, session }),
-        }),
-        createWhistle: () => commands,
-        loadThemePreference: async () => ({ theme: "mocha" }),
-        enableKeymap: true,
-        createRenderer: async (options) => {
-          setup = await createTestRenderer({
-            ...options,
-            width: 90,
-            height: 22,
-            useKittyKeyboard: null,
-          });
-          mounted.resolve();
-          return setup.renderer;
+    await act(async () => {
+      running = runTuiCli(
+        {
+          invocationRoot: root,
+          databasePath: owner.databasePath,
+          sessionId: owner.sessionId,
         },
-      },
-    );
-    await mounted.promise;
+        {
+          prepareClientExtensions: noOpClientExtensions,
+          createServiceManager: () => ({
+            ...manager,
+            connect: async () => ({ ...selected, session }),
+          }),
+          createWhistle: () => commands,
+          createQueryClient: () => queryClient,
+          loadThemePreference: async () => ({ theme: "mocha" }),
+          enableKeymap: true,
+          createRenderer: async (options) => {
+            setup = await createTestRenderer({
+              ...options,
+              width: 90,
+              height: 22,
+              useKittyKeyboard: null,
+            });
+            mounted.resolve();
+            return setup.renderer;
+          },
+        },
+      );
+      await mounted.promise;
+    });
     await act(async () => {
       await setup.renderOnce();
     });
-    await Promise.race([
-      watchReady.promise,
-      running.then(() => {
-        throw new Error("Client exited before observation opened");
-      }),
-    ]);
     await act(async () => {
+      await Promise.race([
+        watchReady.promise,
+        running.then(() => {
+          throw new Error("Client exited before observation opened");
+        }),
+      ]);
       await setup.renderOnce();
     });
-    await setup.waitForFrame(
-      (frame) =>
-        frame.includes("Prove the installed client.") &&
-        frame.includes("Hold recovery work"),
-    );
+    await act(async () => {
+      await setup.waitForFrame(
+        (frame) =>
+          frame.includes("Prove the installed client.") &&
+          frame.includes("Hold recovery work"),
+      );
+    });
     const markdown = nodes(setup.renderer.root).filter(
       (node) => node instanceof TextRenderable,
     );
@@ -184,12 +213,17 @@ export async function proveServiceRecovery({
       prompt: () => Promise.reject(new Error("Queue commands do not prompt")),
       notify: (notice) => queueNotices.push(notice.message),
     };
-    const runQueueCommand = (action) =>
-      executeAlias(commands, "queue", {
-        origin: "agent",
-        arguments: { action },
-        interaction: queueInteraction,
+    const runQueueCommand = async (action) => {
+      let outcome;
+      await act(async () => {
+        outcome = await executeAlias(commands, "queue", {
+          origin: "agent",
+          arguments: { action },
+          interaction: queueInteraction,
+        });
       });
+      return outcome;
+    };
     assert.equal((await runQueueCommand("list")).status, "handled");
     assert.match(
       queueNotices[0],
@@ -199,26 +233,49 @@ export async function proveServiceRecovery({
       queueNotices[0],
       new RegExp(`queued · accepted: ${lastQueued.text}`),
     );
-    assert.equal((await runQueueCommand("editLast")).status, "handled");
-    await setup.waitForFrame((frame) => frame.includes(lastQueued.text));
-    assert.match(
-      queueNotices.at(-1),
-      /Queued prompt returned to the composer for editing/u,
-    );
-    release();
-    let settledSnapshot;
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      settledSnapshot = await owner.session.read();
-      if (
-        settledSnapshot.terminals?.some(
-          (terminal) =>
-            terminal.commandId === lastQueued.commandId &&
-            terminal.outcome === "cancelled",
+    // Queue commands only list; recall belongs to the empty composer's Up gesture.
+    await act(async () => {
+      setup.mockInput.pressArrow("up");
+      await setup.renderOnce();
+    });
+    // Frame passes do not wait for the real loopback cancellation request.
+    let recalledSnapshot;
+    await act(async () => {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        recalledSnapshot = await owner.session.read();
+        if (
+          !recalledSnapshot.pending.prompts.some(
+            (prompt) => prompt.commandId === lastQueued.commandId,
+          )
         )
-      )
-        break;
-      await new Promise((resolve) => globalThis.setTimeout(resolve, 25));
-    }
+          break;
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 25));
+      }
+    });
+    await act(async () =>
+      setup.waitForFrame((frame) => frame.includes(`› ${lastQueued.text}`)),
+    );
+    assert.deepEqual(
+      recalledSnapshot.pending.prompts.map((prompt) => prompt.commandId),
+      [queuedFirst.commandId],
+      "Up returns the newest queued prompt to the composer without withdrawing its predecessor",
+    );
+    let settledSnapshot;
+    await act(async () => {
+      release();
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        settledSnapshot = await owner.session.read();
+        if (
+          settledSnapshot.terminals?.some(
+            (terminal) =>
+              terminal.commandId === lastQueued.commandId &&
+              terminal.outcome === "cancelled",
+          )
+        )
+          break;
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 25));
+      }
+    });
     assert.ok(
       settledSnapshot?.terminals?.some(
         (terminal) =>
@@ -243,64 +300,85 @@ export async function proveServiceRecovery({
       prompt: () => Promise.reject(new Error("Reconnect does not prompt")),
       notify: (notice) => reconnectNotices.push(notice.message),
     };
-    assert.deepEqual(
-      (
-        await executeAlias(commands, "reconnect", {
-          origin: "slash",
-          interaction: reconnectInteraction,
-        })
-      ).result,
-      { kind: "nothing_to_reconnect", state: "connected" },
-    );
+    await act(async () => {
+      assert.deepEqual(
+        (
+          await executeAlias(commands, "reconnect", {
+            origin: "slash",
+            interaction: reconnectInteraction,
+          })
+        ).result,
+        { kind: "nothing_to_reconnect", state: "connected" },
+      );
+    });
     assert.equal(watchAttempts, 1);
-    await act(async () => {
-      failedObservation.reject(new Error("Controlled observation failure"));
-    });
-    await watchClosed.promise;
-    await act(async () => {
-      await setup.renderOnce();
-    });
+    await failObservation(
+      failedObservation,
+      new Error("Controlled observation failure"),
+    );
     // Read the full cause at a width that fits the owner-resolved model label,
     // then restore the ordinary terminal width for reconnect checks.
-    setup.resize(140, 22);
+    await act(async () => {
+      setup.resize(140, 22);
+      await setup.renderOnce();
+    });
     await setup.waitForFrame((frame) =>
       frame.includes("disconnected: Controlled observation"),
     );
-    setup.resize(90, 22);
-    assert.deepEqual(
-      (
-        await executeAlias(commands, "reconnect", {
-          origin: "slash",
-          interaction: reconnectInteraction,
-        })
-      ).result,
-      { kind: "reconnected" },
-    );
+    await act(async () => {
+      setup.resize(90, 22);
+      await setup.renderOnce();
+    });
+    await act(async () => {
+      assert.deepEqual(
+        (
+          await executeAlias(commands, "reconnect", {
+            origin: "slash",
+            interaction: reconnectInteraction,
+          })
+        ).result,
+        { kind: "reconnected" },
+      );
+    });
     assert.equal(watchAttempts, 2);
-    assert.deepEqual(reconnectNotices, [
-      "Session history is already connected.",
-      "Session history reconnected.",
-    ]);
-    setup.resize(140, 22);
+    assert.deepEqual(
+      reconnectNotices,
+      ["Session history is already connected."],
+      "successful reconnect is visible in history without a success echo",
+    );
+    await act(async () => {
+      setup.resize(140, 22);
+      await setup.renderOnce();
+    });
     await setup.waitForFrame((frame) => frame.includes("● idle"));
-    secondFailure.reject(new Error("Controlled second observation failure"));
+    await failObservation(
+      secondFailure,
+      new Error("Controlled second observation failure"),
+    );
     await setup.waitForFrame((frame) =>
       frame.includes("disconnected: Controlled second"),
     );
-    setup.resize(90, 22);
-    assert.deepEqual(
-      (
-        await executeAlias(commands, "reconnect", {
-          origin: "slash",
-          interaction: reconnectInteraction,
-        })
-      ).result,
-      { kind: "failed", cause: "Controlled reconnect failure" },
-    );
+    await act(async () => {
+      setup.resize(90, 22);
+      await setup.renderOnce();
+    });
+    await act(async () => {
+      const failedReconnect = await executeAlias(commands, "reconnect", {
+        origin: "slash",
+        interaction: reconnectInteraction,
+      });
+      assert.equal(failedReconnect.status, "failed");
+      assert.deepEqual(failedReconnect.error, {
+        code: "reconnect_failed",
+        message:
+          "Reconnect failed: Controlled reconnect failure. Check the connection, then try /reconnect again.",
+      });
+    });
     assert.equal(watchAttempts, 3);
-    assert.equal(
-      reconnectNotices.at(-1),
-      "Reconnect failed: Controlled reconnect failure. Check the connection, then try /reconnect again.",
+    assert.deepEqual(
+      reconnectNotices,
+      ["Session history is already connected."],
+      "a failed reconnect returns its Whistle error rather than an info notice",
     );
     await setup.waitForFrame(
       (frame) =>
@@ -361,11 +439,17 @@ export async function proveServiceRecovery({
       await reopened.close();
     }
   } finally {
-    release();
-    if (running !== undefined) {
-      if (!setup?.renderer.isDestroyed)
-        await commands.execute("tui:exit", { origin: "slash" });
-      await running;
-    } else await selected?.close();
+    try {
+      await act(async () => {
+        release();
+        if (running !== undefined) {
+          if (!setup?.renderer.isDestroyed)
+            await commands.execute("tui:exit", { origin: "slash" });
+          await running;
+        } else await selected?.close();
+      });
+    } finally {
+      globalThis.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
   }
 }

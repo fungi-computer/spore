@@ -1,10 +1,11 @@
 import { test, expect } from "bun:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "@fungi.computer/agar/query";
-import { createAppSurfaceCommandHost } from "@fungi.computer/oyster/shell/command-host";
-import type { AppDirectory } from "@fungi.computer/oyster/shell/app-directory";
+import { createAppSurfaceCommandHost } from "@fungi.computer/nacre/command-host";
+import type { AppDirectory } from "@fungi.computer/nacre/app-directory";
 import { createWhistle } from "@fungi.computer/whistle";
 import { TuiFrame } from "../src/frame.js";
 import { createTuiFixture } from "./fixture.js";
@@ -112,12 +113,18 @@ test("the shell App picker hands an App without Gills to its admitted full UI", 
       setup.mockInput.pressEnter();
     });
     await waitForFrame(setup, () => reads === 2);
-    const keys = host.active().bindings.find((row) => row.title === "Panes");
-    if (keys === undefined) throw new Error("Panes command missing");
+    const keys = host
+      .active()
+      .bindings.find((row) => row.title === "All commands");
+    if (keys === undefined) throw new Error("All commands binding missing");
     await act(async () => {
       await host.execute(keys.commandId, { origin: "programmatic" });
     });
-    await waitForFrame(setup, (frame) => frame.includes("All commands"));
+    await waitForFrame(
+      setup,
+      (frame) =>
+        frame.includes("Commands") && frame.includes("/ type to filter"),
+    );
     await act(async () => {
       pending?.resolve(directory);
       await setup.renderOnce();
@@ -127,13 +134,12 @@ test("the shell App picker hands an App without Gills to its admitted full UI", 
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressArrow("down");
     });
-    expect(setup.captureCharFrame()).toContain("All commands");
+    expect(setup.captureCharFrame()).toContain("Commands");
+    expect(setup.captureCharFrame()).toContain("/ type to filter");
     expect(setup.captureCharFrame()).not.toContain("Full UI App");
     expect(opened).toHaveLength(1);
   } finally {
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     host.dispose();
     client.clear();
   }
@@ -166,9 +172,7 @@ test("Open pane lists the launchers registered kinds declare", async () => {
     expect(frame).toContain("Local terminal");
     expect(frame).not.toContain("Apps");
   } finally {
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     host.dispose();
     client.clear();
   }

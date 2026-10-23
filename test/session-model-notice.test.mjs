@@ -21,12 +21,12 @@ const noticeText =
 for (const [providerId, status, preferenceProviderId, expected] of [
   ["openai", "signed in", "openai", undefined],
   ["anthropic", "signed in", "anthropic", undefined],
-  ["fungi", "missing login", "fungi", { tone: "info", message: noticeText }],
+  ["fungi", "missing login", "fungi", noticeText],
   ["fungi", "signed in", "fungi", undefined],
   ["fungi", "catalog unavailable", "fungi", undefined],
   ["fungi", "auth unavailable", "fungi", undefined],
   ["openai", "signed in", null, undefined],
-  ["fungi", "missing login", "openai", { tone: "info", message: noticeText }],
+  ["fungi", "missing login", "openai", noticeText],
 ]) {
   test(`startup notice follows the effective ${providerId} model (${status}, preference ${preferenceProviderId ?? "inherited"})`, async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -74,6 +74,10 @@ for (const [providerId, status, preferenceProviderId, expected] of [
         },
       },
       effectiveModel: async () => effective,
+      sandboxStatus: async () => ({
+        state: "available",
+        requireSandbox: false,
+      }),
       close: async () => undefined,
     };
     try {
@@ -85,14 +89,19 @@ for (const [providerId, status, preferenceProviderId, expected] of [
             authModels: { checkAuth: async () => undefined },
           },
           {
-            clientBuildId: undefined,
             loadThemePreference: async () => ({ theme: "terminal" }),
             prepareClientExtensions: noOpClientExtensions,
             createWhistle: () => commands,
             createQueryClient: () => queryClient,
             createServiceManager: () => ({
               discover: async () => ({
-                agentCount: 1,
+                agents: [
+                  {
+                    agentId: "one",
+                    databasePath: "/project/one/agent.sqlite",
+                    sessionCount: 1,
+                  },
+                ],
                 problems: [],
                 sessions: [{ ...host, resume: async () => host }],
               }),
@@ -168,7 +177,9 @@ for (const [providerId, status, preferenceProviderId, expected] of [
         );
       });
       await act(async () => setup.renderOnce());
-      assert.deepEqual(store.snapshot().notice, expected);
+      // Access prerequisites derive from live model access, never a transient
+      // interaction notice.
+      assert.equal(store.snapshot().notice, undefined);
       assert.ok(!setup.captureCharFrame().includes(effective.label));
       if (expected !== undefined)
         assert.ok(setup.captureCharFrame().includes(noticeText));

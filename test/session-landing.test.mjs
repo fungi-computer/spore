@@ -5,9 +5,13 @@ import { runTuiCli } from "../src/cli-runtime.js";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 
 const host = {
+  sandboxStatus: async () => ({
+    state: "available",
+    requireSandbox: false,
+  }),
   agentId: "agent-landing",
   sessionId: "session-landing",
-  databasePath: "/project/newest.sqlite",
+  databasePath: "/project/one/agent.sqlite",
   session: {},
   close: async () => undefined,
 };
@@ -21,7 +25,7 @@ async function launch({
   const calls = [];
   let renderedFolder;
   const sessions = ["newest", "older"].map((name, index) => ({
-    databasePath: `/project/${name}.sqlite`,
+    databasePath: "/project/one/agent.sqlite",
     sessionId: name,
     title: name,
     createdAt: 1,
@@ -40,7 +44,15 @@ async function launch({
         discover: async (folder) => {
           assert.equal(folder, "/project");
           return {
-            agentCount: empty ? 0 : 2,
+            agents: empty
+              ? []
+              : [
+                  {
+                    agentId: "one",
+                    databasePath: "/project/one/agent.sqlite",
+                    sessionCount: 1,
+                  },
+                ],
             sessions: empty ? [] : sessions,
             problems: [],
           };
@@ -51,7 +63,7 @@ async function launch({
           return host;
         },
         createSession: async (creation) => {
-          assert.equal(creation.databasePath, "/project/newest.sqlite");
+          assert.equal(creation.databasePath, "/project/one/agent.sqlite");
           assert.equal(creation.invocationRoot, "/project");
           assert.ok(creation.requestId);
           calls.push("create");

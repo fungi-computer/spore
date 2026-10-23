@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { type Renderable } from "@opentui/core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "@fungi.computer/agar/query";
@@ -25,7 +26,7 @@ for (const { width, height } of [
   { width: 160, height: 48 },
 ]) {
   for (const pending of [false, true]) {
-    test(`Goal turn is one muted row; human text stays a bubble (${String(width)}x${String(height)}, ${pending ? "queued" : "confirmed"})`, async () => {
+    test(`automated Goal and Loop prompts leave the timeline; human text stays a bubble (${String(width)}x${String(height)}, ${pending ? "queued" : "confirmed"})`, async () => {
       const text = "Goal turn · Keep the menus tidy";
       const origin = {
         extensionId: goalContract.id,
@@ -79,6 +80,7 @@ for (const { width, height } of [
           prompts: pending
             ? [
                 {
+                  requestId: "request-" + "goal-command",
                   commandId: "goal-command",
                   text,
                   delivery: "followUp",
@@ -109,23 +111,17 @@ for (const { width, height } of [
         const rows = descendants(setup.renderer.root).filter((node) =>
           node.id.startsWith("tui-timeline-row:"),
         );
-        expect(rows.map((row) => row.height)).toEqual([3, 3, 3, 1]);
-        const lines = setup
-          .captureSpans()
-          .lines.filter((line) =>
-            line.spans.some((span) => span.text.includes(text)),
-          );
-        expect(lines).toHaveLength(2);
-        const human = lines[0]?.spans.find((span) => span.text.includes(text));
-        const goal = lines[1]?.spans.find((span) => span.text.includes(text));
-        expect(human?.attributes).toBe(1);
-        expect(goal?.attributes).toBe(2);
+        expect(rows.map((row) => row.height)).toEqual([3]);
+        const frame = setup.captureCharFrame();
+        // A person typing the same text as the automated Goal turn still sees it.
+        expect(
+          frame.split("\n").filter((line) => line.includes(text)),
+        ).toHaveLength(1);
+        expect(frame).not.toContain("Check the kiln");
         expect(setup.captureCharFrame()).not.toContain("forage.search");
         expect(setup.captureCharFrame()).not.toContain("goal.get_goal");
       } finally {
-        act(() => {
-          setup.renderer.destroy();
-        });
+        await destroyTestRenderer(setup);
         query.clear();
         commands.close();
       }

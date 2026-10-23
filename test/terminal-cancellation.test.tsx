@@ -5,6 +5,58 @@ import { testRender } from "@opentui/react/test-utils";
 
 import { useTerminalCancellation } from "../src/panes/conversation/terminal-controls.js";
 
+test("Esc stops only the turn; a quick second Esc still stops helpers after the parent becomes idle", async () => {
+  let controls: ReturnType<typeof useTerminalCancellation> | undefined;
+  let setIdle: (() => void) | undefined;
+  const calls: string[] = [];
+  function Probe() {
+    const [idle, changeIdle] = useState(false);
+    setIdle = () => {
+      changeIdle(true);
+    };
+    controls = useTerminalCancellation({
+      commandId: idle ? undefined : "running",
+      status: idle ? "idle" : "thinking",
+      dismissInteraction: () => false,
+      interaction: null,
+      queued: false,
+      waitingLabel: undefined,
+      cancel: () => {
+        calls.push("turn");
+        return Promise.resolve();
+      },
+      stopAll: () => {
+        calls.push("tree");
+        return Promise.resolve();
+      },
+      cancelWaiting: () => Promise.resolve(),
+      onCancelFailure: (cause) => {
+        throw cause;
+      },
+      exit: undefined,
+    });
+    return <box />;
+  }
+  const setup = await testRender(<Probe />, { width: 40, height: 5 });
+  try {
+    await act(async () => {
+      await controls?.keyboard(false);
+    });
+    expect(calls).toEqual(["turn"]);
+    act(() => {
+      setIdle?.();
+    });
+    await act(async () => {
+      await controls?.keyboard(false);
+    });
+    expect(calls).toEqual(["turn", "tree"]);
+  } finally {
+    act(() => {
+      setup.renderer.destroy();
+    });
+  }
+});
+
 test("a second Ctrl+C exits even when the first remote cancellation failed", async () => {
   let controls: ReturnType<typeof useTerminalCancellation> | undefined;
   let cancels = 0;

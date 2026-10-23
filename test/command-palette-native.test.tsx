@@ -97,38 +97,22 @@ for (const width of [80, 160]) {
       await pressDecodedKey(setup, () => {
         setup.mockInput.pressKey("k", { ctrl: true });
       });
-      await waitForFrame(setup, (frame) => frame.includes("All commands"));
-      const paneRows = setup
-        .captureCharFrame()
-        .split("\n")
-        .filter((line) =>
-          [
-            "Open pane",
-            "Close pane",
-            "Zoom pane",
-            "Focus left",
-            "Focus right",
-            "Move pane left",
-            "Move pane right",
-            "All commands",
-          ].some((title) => line.includes(title)),
-        );
-      expect(paneRows).toHaveLength(8);
-      for (const [index, title] of [
-        "Open pane",
-        "Close pane",
-        "Zoom pane",
-        "Focus left",
-        "Focus right",
-        "Move pane left",
-        "Move pane right",
-        "All commands",
-      ].entries()) {
-        expect(paneRows[index]).toContain(title);
-        expect(paneRows[index]?.trimEnd().at(-1)).toBe(
-          ["o", "x", "z", "h", "l", "{", "}", ":"][index],
-        );
-      }
+      const hints = await waitForFrame(setup, (frame) =>
+        frame.includes("All commands"),
+      );
+      const paneBindings = [
+        ["Open pane", "o"],
+        ["Close pane", "x"],
+        ["Zoom pane", "z"],
+        ["Focus left", "h"],
+        ["Focus right", "l"],
+        ["Move pane left", "{"],
+        ["Move pane right", "}"],
+        ["All commands", ":"],
+      ] as const;
+      expect(hints).not.toContain("↑↓ choose");
+      for (const [title, key] of paneBindings)
+        expect(hints).toContain(`${key} ${title}`);
 
       await pressDecodedKey(setup, () => {
         setup.mockInput.pressEscape();
@@ -164,13 +148,13 @@ for (const width of [80, 160]) {
       expect(setup.captureCharFrame()).not.toContain("Preview the palette");
       await act(async () => setup.mockInput.typeText("pa"));
       await waitForFrame(setup, (frame) => frame.includes("PANES"));
-      expect(setup.captureCharFrame()).toContain("Split panes");
+      expect(setup.captureCharFrame()).toContain("Grow main pane");
       await act(async () => setup.mockInput.typeText("lette"));
       await waitForFrame(setup, (frame) =>
         frame.includes("Preview the palette"),
       );
       expect(setup.captureCharFrame()).toContain("ADVANCED");
-      expect(setup.captureCharFrame()).not.toContain("Split panes");
+      expect(setup.captureCharFrame()).not.toContain("Grow main pane");
       await pressDecodedKey(setup, () => {
         setup.mockInput.pressEnter();
       });

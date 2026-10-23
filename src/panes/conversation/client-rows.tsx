@@ -24,6 +24,18 @@ const toneColor = {
   muted: "foreground",
 } as const;
 
+function rowColor(
+  row: ClientContribution["value"]["panel"][number],
+  focusedRowId: string | undefined,
+  presentation: TuiPresentation,
+): TuiPresentation["colors"]["primary"] {
+  return row.id === focusedRowId
+    ? presentation.colors.primary
+    : presentation.colors[
+        row.tone === undefined ? "foreground" : toneColor[row.tone]
+      ];
+}
+
 /**
  * Both pinned and committed rows use the shared data grammar. Every row
  * reserves the shared left gutter -- blank when it carries no tone -- so a
@@ -66,50 +78,62 @@ export function TerminalClientRows({
                 },
               })}
         >
-          <text
+          <box
+            flexDirection="row"
             {...(compactWidth === undefined || row.id === expandedRowId
               ? {}
-              : { height: 1, wrapMode: "none" })}
-            fg={
-              row.id === focusedRowId
-                ? presentation.colors.primary
-                : presentation.colors[
-                    row.tone === undefined ? "foreground" : toneColor[row.tone]
-                  ]
-            }
+              : { height: 1 })}
           >
-            {sigilGutterText(row.tone === undefined ? "" : "●")}
-            {compactWidth === undefined || row.id === expandedRowId
-              ? terminalText(row.title)
-              : row.inspection === undefined
-                ? fitFooterCaption(
-                    terminalText(
-                      [row.title, row.detail].filter(Boolean).join(" · "),
-                    ),
-                    Math.max(0, compactWidth - sigilGutterTotalWidth),
-                  )
-                : fitFooterCaption(
-                    terminalText(row.title),
-                    Math.max(
-                      0,
-                      compactWidth -
-                        sigilGutterTotalWidth -
-                        (row.detail === undefined
-                          ? 0
-                          : terminalCellWidth(terminalText(row.detail)) + 3),
-                    ),
-                  )}
-            {compactWidth !== undefined &&
-            row.id !== expandedRowId &&
-            row.inspection !== undefined &&
-            row.detail !== undefined
-              ? ` · ${terminalText(row.detail)}`
-              : ""}
-          </text>
+            <text
+              width={sigilGutterTotalWidth}
+              flexShrink={0}
+              fg={rowColor(row, focusedRowId, presentation)}
+            >
+              {sigilGutterText(row.tone === undefined ? "" : "●")}
+            </text>
+            <text
+              flexGrow={1}
+              flexShrink={1}
+              {...(compactWidth === undefined || row.id === expandedRowId
+                ? {}
+                : { height: 1, wrapMode: "none" as const })}
+              fg={rowColor(row, focusedRowId, presentation)}
+            >
+              {compactWidth === undefined || row.id === expandedRowId
+                ? terminalText(row.title)
+                : row.inspection === undefined
+                  ? fitFooterCaption(
+                      terminalText(
+                        [row.title, row.detail].filter(Boolean).join(" · "),
+                      ),
+                      Math.max(0, compactWidth - sigilGutterTotalWidth),
+                    )
+                  : fitFooterCaption(
+                      terminalText(row.title),
+                      Math.max(
+                        0,
+                        compactWidth -
+                          sigilGutterTotalWidth -
+                          (row.detail === undefined
+                            ? 0
+                            : terminalCellWidth(terminalText(row.detail)) + 3),
+                      ),
+                    )}
+              {compactWidth !== undefined &&
+              row.id !== expandedRowId &&
+              row.inspection !== undefined &&
+              row.detail !== undefined
+                ? ` · ${terminalText(row.detail)}`
+                : ""}
+            </text>
+          </box>
           {row.detail === undefined ||
           (compactWidth !== undefined && row.id !== expandedRowId) ? null : (
-            <text fg={presentation.colors.foreground} attributes={2}>
-              {" ".repeat(sigilGutterTotalWidth)}
+            <text
+              marginLeft={sigilGutterTotalWidth}
+              fg={presentation.colors.foreground}
+              attributes={2}
+            >
               {terminalText(row.detail)}
             </text>
           )}
@@ -149,9 +173,11 @@ export function useClientRowCommands(
             const placed = placeClientTimeline(
               entries,
               timeline.commandAnchors,
+              timeline.positionAnchors,
             );
             const visible = [...placed.after.values()]
               .flat()
+              .concat(placed.before)
               .concat(placed.unanchored);
             const rows = entries
               .flatMap(({ entryId, value }) =>
@@ -203,9 +229,12 @@ export function useClientRowCommands(
                 options,
               });
               if (selectedAction === "open") {
-                if (row.row.open === undefined || onOpen === undefined)
+                const target = row.row.open;
+                if (target === undefined || onOpen === undefined)
                   throw new Error("The selected open target is unavailable");
-                await onOpen(row.row.open);
+                await interaction.run(async () => {
+                  await onOpen(target);
+                });
                 return;
               }
               const action = choices.find(
@@ -214,7 +243,7 @@ export function useClientRowCommands(
               if (action === undefined)
                 throw new Error("The selected row action is unavailable");
               setSelecting(false);
-              await actions.execute(row.entryId, action);
+              await interaction.run(() => actions.execute(row.entryId, action));
             } finally {
               setSelecting(false);
             }

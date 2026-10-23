@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { TextareaRenderable, type Renderable } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createWhistle } from "@fungi.computer/whistle";
 import { act } from "react";
@@ -82,9 +83,7 @@ async function mount(
     setup.waitForFrame((frame) => frame.includes(readyText)),
   );
   const close = async () => {
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     commands.close();
     client.clear();
     await fixture.waitForClose();

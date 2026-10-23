@@ -62,6 +62,10 @@ export async function writeCliNotices({
             "runtimes/local/dist/internal/sandbox-metafile.json",
             "runtimes/local",
           ],
+          [
+            "runtimes/local/dist/internal/image-fit-metafile.json",
+            "runtimes/local",
+          ],
           ["packages/cordyceps/dist/metafile.json", "packages/cordyceps"],
         ];
   for (const [file, cwd] of graphs) {
@@ -89,6 +93,12 @@ export async function writeCliNotices({
         nativeTexts: owner.texts,
       });
   }
+  if (metafile !== undefined)
+    owners.set("source:codex-seatbelt", {
+      name: "@openai/codex",
+      version: "0.162.1",
+      nativeTexts: [],
+    });
   const sections = [
     "THIRD-PARTY NOTICES\n\nUpstream notices for this package's bundled components. Fungi-owned code licensing is determined separately. Runtime packages installed by npm retain their own license files.",
   ];

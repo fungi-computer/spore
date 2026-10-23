@@ -110,12 +110,12 @@ function assistantText(message: SessionMessage["value"]): string {
 }
 
 function frameMessages(frame: SessionFrame): readonly SessionMessage[] {
-  if (frame.kind === "progress") return [];
+  if (frame.kind === "progress" || frame.kind === "tool_output") return [];
   return frame.kind === "reset" ? frame.baseline.messages : frame.messages;
 }
 
 function frameTerminals(frame: SessionFrame): readonly SessionTerminal[] {
-  if (frame.kind === "progress") return [];
+  if (frame.kind === "progress" || frame.kind === "tool_output") return [];
   return frame.kind === "reset" ? frame.baseline.terminals : frame.terminals;
 }
 
@@ -231,7 +231,7 @@ async function consumeSessionSettlement(
   };
   for await (const frame of { [Symbol.asyncIterator]: () => changes }) {
     throwIfRequested(cancellation);
-    if (frame.kind === "progress") continue;
+    if (frame.kind === "progress" || frame.kind === "tool_output") continue;
     state = reduceSettlementState(state, frame, commandId);
     const terminal = state.terminal;
     if (terminal === undefined) continue;

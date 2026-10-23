@@ -10,6 +10,7 @@ import { formatContextUsage } from "@fungi.computer/parakeet/headless";
 import { TuiFrame } from "../src/frame.js";
 import { captureFrame } from "./frame-capture.js";
 import { footerRow } from "./footer-row.js";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 
 const wide = { providerId: "faux", modelId: "wide" } as const;
 
@@ -57,7 +58,7 @@ for (const width of [80, 160]) {
     const output = process.env.TUI_CONTEXT_FOOTER_CAPTURE_DIR;
     /** The footer's context use once it reads the owner's current figure. */
     const shows = async (name: string) => {
-      const context = (await session.read()).context;
+      const context = (await act(async () => session.read())).context;
       if (context === undefined) throw new Error("No context reported");
       const text = formatContextUsage(context);
       // Live frames arrive from the owner's observation stream in real time.
@@ -84,20 +85,20 @@ for (const width of [80, 160]) {
       expect(first.window).toBe(200_000);
 
       // Another turn: the footer follows the context compaction now measures.
-      await session.send("Which is the oldest?", { requestId: "second" });
-      await host.settle(sessionId);
+      await act(async () => {
+        await session.send("Which is the oldest?", { requestId: "second" });
+        await host.settle(sessionId);
+      });
       const second = await shows("second-turn");
       expect(second.tokens).toBeGreaterThan(first.tokens);
 
       // /model while idle: the new selection's window, before any run.
-      await session.modelPreference.set(wide);
+      await act(async () => session.modelPreference.set(wide));
       const switched = await shows("after-model");
       expect(switched).toEqual({ tokens: second.tokens, window: 1_000_000 });
       expect(footerRow(setup.captureCharFrame(), "idle")).toContain("/1M");
     } finally {
-      act(() => {
-        setup.renderer.destroy();
-      });
+      await destroyTestRenderer(setup);
       query.clear();
       commands.close();
       await host.close();

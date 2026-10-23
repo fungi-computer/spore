@@ -53,6 +53,33 @@ type SelectableRow = Extract<PickerRow, { kind: "choice" | "expand" }>;
 const rowKey = (row: SelectableRow) =>
   row.kind === "choice" ? `choice-${String(row.index)}` : "expand";
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/** fzf positions address UTF-16; styling must cover whole displayed graphemes. */
+function MatchedText({
+  text,
+  positions,
+  offset = 0,
+  clipped = false,
+}: Readonly<{
+  text: string;
+  positions: ReadonlySet<number>;
+  offset?: number;
+  clipped?: boolean;
+}>) {
+  if (positions.size === 0) return text;
+  const matched = [...positions];
+  return Array.from(graphemes.segment(text), ({ segment, index }) => {
+    const start = index + offset;
+    const bold =
+      (!clipped || index + segment.length < text.length) &&
+      matched.some(
+        (position) => position >= start && position < start + segment.length,
+      );
+    return bold ? <b key={index}>{segment}</b> : segment;
+  });
+}
+
 /** Native input editing with grouped, independently sized cursor and label cells. */
 export function Picker({
   title: rawTitle,
@@ -85,17 +112,24 @@ export function Picker({
   const title = rawTitle === undefined ? undefined : terminalText(rawTitle);
   const choices = useMemo(
     () =>
-      rawChoices.map((choice) => ({
-        ...choice,
-        name: terminalText(choice.name),
-        description:
-          choice.description === undefined
-            ? undefined
-            : terminalText(choice.description),
-        group:
-          choice.group === undefined ? undefined : terminalText(choice.group),
-      })),
-    [rawChoices],
+      rawChoices.map((choice) => {
+        const name = terminalText(choice.name).normalize();
+        return {
+          ...choice,
+          // Match the same single-line whitespace that fitFooterCaption displays.
+          name:
+            descriptionWidth !== undefined || !descriptionWrap
+              ? name.replace(/\s+/gu, " ")
+              : name,
+          description:
+            choice.description === undefined
+              ? undefined
+              : terminalText(choice.description).normalize(),
+          group:
+            choice.group === undefined ? undefined : terminalText(choice.group),
+        };
+      }),
+    [rawChoices, descriptionWidth, descriptionWrap],
   );
   const renderer = useRenderer();
   const { width, height: terminalHeight } = useTerminalDimensions();
@@ -149,13 +183,13 @@ export function Picker({
       ? undefined
       : rowKey(options[selectedIndex]);
   const [contentWidth, setContentWidth] = useState(
-    Math.max(1, Math.min(68, width - 2) - (compact ? 4 : 6)),
+    Math.max(1, Math.min(68, width - 2) - (compact ? 4 : 6) - 2),
   );
   useLayoutEffect(() => {
     if (descriptionWidth === undefined) return;
     // Read the settled native width so end truncation also follows resizes.
     const measure = () => {
-      if (focus.current) setContentWidth(focus.current.width);
+      if (focus.current) setContentWidth(Math.max(1, focus.current.width - 2));
     };
     renderer.addPostProcessFn(measure);
     return () => {
@@ -186,6 +220,14 @@ export function Picker({
       if (!disabled) onCancel();
     } else if (disabled) {
       event.preventDefault();
+    } else if (
+      !event.ctrl &&
+      !event.meta &&
+      !event.option &&
+      /^[1-9]$/.test(event.name)
+    ) {
+      event.preventDefault();
+      activate(options[Number(event.name) - 1]);
     } else if (event.name === "up" || event.name === "down") {
       event.preventDefault();
       const next =
@@ -276,7 +318,8 @@ export function Picker({
       focusable={!searchable}
       focused={!searchable}
       onSizeChange={() => {
-        if (focus.current) setContentWidth(focus.current.width);
+        if (focus.current)
+          setContentWidth(Math.max(1, focus.current.width - 2));
       }}
       onKeyDown={(event) => {
         if (!searchable) keyDown(event);
@@ -362,6 +405,8 @@ export function Picker({
               </text>
             );
           const key = rowKey(row);
+          const ordinal =
+            options.findIndex((option) => rowKey(option) === key) + 1;
           const active = key === activeKey;
           const fullLabel =
             row.kind === "choice"
@@ -411,6 +456,9 @@ export function Picker({
                 activate(row);
               }}
             >
+              <text width={2} flexShrink={0} fg={colors.foreground}>
+                {ordinal <= 9 ? `${String(ordinal)} ` : "  "}
+              </text>
               <text width={2} flexShrink={0} fg={colors.selectionForeground}>
                 {active ? "▶ " : "  "}
               </text>
@@ -440,7 +488,16 @@ export function Picker({
                       : "char"
                   }
                 >
-                  {label}
+                  {row.kind === "choice" ? (
+                    <MatchedText
+                      text={label}
+                      positions={row.positions}
+                      offset={row.index === currentIndex ? -2 : 0}
+                      clipped={label !== fullLabel}
+                    />
+                  ) : (
+                    label
+                  )}
                 </text>
                 {description === undefined ? null : (
                   <box
@@ -461,7 +518,15 @@ export function Picker({
                       attributes={active ? 0 : 2}
                       wrapMode={descriptionWrap ? "char" : "none"}
                     >
-                      {description}
+                      {row.kind === "choice" ? (
+                        <MatchedText
+                          text={description}
+                          positions={row.positions}
+                          offset={row.choice.name.length + 1}
+                        />
+                      ) : (
+                        description
+                      )}
                     </text>
                   </box>
                 )}
@@ -476,7 +541,7 @@ export function Picker({
         ) : null}
       </scrollbox>
       <HintRow
-        hints={hints}
+        hints={[...hints, { keys: "1–9", label: "pick", priority: 3 }]}
         compact={width < 48 || compact}
         width={contentWidth}
         colors={colors}

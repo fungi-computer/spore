@@ -139,6 +139,10 @@ test("held /new creates once, pins the mounted store, and adopts its connection"
   let secondNew;
   let renderCount = 0;
   const connection = (sessionId) => ({
+    sandboxStatus: async () => ({
+      state: "available",
+      requireSandbox: false,
+    }),
     agentId: "agent-fixture",
     service: { serviceId: "fixture", baseUrl: "http://fixture" },
     databasePath: "/tmp/current-agent.sqlite",
@@ -162,7 +166,7 @@ test("held /new creates once, pins the mounted store, and adopts its connection"
       await creation.promise;
       return connection("session-fresh");
     },
-    discover: async () => ({ sessions: [], problems: [] }),
+    discover: async () => ({ agents: [], sessions: [], problems: [] }),
     status: async () => undefined,
     start: async () => ({ serviceId: "fixture", baseUrl: "http://fixture" }),
     stop: async () => undefined,

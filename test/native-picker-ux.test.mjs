@@ -13,6 +13,7 @@ import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 import { createTuiFixture } from "./fixture.js";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 import { configuredModelAccess } from "./model-access-fixture.js";
+import { pressDecodedKey, waitForFrame } from "./native-readiness.js";
 
 function renderedNodes(node) {
   return [node, ...node.getChildren().flatMap(renderedNodes)];
@@ -43,7 +44,10 @@ async function captureSurface(name, setup) {
   );
 }
 
-async function withCli(check, { listModels, runAuth } = {}) {
+async function withCli(
+  check,
+  { listModels, runAuth, saveThemePreference } = {},
+) {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const fixture = createTuiFixture();
   const setup = await createTestRenderer({
@@ -71,7 +75,7 @@ async function withCli(check, { listModels, runAuth } = {}) {
         { invocationRoot: "/tmp" },
         {
           loadThemePreference: async () => ({ theme: "terminal" }),
-          saveThemePreference: async () => undefined,
+          saveThemePreference: saveThemePreference ?? (async () => undefined),
           prepareClientExtensions: noOpClientExtensions,
           createServiceManager: () => ({
             status: async () => undefined,
@@ -81,7 +85,13 @@ async function withCli(check, { listModels, runAuth } = {}) {
             }),
             stop: async () => undefined,
             discover: async () => ({
-              agentCount: 1,
+              agents: [
+                {
+                  agentId: "one",
+                  databasePath: "/project/one/agent.sqlite",
+                  sessionCount: 1,
+                },
+              ],
               sessions: [],
               problems: [],
             }),
@@ -93,18 +103,24 @@ async function withCli(check, { listModels, runAuth } = {}) {
               return runAuth(request, interaction);
             },
             createSession: async () => ({
-              agentId: "agent-fixture",
+              sandboxStatus: async () => ({
+                state: "available",
+                requireSandbox: false,
+              }),
+              ...fixture.identity,
               databasePath: "/fixture/main.sqlite",
-              sessionId: "main",
               session,
               close: async () => {
                 hostCloses += 1;
               },
             }),
             connect: async () => ({
-              agentId: "agent-fixture",
+              sandboxStatus: async () => ({
+                state: "available",
+                requireSandbox: false,
+              }),
+              ...fixture.identity,
               databasePath: "/fixture/main.sqlite",
-              sessionId: "main",
               session,
               close: async () => {
                 hostCloses += 1;
@@ -152,6 +168,40 @@ async function withCli(check, { listModels, runAuth } = {}) {
   );
 }
 
+test("the native command palette fuzzily selects Theme through its real Whistle owner", async () => {
+  await withCli(async ({ setup, fixture }) => {
+    await pressDecodedKey(setup, () =>
+      setup.mockInput.pressKey("k", { ctrl: true }),
+    );
+    await waitForFrame(setup, (frame) => frame.includes("Open pane"));
+    await pressDecodedKey(setup, () =>
+      setup.mockInput.pressKey("k", { ctrl: true }),
+    );
+    await waitForFrame(setup, (frame) => frame.includes("Commands"));
+    for (const key of ["t", "h", "m"])
+      await pressDecodedKey(setup, () => setup.mockInput.pressKey(key));
+    assert.match(setup.captureCharFrame(), /▶ Theme/u);
+    const line = setup.captureSpans().lines.find((line) =>
+      line.spans
+        .map((span) => span.text)
+        .join("")
+        .includes("▶ Theme"),
+    );
+    assert.equal(
+      line?.spans
+        .filter((span) => (span.attributes & 1) !== 0)
+        .map((span) => span.text)
+        .join(""),
+      "Thm",
+    );
+    await captureSurface("fuzzy-command-palette", setup);
+    await pressDecodedKey(setup, () => setup.mockInput.pressEnter());
+    await waitForFrame(setup, (frame) => frame.includes("↑↓ preview"));
+    assert.equal(fixture.promptCalls(), 0);
+    await pressDecodedKey(setup, () => setup.mockInput.pressEscape());
+  });
+});
+
 test("the searchable /model choice keeps the draft and restores composer focus on Escape", async () => {
   const models = [
     { id: "gpt-5.6-sol", name: "Sol" },
@@ -160,6 +210,9 @@ test("the searchable /model choice keeps the draft and restores composer focus o
     { id: "luna-3", name: "Luna" },
     { id: "fern-1", name: "Fern" },
     { id: "moss-2", name: "Moss" },
+    // Seven actual models keep this above the shared picker's search threshold;
+    // the provider's model list no longer includes an inheritance/reset row.
+    { id: "oak-1", name: "Oak" },
   ];
   await withCli(
     async ({ setup, commands, fixture }) => {
@@ -270,6 +323,132 @@ test("login's provider choice consumes input and Ctrl+C dismisses without auth o
   );
 });
 
+test("login provider and method each commit on one number key; success closes", async () => {
+  const actions = [];
+  await withCli(
+    async ({ setup, commands }) => {
+      let choosing;
+      await act(async () => {
+        choosing = commands.execute("account:login", { origin: "slash" });
+        await delay(25);
+      });
+      await act(async () => setup.renderOnce());
+      await captureSurface("login-provider-before-pick", setup);
+      await act(async () => setup.mockInput.typeText("2"));
+      await act(async () => setup.renderOnce());
+      assert.match(setup.captureCharFrame(), /How do you want to sign in/u);
+      await captureSurface("login-method-before-pick", setup);
+      await act(async () => setup.mockInput.typeText("1"));
+      await act(async () => choosing);
+      await act(async () => setup.renderOnce());
+      assert.equal(actions.length, 1);
+      assert.doesNotMatch(setup.captureCharFrame(), /Enter close/u);
+      assert.doesNotMatch(setup.captureCharFrame(), /Signed in to OpenAI/u);
+      assert.doesNotMatch(
+        setup.captureCharFrame(),
+        /How do you want to sign in/u,
+      );
+      await captureSurface("login-submitted", setup);
+    },
+    {
+      runAuth: async (action) => {
+        actions.push(action);
+        return { kind: "completed" };
+      },
+    },
+  );
+});
+
+test("model provider and model each commit on one number key", async () => {
+  await withCli(
+    async ({ setup, commands }) => {
+      await waitForFrame(setup, () =>
+        commands
+          .snapshot()
+          .agent.some(
+            (row) =>
+              row.title === "Model" &&
+              JSON.stringify(row.action ?? {}).includes("Fixture · Sol"),
+          ),
+      );
+      let choosing;
+      await act(async () => {
+        choosing = executeAlias(commands, "model", { origin: "slash" });
+        await delay(25);
+      });
+      await act(async () => setup.renderOnce());
+      await act(async () => setup.mockInput.typeText("3"));
+      await act(async () => setup.renderOnce());
+      assert.match(setup.captureCharFrame(), /Fixture · Sol/u);
+      await captureSurface("model-before-pick", setup);
+      await act(async () => setup.mockInput.typeText("1"));
+      await act(async () => choosing);
+      await act(async () => setup.renderOnce());
+      assert.doesNotMatch(setup.captureCharFrame(), /Enter close/u);
+      assert.doesNotMatch(setup.captureCharFrame(), /Use agent model/u);
+      await captureSurface("model-submitted", setup);
+    },
+    {
+      listModels: () => [
+        {
+          id: "sol",
+          name: "Sol",
+          providerId: "fixture",
+          providerName: "Fixture",
+          reasoning: [],
+        },
+      ],
+    },
+  );
+});
+
+test("switching an already signed-in account closes success without Enter or Esc", async () => {
+  const actions = [];
+  await withCli(
+    async ({ setup, commands }) => {
+      let choosing;
+      await act(async () => {
+        choosing = commands.execute("account:login", { origin: "slash" });
+        await delay(25);
+      });
+      await act(async () => setup.renderOnce());
+      await act(async () => setup.mockInput.typeText("1"));
+      await act(async () => setup.renderOnce());
+      assert.match(setup.captureCharFrame(), /Switch account/u);
+      await captureSurface("switch-account-before-pick", setup);
+      await act(async () => setup.mockInput.typeText("1"));
+      await act(async () => setup.renderOnce());
+      assert.match(setup.captureCharFrame(), /How do you want to sign in/u);
+      await act(async () => setup.mockInput.typeText("1"));
+      await act(async () => choosing);
+      await act(async () => setup.renderOnce());
+      assert.equal(actions.length, 1);
+      assert.doesNotMatch(setup.captureCharFrame(), /Signed in to OpenAI/u);
+      assert.doesNotMatch(
+        setup.captureCharFrame(),
+        /How do you want to sign in|Switch account/u,
+      );
+      assert.doesNotMatch(setup.captureCharFrame(), /Enter close/u);
+      await captureSurface("switch-account-submitted", setup);
+    },
+    {
+      listModels: () => [
+        {
+          id: "sol",
+          name: "Sol",
+          providerId: "openai",
+          providerName: "OpenAI",
+          reasoning: [],
+        },
+      ],
+      runAuth: async (action) => {
+        actions.push(action);
+        return { kind: "completed" };
+      },
+    },
+  );
+});
+
 test("slash completion shows the real Whistle choice and Enter opens theme without a prompt", async () => {
   await withCli(async ({ setup, fixture }) => {
     await act(async () => setup.mockInput.typeText("/the"));
@@ -295,4 +474,21 @@ test("slash completion shows the real Whistle choice and Enter opens theme witho
     await act(async () => setup.renderOnce());
     assert.equal(editor.focused, true);
   });
+});
+
+test("a numbered theme pick saves that theme, not the previously highlighted one", async () => {
+  const saved = [];
+  await withCli(
+    async ({ setup, commands }) => {
+      await act(async () => {
+        await executeAlias(commands, "theme", { origin: "slash" });
+      });
+      await act(async () => setup.renderOnce());
+      await setup.waitForFrame((frame) => frame.includes("↑↓ preview"));
+      await act(async () => setup.mockInput.typeText("3"));
+      await setup.waitForFrame((frame) => !frame.includes("↑↓ preview"));
+      assert.deepEqual(saved, ["latte"]);
+    },
+    { saveThemePreference: async (theme) => saved.push(theme) },
+  );
 });

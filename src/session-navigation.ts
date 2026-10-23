@@ -1,7 +1,9 @@
-import type {
-  PrivateLocalServiceConnection,
-  PrivateLocalServiceManager,
-  PrivateLocalSessionChoice,
+import {
+  LocalAgentSelectionAmbiguous,
+  type PrivateLocalAgentChoice,
+  type PrivateLocalServiceConnection,
+  type PrivateLocalServiceManager,
+  type PrivateLocalSessionChoice,
 } from "@fungi.computer/truffle/service";
 import type { createRoot } from "@opentui/react";
 import { defineIdFamily } from "@fungi.computer/cairn/id";
@@ -16,6 +18,9 @@ export type TuiSessionMount = Pick<
   | "sessionId"
   | "session"
   | "effectiveModel"
+  | "sandboxStatus"
+  | "rebind"
+  | "stopAll"
   | "close"
 >;
 
@@ -90,64 +95,140 @@ export async function selectTuiSession(input: {
     onNotice,
   } = input;
   if (options.sessionChoice !== undefined)
-    return options.sessionChoice.resume({ signal, fungiMcp: options.fungiMcp });
+    return options.sessionChoice.resume({
+      signal,
+      fungiMcp: options.fungiMcp,
+      requireSandbox: options.requireSandbox,
+    });
   if (
     (options.entry === "landing" || options.entry === "new") &&
     !options.resume
   ) {
-    const discovery = await (input.discoverSessions ?? serviceManager.discover)(
-      options.invocationRoot,
-      { signal },
-    );
+    const discover = () =>
+      (input.discoverSessions ?? serviceManager.discover)(
+        options.invocationRoot,
+        { signal },
+      );
+    let discovery = await discover();
     if (discovery.problems.length > 0)
       onNotice(discoveryProblemMessage(discovery.problems));
-    const newest = discovery.sessions[0];
-    const startNew = () =>
-      newest === undefined
-        ? serviceManager.connect(
+    // The Agent the new Session belongs to. Several Agents leave it to the
+    // person (landing) because the service never picks one for them.
+    let agent: PrivateLocalAgentChoice | undefined =
+      discovery.agents.length > 1 ? undefined : discovery.agents[0];
+    const startNew = () => {
+      const databasePath = agent?.databasePath;
+      if (databasePath === undefined) {
+        if (discovery.agents.length > 1)
+          throw new LocalAgentSelectionAmbiguous(
+            discovery.agents.map((candidate) => candidate.agentId),
+          );
+        return serviceManager.connect(
+          {
+            invocationRoot: options.invocationRoot,
+            requireSandbox: options.requireSandbox,
+            fungiMcp: options.fungiMcp,
+          },
+          { signal },
+        );
+      }
+      return serviceManager.createSession(
+        {
+          invocationRoot: options.invocationRoot,
+          databasePath,
+          requestId: sessionCreateRequests.request.generate(),
+          requireSandbox: options.requireSandbox,
+          fungiMcp: options.fungiMcp,
+        },
+        { signal },
+      );
+    };
+    if (options.entry === "new") return startNew();
+    if (destroyed()) return undefined;
+    const showLanding = (
+      sessions: readonly PrivateLocalSessionChoice[],
+      agents: readonly PrivateLocalAgentChoice[],
+      landingNotice?: string,
+    ) =>
+      new Promise<LandingChoice | undefined>((resolve) => {
+        const cancel = () => {
+          done(undefined);
+        };
+        const done = (picked: LandingChoice | undefined) => {
+          signal.removeEventListener("abort", cancel);
+          resolve(picked);
+        };
+        signal.addEventListener("abort", cancel, { once: true });
+        if (signal.aborted) {
+          cancel();
+          return;
+        }
+        input.renderLanding(
+          root,
+          sessions,
+          options.invocationRoot,
+          done,
+          theme,
+          agents,
+          landingNotice,
+        );
+      });
+    let landingNotice: string | undefined;
+    for (;;) {
+      let visible = agent === undefined ? [] : discovery.sessions;
+      let choice = await showLanding(visible, discovery.agents, landingNotice);
+      landingNotice = undefined;
+      if (choice?.kind === "archive") {
+        const target = discovery.agents[choice.index];
+        if (target === undefined || signal.aborted || destroyed())
+          return undefined;
+        try {
+          await serviceManager.archive(
             {
               invocationRoot: options.invocationRoot,
-              fungiMcp: options.fungiMcp,
-            },
-            { signal },
-          )
-        : serviceManager.createSession(
-            {
-              invocationRoot: options.invocationRoot,
-              databasePath: newest.databasePath,
-              requestId: sessionCreateRequests.request.generate(),
-              fungiMcp: options.fungiMcp,
+              agentId: target.agentId,
+              archived: true,
             },
             { signal },
           );
-    if (options.entry === "new") return startNew();
-    if (destroyed()) return undefined;
-    const choice = await new Promise<LandingChoice | undefined>((resolve) => {
-      const cancel = () => {
-        done(undefined);
-      };
-      const done = (picked: LandingChoice | undefined) => {
-        signal.removeEventListener("abort", cancel);
-        resolve(picked);
-      };
-      signal.addEventListener("abort", cancel, { once: true });
-      if (signal.aborted) {
-        cancel();
-        return;
+        } catch (cause) {
+          // An abort ends the selection; anything else is said on the landing.
+          if (cause instanceof Error && cause.name === "AbortError")
+            throw cause;
+          landingNotice =
+            cause instanceof Error
+              ? cause.message
+              : "The Agent could not be archived";
+        }
+        discovery = await discover();
+        agent = discovery.agents.length > 1 ? undefined : discovery.agents[0];
+        continue;
       }
-      input.renderLanding(
-        root,
-        discovery.sessions,
-        options.invocationRoot,
-        done,
-        theme,
-      );
-    });
-    if (choice === undefined || destroyed()) return undefined;
-    if (choice.kind === "new") return startNew();
-    const picked = discovery.sessions[choice.index];
-    if (picked === undefined) return undefined;
-    return picked.resume({ signal, fungiMcp: options.fungiMcp });
+      if (choice?.kind === "agent") {
+        const chosen = discovery.agents[choice.index];
+        if (chosen === undefined) return undefined;
+        agent = chosen;
+        visible = discovery.sessions.filter(
+          (session) => session.databasePath === chosen.databasePath,
+        );
+        choice = destroyed() ? undefined : await showLanding(visible, [chosen]);
+        if (choice === undefined && !destroyed() && !signal.aborted) {
+          // Esc on one Agent's conversations goes back to the Agent list.
+          agent = undefined;
+          continue;
+        }
+      }
+      if (choice === undefined || destroyed()) return undefined;
+      if (choice.kind === "new") return startNew();
+      if (choice.kind === "agent") return undefined;
+      const picked = visible[choice.index];
+      if (picked === undefined) return undefined;
+      return picked.resume({
+        signal,
+        fungiMcp: options.fungiMcp,
+        requireSandbox: options.requireSandbox,
+      });
+    }
   }
   const discovery =
     options.databasePath === undefined &&
@@ -158,7 +239,10 @@ export async function selectTuiSession(input: {
           { signal },
         )
       : undefined;
-  if (discovery !== undefined && (options.resume || discovery.agentCount > 1)) {
+  if (
+    discovery !== undefined &&
+    (options.resume || discovery.agents.length > 1)
+  ) {
     if (discovery.problems.length > 0)
       onNotice(discoveryProblemMessage(discovery.problems));
     const selected = discovery.sessions[0];
@@ -170,7 +254,11 @@ export async function selectTuiSession(input: {
       );
     validateTuiSelection(options);
     if (options.last)
-      return selected.resume({ signal, fungiMcp: options.fungiMcp });
+      return selected.resume({
+        signal,
+        fungiMcp: options.fungiMcp,
+        requireSandbox: options.requireSandbox,
+      });
     if (destroyed()) return undefined;
     const picked = await new Promise<PrivateLocalSessionChoice | undefined>(
       (resolve) => {
@@ -200,7 +288,11 @@ export async function selectTuiSession(input: {
       },
     );
     if (picked === undefined || destroyed()) return undefined;
-    return picked.resume({ signal, fungiMcp: options.fungiMcp });
+    return picked.resume({
+      signal,
+      fungiMcp: options.fungiMcp,
+      requireSandbox: options.requireSandbox,
+    });
   }
   if (options.connect !== undefined)
     throw new Error(
@@ -217,12 +309,14 @@ export async function selectTuiSession(input: {
           invocationRoot: options.invocationRoot,
           fungiMcp: options.fungiMcp,
           sessionId: options.sessionId,
+          requireSandbox: options.requireSandbox,
         }
       : {
           invocationRoot: options.invocationRoot,
           fungiMcp: options.fungiMcp,
           databasePath: options.databasePath,
           sessionId: options.sessionId,
+          requireSandbox: options.requireSandbox,
         };
   return serviceManager.connect(selection, { signal });
 }

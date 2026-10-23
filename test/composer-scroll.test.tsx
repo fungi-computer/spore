@@ -9,6 +9,7 @@ import {
   type Renderable,
 } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createWhistle } from "@fungi.computer/whistle";
 import { act } from "react";
@@ -198,9 +199,7 @@ test("long Session history scrolls continuously while older rows mount at the to
     expect(setup.captureCharFrame()).toContain("History 601");
     expect(setup.captureCharFrame()).not.toContain("Jump to latest");
   } finally {
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     client.clear();
     await fixture.waitForClose();
   }
@@ -294,9 +293,7 @@ test("PageUp reveals an older page after its delayed read finishes", async () =>
     expect(setup.captureCharFrame()).toContain("Jump to latest");
   } finally {
     releaseRead.resolve(undefined);
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     client.clear();
     commands.close();
     await fixture.waitForClose();
@@ -399,9 +396,7 @@ test("editing a multiline draft preserves manual scroll while progress grows", a
     expect(editor.plainText).toBe("");
     expect(scroll.scrollTop).toBe(away);
   } finally {
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     client.clear();
     await fixture.waitForClose();
     expect(fixture.closeCalls()).toBe(1);

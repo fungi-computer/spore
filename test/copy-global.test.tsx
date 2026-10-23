@@ -14,7 +14,7 @@ function Login({
 }: Readonly<{ host: ReturnType<typeof createWhistleInteractionHost> }>) {
   const { colors } = useTerminalTheme("mocha");
   return (
-    <CopySurface colors={colors}>
+    <CopySurface>
       <DialogSurface colors={colors} onClose={() => undefined}>
         <InteractionView
           host={host}
@@ -115,10 +115,12 @@ test("Alt+C copies the handoff URL while the paste-code input keeps its own typi
     act(() => {
       interaction.notify({ type: "handoff", url: link });
     });
-    const answer = interaction.prompt({
-      type: "text",
-      message: "Paste the code",
-    });
+    const { answer } = await act(() => ({
+      answer: interaction.prompt({
+        type: "text",
+        message: "Paste the code",
+      }),
+    }));
     await act(async () =>
       setup.waitForFrame((frame) => frame.includes("Alt+C while typing")),
     );

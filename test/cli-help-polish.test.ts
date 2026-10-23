@@ -7,6 +7,7 @@ const commands = [
   "new",
   "resume",
   "sessions",
+  "agents",
   "run",
   "acp",
   "login",
@@ -75,6 +76,7 @@ test("help descriptions share column 33", () => {
 test("doctor prints its title once", async () => {
   let text = "";
   await runDoctor({
+    localServiceStatus: () => Promise.resolve(undefined),
     models: {
       getProviders: () => [],
       checkAuth: () => Promise.resolve(undefined),

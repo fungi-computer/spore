@@ -38,6 +38,7 @@ const faux = fauxProvider({ tokensPerSecond: 40 });
 models.setProvider(faux.provider);
 const pending = Promise.withResolvers();
 faux.setResponses([
+  fauxAssistantMessage("Ready."),
   async () => {
     await pending.promise;
     return fauxAssistantMessage("Done.");
@@ -104,6 +105,16 @@ try {
     await delay(25);
   }
   selected = await manager.connect({ invocationRoot: root, sessionId: "main" });
+  // `fungi resume` opens only a saved conversation: give it one first.
+  await selected.session.send("Hello.", {
+    requestId: "seed",
+    delivery: "followUp",
+  });
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const seeded = await selected.session.read();
+    if (seeded.messages.some(({ value }) => value.role === "assistant")) break;
+    await delay(25);
+  }
   const ready = Promise.withResolvers();
   await act(async () => {
     clientRun = runFungiCli(
@@ -161,10 +172,10 @@ try {
   });
   await render(600);
   await shot("real-idle", 200);
-  assert.doesNotMatch(setup.captureCharFrame(), /Goal ·|Loop ·/u);
+  assert.doesNotMatch(setup.captureCharFrame(), /Pursuing goal|Loop ·/u);
   await type("/goal Keep the menus tidy");
   await enter();
-  await until((frame) => frame.includes("Goal · active"));
+  await until((frame) => frame.includes("Pursuing goal since"));
   await type("/loop 10m check the menus");
   await enter();
   await until((frame) => frame.includes("Loop · active"));
@@ -175,14 +186,11 @@ try {
     .find((line) => /(?:● )?(?:waiting|thinking|streaming|idle)\s/u.test(line));
   assert.ok(status, "live status line visible");
   assert.doesNotMatch(status, /Goal active|Loop self/u);
-  assert.match(status, /Enter send/u);
-  assert.match(status, /Tab queue/u);
-  assert.match(status, /Ctrl\+C cancel or exit/u);
-  if (width >= 100) {
-    assert.match(status, /PgUp\/PgDn scroll/u);
-  }
+  // The native footer carries no key hints (client-entry-native.test.tsx).
+  assert.doesNotMatch(status, /Enter send|Tab queue|cancel or exit|PgUp/u);
   assert.equal(
-    frame.split("\n").filter((line) => line.includes("Goal · active")).length,
+    frame.split("\n").filter((line) => line.includes("Pursuing goal since"))
+      .length,
     1,
   );
   assert.equal(

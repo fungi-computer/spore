@@ -8,10 +8,11 @@ import { URL } from "node:url";
 import { generateToolSigilImages } from "../scripts/build-tool-sigils.mjs";
 import { loadToolSigils, deleteToolSigils } from "../dist/tool-sigils.js";
 
-test("build-generated PNGs use seven stable virtual placements and bounded uploads", async () => {
+test("build-generated PNGs use eight stable virtual placements and bounded uploads", async () => {
   const writes = [];
   const glyphs = await loadToolSigils((data) => writes.push(data));
   expect(Object.keys(glyphs).sort()).toEqual([
+    "agent",
     "code",
     "command",
     "edit",
@@ -22,12 +23,12 @@ test("build-generated PNGs use seven stable virtual placements and bounded uploa
   ]);
   const placements = writes.filter((data) => data.includes("a=p,"));
   expect(placements).toEqual(
-    [61441, 61442, 61443, 61444, 61445, 61446, 61447].map(
+    [61441, 61442, 61443, 61444, 61445, 61446, 61447, 61448].map(
       (id) => `\u001b_Ga=p,i=${String(id)},U=1,c=3,r=1,q=2;\u001b\\`,
     ),
   );
   const uploads = writes.filter((data) => data.includes("a=t,"));
-  expect(uploads).toHaveLength(7);
+  expect(uploads).toHaveLength(8);
   for (const command of uploads) {
     expect(command).toContain("f=100,");
     expect(command).toContain("q=2,");
@@ -60,7 +61,7 @@ test("build-generated PNGs use seven stable virtual placements and bounded uploa
   const released = [];
   deleteToolSigils((data) => released.push(data));
   expect(released).toEqual(
-    [61441, 61442, 61443, 61444, 61445, 61446, 61447].map(
+    [61441, 61442, 61443, 61444, 61445, 61446, 61447, 61448].map(
       (id) => `\u001b_Ga=d,d=I,i=${String(id)},q=2;\u001b\\`,
     ),
   );

@@ -108,6 +108,7 @@ function representativeMessages(sequenceOffset = 0): readonly SessionMessage[] {
     },
     {
       id: "design-result-read-frame",
+      data: { path: "apps/tui/src/frame.tsx" },
       commandId: null,
       sequence: sequenceOffset + 3,
       value: {
@@ -128,9 +129,6 @@ function representativeMessages(sequenceOffset = 0): readonly SessionMessage[] {
             }),
           },
         ],
-        details: {
-          path: "apps/tui/src/frame.tsx",
-        },
         isError: false,
         timestamp: sequenceOffset + 3,
       },
@@ -173,7 +171,8 @@ const designGoal: Goal = {
   revision: "design-goal",
   objective: "Polish the terminal review",
   state: "active",
-  stopReason: null,
+  startedAt: Date.parse("2026-10-18T14:02:00.000Z"),
+  pauseCause: null,
 };
 const designGoalSlots: SessionExtensionSlots = {
   [goalContract.id]: {
@@ -181,7 +180,8 @@ const designGoalSlots: SessionExtensionSlots = {
     revision: "sha256:design",
     value: {
       goal: designGoal,
-      history: { nextSequence: 1, omitted: 0, events: [] },
+      ended: [],
+      omitted: 0,
     },
     catalog: {
       protocol: "whistle.catalog/v1",
@@ -201,6 +201,7 @@ export const representativeDesignSnapshot: SessionSnapshot = {
   terminals: [],
   activity: runningActivity(),
   extensions: designGoalSlots,
+  toolOutput: [],
   progress: {
     messageId: "design-assistant-narrow",
     revision: 3,
@@ -321,6 +322,7 @@ export const longHistoryDesignSnapshot: SessionSnapshot = {
   ],
   terminals: [],
   activity: runningActivity({ activeTool: "execute" }),
+  toolOutput: [],
   progress: null,
   extensions: designGoalSlots,
 };
@@ -388,6 +390,9 @@ export function createDesignTuiFixture({
 }: DesignTuiFixtureOptions = {}): TuiFixture {
   const fixture = createTuiFixture({ ...fixtureOptions, goal: designGoal });
   const session: ParakeetSession = {
+    latestPending: () =>
+      Promise.resolve(snapshot.pending.prompts.at(-1) ?? null),
+    withdraw: () => Promise.resolve({ status: "unknown" }),
     address: `${fixture.session.address}/${snapshot.sessionId}`,
     command: fixture.session.command,
     extension: fixture.session.extension,
@@ -591,6 +596,7 @@ export const groupedToolsDesignSnapshot: SessionSnapshot = {
   sessionId: "tui-design-grouped-tools",
   activity: idleActivity,
   terminals: [completedDesignRun],
+  toolOutput: [],
   progress: null,
   messages: groupedMessages(groupedCalls, undefined),
 };
@@ -603,6 +609,7 @@ export const runningToolsDesignSnapshot: SessionSnapshot = {
     queue: { state: "running", commandId: "group-request" },
     activeTool: "bash",
   }),
+  toolOutput: [],
   progress: null,
   messages: groupedMessages(
     groupedCalls.filter((call) => call.isError !== true).slice(0, 4),

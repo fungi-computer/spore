@@ -3,7 +3,7 @@ import { act, type ReactNode } from "react";
 import { testRender } from "@opentui/react/test-utils";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "@fungi.computer/agar/query";
-import { createAppSurfaceCommandHost } from "@fungi.computer/oyster/shell/command-host";
+import { createAppSurfaceCommandHost } from "@fungi.computer/nacre/command-host";
 import { createWhistle } from "@fungi.computer/whistle";
 import { TuiFrame } from "../src/frame.js";
 import { useDialog, type PaneKindEntry } from "../src/button/index.js";
@@ -12,6 +12,8 @@ import { PaneWorkspace } from "../src/shell/workspace.js";
 import type { createPaneRegistry } from "../src/shell/registry.js";
 import { createTuiFixture } from "./fixture.js";
 import { pressDecodedKey, waitForFrame } from "./native-readiness.js";
+import { captureFrame } from "./frame-capture.js";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 
 /**
  * The unit twins of the pre-install smoke check: the one Open pane picker
@@ -25,9 +27,11 @@ async function frameFor(
   host: ReturnType<typeof createAppSurfaceCommandHost>,
 ) {
   const client = createQueryClient();
-  const setup = await testRender(
-    <QueryClientProvider client={client}>{node}</QueryClientProvider>,
-    { width: 120, height: 30 },
+  const setup = await act(async () =>
+    testRender(
+      <QueryClientProvider client={client}>{node}</QueryClientProvider>,
+      { width: 120, height: 30 },
+    ),
   );
   /** PTY output arrives after render idle; poll real frames. */
   const shows = async (check: (text: string) => boolean) => {
@@ -36,7 +40,7 @@ async function frameFor(
         await setup.renderOnce();
       });
       if (check(setup.captureCharFrame())) return;
-      await Bun.sleep(10);
+      await act(async () => Bun.sleep(10));
     }
     throw new Error(`Frame never matched:\n${setup.captureCharFrame()}`);
   };
@@ -53,11 +57,10 @@ async function frameFor(
       setup.mockInput.pressEnter();
     });
   };
-  const close = () => {
-    act(() => {
-      setup.renderer.destroy();
+  const close = async () => {
+    await destroyTestRenderer(setup, () => {
+      host.dispose();
     });
-    host.dispose();
     client.clear();
   };
   const terminalReady = () =>
@@ -65,7 +68,10 @@ async function frameFor(
   return { setup, shows, run, type, close, terminalReady };
 }
 
-function frame(apps?: Parameters<typeof TuiFrame>[0]["apps"]) {
+function frame(
+  apps?: Parameters<typeof TuiFrame>[0]["apps"],
+  chooseConversation?: () => void,
+) {
   const fixture = createTuiFixture();
   const commands = createWhistle();
   const host = createAppSurfaceCommandHost(commands);
@@ -77,10 +83,39 @@ function frame(apps?: Parameters<typeof TuiFrame>[0]["apps"]) {
         commands={commands}
         commandHost={host}
         apps={apps}
+        chooseConversation={chooseConversation}
       />
     ),
   };
 }
+
+test("Open pane filters typed text using the shared searchable picker", async () => {
+  let resumes = 0;
+  const { host, node } = frame(undefined, () => {
+    resumes += 1;
+  });
+  const view = await frameFor(node, host);
+  try {
+    await view.shows((text) => text.includes("Ask anything"));
+    await view.run("Open pane");
+    await view.shows((text) => text.includes("Local terminal"));
+    await act(async () => view.setup.mockInput.typeText("resume"));
+    await act(async () => view.setup.renderOnce());
+    await captureFrame(
+      view.setup,
+      process.env.TUI_UX_CAPTURE_DIR,
+      "07-open-filter",
+    );
+    expect(view.setup.captureCharFrame()).toContain("Resume conversation");
+    expect(view.setup.captureCharFrame()).not.toContain("Local terminal");
+    await pressDecodedKey(view.setup, () => {
+      view.setup.mockInput.pressEnter();
+    });
+    expect(resumes).toBe(1);
+  } finally {
+    await view.close();
+  }
+});
 
 test("Open pane lists the Local terminal first; Enter opens a shell that takes typed input", async () => {
   const { host, node } = frame();
@@ -100,7 +135,7 @@ test("Open pane lists the Local terminal first; Enter opens a shell that takes t
     await view.shows((text) => text.includes("typed-42"));
     expect(view.setup.captureCharFrame()).not.toContain("› echo");
   } finally {
-    view.close();
+    await view.close();
   }
 }, 30_000);
 
@@ -125,7 +160,7 @@ test("signed out, Open pane lists only choices that work", async () => {
     await view.type("echo signed-out-$((3+3))");
     await view.shows((text) => text.includes("signed-out-6"));
   } finally {
-    view.close();
+    await view.close();
   }
 }, 30_000);
 
@@ -156,11 +191,15 @@ test("an App choice that fails reports a notice and the terminal still takes inp
       view.setup.mockInput.pressEnter();
     });
     await view.shows(view.terminalReady);
+    expect(view.setup.captureCharFrame()).toContain(signedOut);
+    await pressDecodedKey(view.setup, () => {
+      view.setup.mockInput.pressEscape();
+    });
     await view.type("echo after-$((1+1))");
     await view.shows((text) => text.includes("after-2"));
     expect(view.setup.captureCharFrame()).not.toContain(signedOut);
   } finally {
-    view.close();
+    await view.close();
   }
 }, 30_000);
 
@@ -223,7 +262,7 @@ test("an unfocused conversation does not take keys typed into another pane", asy
     await waitForFrame(view.setup, (text) => text.includes("Ask anything"));
     // The live path: a picker opened over the conversation closes after the
     // chosen pane takes focus, and hands native focus back to the composer.
-    const picker = dialogs?.show(() => <text>picker</text>);
+    const picker = await act(() => dialogs?.show(() => <text>picker</text>));
     await waitForFrame(view.setup, (text) => text.includes("picker"));
     await act(async () => {
       await panes.open({ kind: "quiet" });
@@ -245,6 +284,6 @@ test("an unfocused conversation does not take keys typed into another pane", asy
     await act(async () => {
       await registry?.dispose();
     });
-    view.close();
+    await view.close();
   }
 }, 30_000);

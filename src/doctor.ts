@@ -4,6 +4,7 @@ import { Writable } from "node:stream";
 import process from "node:process";
 import { z } from "zod";
 import { reportFailure } from "./button/log-event.js";
+import type { PrivateLocalServiceManager } from "@fungi.computer/truffle";
 
 /** Report public account metadata and provider readiness without displaying credentials. */
 export async function runDoctor(options: {
@@ -13,6 +14,8 @@ export async function runDoctor(options: {
   >;
   endpoint?: string | undefined;
   version: string;
+  /** Read only: doctor must never start or restart the Local service. */
+  localServiceStatus: PrivateLocalServiceManager["status"];
   interactive?: boolean;
   write: (message: string) => void;
   connect?: (url: string) => Promise<boolean>;
@@ -34,6 +37,28 @@ export async function runDoctor(options: {
     check(label, ok, detail);
   };
   options.write("fungi doctor\n");
+  try {
+    const service = await options.localServiceStatus();
+    if (service === undefined) {
+      report(
+        "Local service",
+        false,
+        "No readable live status (not started by doctor)",
+      );
+    } else {
+      const diagnostics = service.diagnostics;
+      report(
+        "Local diagnostics",
+        diagnostics.state === "active",
+        diagnostics.state === "active"
+          ? "ACTIVE"
+          : `FAILED ${diagnostics.code} since ${diagnostics.since}`,
+      );
+    }
+  } catch (cause) {
+    reportFailure("doctor-local-service-check", cause);
+    report("Local service", false, "Could not read live service status");
+  }
   const { header } = z
     .object({
       header: z.object({ glibcVersionRuntime: z.string().optional() }),

@@ -218,8 +218,8 @@ function assertStatusAndGoalRow(setup, width, status = "streaming") {
   assert.match(
     setup.captureCharFrame(),
     width < 48
-      ? /Polish the terminal review · G…/u
-      : /Polish the terminal review · Goal · active/u,
+      ? /Pursuing goal since \d\d:\d\d · Pol…/u
+      : /Pursuing goal since \d\d:\d\d · Polish the terminal review/u,
   );
   // Model identity stays ahead of shortcuts at every width.
   if (width >= 80 && (width >= 100 || status !== "waiting"))
@@ -428,6 +428,7 @@ for (const [width, height] of [
           baseline: {
             ...baseline,
             activity: footerActivities[status],
+            toolOutput: [],
             progress: null,
           },
         });
@@ -471,7 +472,8 @@ for (const [width, height] of [
                 revision: "design-goal",
                 objective: "Polish the terminal review",
                 state: "paused",
-                stopReason: null,
+                startedAt: Date.parse("2026-10-18T14:02:00.000Z"),
+                pauseCause: null,
               },
             },
           },
@@ -480,29 +482,22 @@ for (const [width, height] of [
       await setup.renderOnce();
     });
     await waitForFrame(setup, (frame) =>
-      frame.includes(
-        width < 48 ? "Polish the terminal review · G…" : "Goal · paused",
-      ),
+      frame.includes("Goal paused (/goal resume)"),
     );
-    assert.match(
-      setup.captureCharFrame(),
-      width < 48 ? /Polish the terminal review · G…/u : /Goal · paused/u,
-    );
+    assert.match(setup.captureCharFrame(), /Goal paused \(\/goal resume\)/u);
     const pausedGoalRow = setup
       .captureSpans()
       .lines.find((line) =>
         line.spans.some((span) =>
-          span.text.includes(
-            width < 48 ? "Polish the terminal review · G…" : "Goal · paused",
-          ),
+          span.text.includes("Goal paused (/goal resume)"),
         ),
       );
     assert.ok(pausedGoalRow);
     assert.match(
       pausedGoalRow.spans.map((span) => span.text).join(""),
       width < 48
-        ? /Polish the terminal review · G…/u
-        : /Polish the terminal review · Goal · paused/u,
+        ? /Goal paused \(\/goal resume\)/u
+        : /Goal paused \(\/goal resume\) · Polish the terminal review/u,
     );
     await capture(setup, `paused-goal-row-${width}x${height}`);
     assert.equal(fixture.watchCalls(), 1);

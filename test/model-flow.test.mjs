@@ -92,11 +92,13 @@ async function withModels(
   {
     listModels = () => models,
     beforeSave = async () => undefined,
+    beforeExtensionsComplete,
     auth = async () => configuredModelAccess(listModels()),
   } = {},
 ) {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const opened = [];
+  const archived = [];
   const setups = [];
   const fixtures = [];
   const commandOwners = [];
@@ -130,8 +132,17 @@ async function withModels(
               stop: async () => {
                 throw new Error("client cannot stop service");
               },
+              archive: async (request) => {
+                archived.push(request);
+              },
               discover: async () => ({
-                agentCount: 1,
+                agents: [
+                  {
+                    agentId: "one",
+                    databasePath: "/project/one/agent.sqlite",
+                    sessionCount: 1,
+                  },
+                ],
                 sessions: [],
                 problems: [],
               }),
@@ -143,6 +154,10 @@ async function withModels(
                   agentId: "agent-fixture",
                   databasePath: "/fixture/main.sqlite",
                   sessionId: "main",
+                  sandboxStatus: async () => ({
+                    state: "available",
+                    requireSandbox: false,
+                  }),
                   effectiveModel: async () => {
                     const selected = preference?.modelId ?? "sol";
                     const name = selected === "luna" ? "Luna" : "Sol";
@@ -174,7 +189,32 @@ async function withModels(
             };
           },
           createWhistle: () => {
-            const commands = createWhistle();
+            const runtime = createWhistle();
+            const commands = {
+              ...runtime,
+              contribute: (contribution) =>
+                runtime.contribute(
+                  beforeExtensionsComplete === undefined
+                    ? contribution
+                    : {
+                        ...contribution,
+                        commands: contribution.commands.map((command) =>
+                          command.id !== "extensions"
+                            ? command
+                            : {
+                                ...command,
+                                handler: async (input) => {
+                                  const result = await command.handler(input);
+                                  // Hold the real handler after its notice but
+                                  // before Whistle settles its flow surface.
+                                  await beforeExtensionsComplete();
+                                  return result;
+                                },
+                              },
+                        ),
+                      },
+                ),
+            };
             commandOwners.push(commands);
             return commands;
           },
@@ -205,6 +245,7 @@ async function withModels(
       setups,
       commandOwners,
       opened,
+      archived,
       ready,
       get closed() {
         return closed;
@@ -243,6 +284,146 @@ async function begin(setup, owner, commandId) {
   return { settled: () => running };
 }
 
+for (const [alias, title] of [
+  ["archive", "Archive an Agent"],
+  ["extensions", "Manage extensions"],
+]) {
+  test(`${alias} is discoverable through command search and slash commands`, async () => {
+    const closing = Promise.withResolvers();
+    const releaseClose = Promise.withResolvers();
+    let observedClosing = false;
+    try {
+      await withModels(
+        async ({ setups, commandOwners, archived }) => {
+          const setup = setups[0];
+          await waitForFrame(setup, (frame) => frame.includes("Ask anything"));
+          await act(async () => setup.mockInput.pressKey("k", { ctrl: true }));
+          await act(async () => setup.renderOnce());
+          await act(async () => setup.mockInput.typeText(":"));
+          await act(async () => setup.renderOnce());
+          await act(async () => setup.mockInput.typeText(alias));
+          await act(async () => setup.renderOnce());
+          await capture(setup, `${alias}-discovery`);
+          assert.match(setup.captureCharFrame(), new RegExp(title, "u"));
+          assert.ok(
+            commandOwners[0]
+              .snapshot()
+              .slash.some((row) => row.alias === alias),
+          );
+          await press(setup, "escape");
+          await act(async () => setup.mockInput.typeText(`/${alias}`));
+          await press(setup, "enter");
+          if (alias === "archive") {
+            await waitForFrame(setup, (frame) =>
+              frame.includes("Archive which Agent?"),
+            );
+            await capture(setup, "09-archive-agents");
+            await press(setup, "enter");
+            await waitForFrame(setup, (frame) =>
+              frame.includes("conversations and files stay"),
+            );
+            await press(setup, "enter");
+            await waitForFrame(setup, () => archived.length === 1);
+            assert.deepEqual(archived, [
+              {
+                invocationRoot: "/fixture",
+                agentId: "one",
+                archived: true,
+              },
+            ]);
+          } else {
+            await waitForFrame(setup, (frame) => frame.includes("Extensions"));
+            await capture(setup, "10-extensions");
+            await press(setup, "enter");
+            await act(async () => closing.promise);
+            await waitForFrame(setup, (frame) => {
+              const ready =
+                frame.includes("No extensions installed.") &&
+                !frame.includes("Manage extensions") &&
+                !frame.includes("Enter close");
+              if (
+                !observedClosing &&
+                frame.includes("No extensions installed.")
+              ) {
+                observedClosing = true;
+                try {
+                  assert.match(frame, /Manage extensions/u);
+                  assert.equal(
+                    ready,
+                    false,
+                    "the notice cannot make the still-closing dialog ready",
+                  );
+                } finally {
+                  releaseClose.resolve();
+                }
+              }
+              return ready;
+            });
+            assert.equal(observedClosing, true);
+            assert.doesNotMatch(setup.captureCharFrame(), /Manage extensions/u);
+            assert.doesNotMatch(setup.captureCharFrame(), /Enter close/u);
+            await capture(setup, "11-extensions-list");
+          }
+        },
+        {
+          beforeExtensionsComplete:
+            alias === "extensions"
+              ? async () => {
+                  closing.resolve();
+                  await releaseClose.promise;
+                }
+              : undefined,
+        },
+      );
+    } finally {
+      releaseClose.resolve();
+    }
+  });
+}
+
+test("cancelled /model consumes only its command", async () => {
+  await withModels(async ({ setups, commandOwners }) => {
+    const setup = setups[0];
+    await waitForFrame(setup, (frame) => frame.includes("Ask anything"));
+    await act(async () => setup.mockInput.typeText("/model"));
+    await press(setup, "enter");
+    await waitForFrame(setup, (frame) => frame.includes("Use agent model"));
+    await press(setup, "escape");
+    await act(async () => setup.mockInput.typeText("next prompt"));
+    await act(async () => setup.renderOnce());
+    await capture(setup, "02-cancelled-model");
+    assert.doesNotMatch(setup.captureCharFrame(), /\/modelnext prompt/u);
+    assert.match(setup.captureCharFrame(), /next prompt/u);
+    // A command-search launch preserves a genuine pre-existing draft.
+    const choosing = await begin(setup, commandOwners[0], "model");
+    await press(setup, "escape");
+    await choosing.settled();
+    assert.match(setup.captureCharFrame(), /next prompt/u);
+  });
+});
+
+test("provider Enter keeps that provider instead of resetting to the agent model", async () => {
+  await withModels(async ({ setups, commandOwners }) => {
+    const setup = setups[0];
+    const provider = await begin(setup, commandOwners[0], "model");
+    await press(setup, "down");
+    await press(setup, "down");
+    await press(setup, "enter");
+    await capture(setup, "05-provider-default");
+    try {
+      assert.match(setup.captureCharFrame(), /▶ OpenAI · Sol \(current\)/u);
+      await press(setup, "enter");
+      assert.match(setup.captureCharFrame(), /Thinking level for Sol/u);
+      await press(setup, "enter");
+      await provider.settled();
+      assert.match(setup.captureCharFrame(), /openai\/sol/u);
+    } finally {
+      await press(setup, "escape");
+      await provider.settled();
+    }
+  });
+});
+
 test("native model flow applies one supported pair only after the thinking choice", async () => {
   await withModels(async ({ setups, commandOwners, opened }) => {
     const setup = setups[0];
@@ -252,12 +433,7 @@ test("native model flow applies one supported pair only after the thinking choic
     await press(setup, "down");
     await press(setup, "down");
     await press(setup, "enter");
-    assertOptions(setup, [
-      "Use agent model",
-      "OpenAI · Sol (current)",
-      "OpenAI · Luna",
-    ]);
-    await press(setup, "down");
+    assertOptions(setup, ["OpenAI · Sol (current)", "OpenAI · Luna"]);
     await press(setup, "down");
     await press(setup, "enter");
     assert.match(setup.captureCharFrame(), /Thinking level for Luna/u);
@@ -331,19 +507,20 @@ test("cancel retains the mounted model; a rejected preference remains visible", 
       await press(setup, "down");
       await press(setup, "enter");
       await press(setup, "down");
-      await press(setup, "down");
       await press(setup, "enter");
       await press(setup, "down");
       writeFailure = new Error("Preference rejected");
       await press(setup, "enter");
-      await act(async () => rejected.settled());
-      await act(async () => setup.renderOnce());
+      await act(async () =>
+        waitForFrame(setup, (frame) => frame.includes("Preference rejected")),
+      );
       assert.match(setup.captureCharFrame(), /Preference rejected/u);
       assert.match(setup.captureCharFrame(), /openai\/sol/u);
       assert.doesNotMatch(setup.captureCharFrame(), /openai\/luna/u);
       assert.equal(opened.length, 1);
       assert.equal(context.closed, 0);
       await press(setup, "escape");
+      await act(async () => rejected.settled());
       assert.ok(
         nodes(setup.renderer.root).find(
           (node) => node instanceof TextareaRenderable && node.focused,
@@ -380,12 +557,7 @@ test("unsigned model selection signs in before saving and keeps the same session
       assert.match(setup.captureCharFrame(), /Fixture API key/u);
       await act(async () => setup.mockInput.typeText("fixture-credential"));
       await press(setup, "enter");
-      assertOptions(setup, [
-        "Use agent model",
-        "OpenAI · Sol (current)",
-        "OpenAI · Luna",
-      ]);
-      await press(setup, "down");
+      assertOptions(setup, ["OpenAI · Sol (current)", "OpenAI · Luna"]);
       await press(setup, "down");
       await press(setup, "enter");
       await press(setup, "enter");

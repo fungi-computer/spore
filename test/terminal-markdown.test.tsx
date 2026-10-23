@@ -288,9 +288,8 @@ const gallery = "https://claude.ai/artifact/CfPhvRqs9e1VtP12LAPprT";
 
 test("a Markdown link shows its label and full URL, and selecting the URL copies it whole", async () => {
   function Copyable() {
-    const presentation = useTerminalTheme("mocha");
     return (
-      <CopySurface colors={presentation.colors}>
+      <CopySurface>
         <Markdown
           content={`See [Screenshot gallery](${gallery}).\n\n[https://example.com/plain](https://example.com/plain)`}
         />

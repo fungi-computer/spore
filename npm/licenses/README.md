@@ -14,8 +14,8 @@ declarations; no missing copyright year or holder is fabricated. Review these
 declarations as part of publication approval.
 
 For example, `LICENSE.pi` is the unmodified root license from
-[`earendil-works/pi` v0.99.2](https://github.com/earendil-works/pi/blob/v0.99.2/LICENSE),
-the release used by `@earendil-works/pi-ai@0.99.2`. Its SHA-256 is
+[`earendil-works/pi` v1.3.0](https://github.com/earendil-works/pi/blob/v1.3.0/LICENSE),
+the release used by `@earendil-works/pi-ai@1.3.0`. Its SHA-256 is
 `0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48`. The bundler
 includes this text in `THIRD_PARTY_NOTICES` because the upstream npm package
 declares MIT but does not carry the license file. It does not set the Fungi

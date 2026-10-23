@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import process from "node:process";
+import { homedir } from "node:os";
+import { basename } from "node:path";
 import {
   installedUpdateRestart,
   resumeInstalledUpdate,
@@ -18,7 +20,10 @@ import { createRoot } from "@opentui/react";
 import type { QueryClient } from "@tanstack/query-core";
 import { createQueryClient } from "@fungi.computer/agar/query";
 import { createWhistle } from "@fungi.computer/whistle";
-import { createPrivateModels } from "@fungi.computer/truffle";
+import {
+  createPrivateModels,
+  resolveDefaultCredentialPath,
+} from "@fungi.computer/truffle";
 import { localAccountOwner } from "@fungi.computer/truffle/login";
 import {
   contributeAccountCommands,
@@ -31,7 +36,8 @@ import {
   renderTuiLanding,
   renderTuiConnecting,
   renderTuiConnectionRecovery,
-  renderTuiServiceMismatch,
+  renderTuiServiceUpdated,
+  checkpointTuiUpdateDrafts,
 } from "./frame-renderer.js";
 import {
   loadThemePreference,
@@ -73,13 +79,19 @@ export type TuiCliDependencies = Readonly<{
 }> &
   SelectedSessionDependencies;
 
-const defaultDependencies: TuiCliDependencies = {
+const defaultDependencies: Omit<
+  TuiCliDependencies,
+  "createServiceManager" | "renderLanding" | "loginProviders"
+> = {
+  checkpointDrafts: checkpointTuiUpdateDrafts,
+  automaticInstalledRestart:
+    process.env.FUNGI_LAUNCHER !== undefined &&
+    basename(process.env.FUNGI_LAUNCHER) !== "fungi.cjs",
   resumeInstalledUpdate,
   signals: process,
   loadThemePreference,
   saveThemePreference,
   createWhistle,
-  createServiceManager: () => createPrivateLocalServiceManager(),
   prepareClientExtensions,
   createQueryClient,
   createRenderer: createCliRenderer,
@@ -103,8 +115,7 @@ const defaultDependencies: TuiCliDependencies = {
   },
   renderConnecting: renderTuiConnecting,
   renderRecovery: renderTuiConnectionRecovery,
-  renderServiceMismatch: renderTuiServiceMismatch,
-  clientBuildId: process.env.FUNGI_BUNDLED_BUILD_ID,
+  renderServiceUpdated: renderTuiServiceUpdated,
   renderPicker: (root, sessions, onSelect, onCancel, theme) => {
     renderTuiSessionPicker(root, {
       ...theme,
@@ -113,18 +124,8 @@ const defaultDependencies: TuiCliDependencies = {
       sessions,
     });
   },
-  renderLanding: (root, sessions, folder, choose, theme) => {
-    renderTuiLanding(root, {
-      initialTheme: theme.initialTheme,
-      sessions,
-      folder,
-      loadSummary: readLandingSummary,
-      choose,
-    });
-  },
   enableKeymap: true,
   runOneShot,
-  loginProviders: () => createPrivateModels().getProviders(),
   checkInstalledUpdate:
     process.env.FUNGI_LAUNCHER === undefined
       ? undefined
@@ -134,7 +135,7 @@ const defaultDependencies: TuiCliDependencies = {
           if (link === null || running === undefined) return undefined;
           return installedUpdateRestart(link, running, sessions);
         },
-} satisfies TuiCliDependencies;
+};
 
 async function collectCliCleanupFailure(
   cleanupFailures: Error[],
@@ -162,9 +163,36 @@ async function collectDefinedCliCleanupFailure<Value>(
 export async function runTuiCli(
   options: TuiCliOptions,
   overrides: Partial<TuiCliDependencies> = {},
+  home = homedir(),
 ): Promise<void> {
+  const credentialPath = resolveDefaultCredentialPath(home);
   const dependencies: TuiCliDependencies = {
     ...defaultDependencies,
+    createServiceManager: () =>
+      createPrivateLocalServiceManager({
+        home,
+        reportCleanupFailure: (cause) => {
+          reportFailure("local-service-cleanup", cause);
+        },
+      }),
+    loginProviders: () => createPrivateModels(credentialPath).getProviders(),
+    renderLanding: (root, sessions, folder, choose, theme, agents, notice) => {
+      renderTuiLanding(root, {
+        initialTheme: theme.initialTheme,
+        sessions,
+        agents,
+        notice,
+        folder,
+        loadSummary: (signal) =>
+          readLandingSummary(
+            createPrivateModels(credentialPath),
+            agents,
+            signal,
+            { credentialPath },
+          ),
+        choose,
+      });
+    },
     ...overrides,
   };
   let failure: Error | undefined;
@@ -258,7 +286,7 @@ export async function runTuiCli(
         },
       );
       try {
-        await runSessionApplication(options, dependencies, application);
+        await runSessionApplication(options, dependencies, application, home);
       } finally {
         account.dispose();
       }

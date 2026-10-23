@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -10,6 +10,7 @@ import {
 } from "../../../tooling/proof-containers/proof-janitor.mjs";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
+const proofWorkArea = resolve(repository, ".botanical/spore-packed-proof");
 const { values, positionals: archives } = parseArgs({
   allowPositionals: true,
   options: { "acp-fixture": { type: "string" } },
@@ -22,6 +23,8 @@ const builder = JSON.parse(
     "utf8",
   ),
 );
+await mkdir(proofWorkArea, { recursive: true });
+const evidenceDirectory = await mkdtemp(resolve(proofWorkArea, "evidence-"));
 const owner = installProofContainerTrap("cli-glibc-235");
 try {
   const args = [
@@ -40,6 +43,8 @@ try {
     "--mount",
     `type=bind,src=${repository},dst=${repository},readonly`,
     "--mount",
+    `type=bind,src=${proofWorkArea},dst=${proofWorkArea}`,
+    "--mount",
     `type=bind,src=${dirname(dirname(process.execPath))},dst=/opt/node,readonly`,
     "--workdir",
     repository,
@@ -47,6 +52,8 @@ try {
     "PATH=/opt/node/bin:/usr/bin:/bin",
     "--env",
     "HOME=/tmp/fungi-baseline-home",
+    "--env",
+    `SPORE_PACKED_PROOF_RECEIPT_DIR=${evidenceDirectory}`,
     builder.image,
     "bash",
     "-euc",
@@ -70,4 +77,5 @@ try {
   });
 } finally {
   owner.cleanup();
+  console.error(`Baseline ACP proof evidence retained at ${evidenceDirectory}`);
 }

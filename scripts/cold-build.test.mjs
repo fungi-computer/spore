@@ -16,6 +16,9 @@ import process from "node:process";
 import { test } from "node:test";
 
 const root = resolve(import.meta.dirname, "../../..");
+const { name: tuiPackage } = JSON.parse(
+  readFileSync(join(import.meta.dirname, "../package.json"), "utf8"),
+);
 
 test("TUI builds and checks in a clean checkout after Parakeet cache restoration", () => {
   const parent = join(root, ".botanical/tui-cold-build");
@@ -99,11 +102,7 @@ test("TUI builds and checks in a clean checkout after Parakeet cache restoration
     rmSync(join(injected, "dist"), { recursive: true });
     assert.equal(existsSync(join(checkout, "apps/tui/dist")), false);
 
-    turbo(
-      "restored-tui",
-      ["build", "lint", "typecheck"],
-      "@fungi.computer/spore",
-    );
+    turbo("restored-tui", ["build", "lint", "typecheck"], tuiPackage);
     assert.match(
       readFileSync(join(work, "restored-tui.log"), "utf8"),
       /@fungi\.computer\/parakeet:build: cache hit/,
@@ -124,14 +123,11 @@ test("TUI builds and checks in a clean checkout after Parakeet cache restoration
     // Cached consumers still need the installed runtime files. This catches a
     // sync task that was accidentally made cacheable or moved into TUI's script.
     rmSync(join(injected, "dist"), { recursive: true });
-    turbo(
-      "cached-tui",
-      ["build", "lint", "typecheck"],
-      "@fungi.computer/spore",
-    );
-    assert.match(
-      readFileSync(join(work, "cached-tui.log"), "utf8"),
-      /@fungi\.computer\/tui:build: cache hit/,
+    turbo("cached-tui", ["build", "lint", "typecheck"], tuiPackage);
+    assert.ok(
+      readFileSync(join(work, "cached-tui.log"), "utf8").includes(
+        `${tuiPackage}:build: cache hit`,
+      ),
     );
     run(
       "headless-import",

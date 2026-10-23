@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
-import { RGBA, type KeyEvent } from "@opentui/core";
+import { RGBA, parseKeypress, type KeyEvent } from "@opentui/core";
 import { terminalPalette } from "@fungi.computer/stipe";
 import { Shiitake, type ShiitakeAgent } from "@fungi.computer/shiitake";
+import type { SessionPendingPrompt } from "@fungi.computer/shiitake/client";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import {
   QueryClientProvider,
   notifyManager,
@@ -98,13 +100,154 @@ async function queuedFrame(
     return setup.captureCharFrame();
   } finally {
     keymap.cleanup();
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     commands.close();
     client.clear();
     notifyManager.setScheduler(defaultScheduler);
   }
+}
+
+for (const imageOnly of [false, true]) {
+  test(`plain Up recalls and resends the newest native ${imageOnly ? "image-only" : "text"} payload`, async () => {
+    const fixture = createNativeSqliteOwnerFixture();
+    const runtime = createCompatibilityRuntimeHost();
+    const agent = await Shiitake.make({
+      ...compatibilityRunDependencies(),
+      store: fixture.owner,
+      runtime: runtime.runtime,
+    });
+    try {
+      const session = agent.session("up-recall");
+      const first = await session.send("A stays queued", {
+        requestId: "recall-A",
+        delivery: "followUp",
+      });
+      const text = imageOnly ? "" : "B recall target";
+      const delivery = imageOnly ? "steer" : "followUp";
+      const images: NonNullable<SessionPendingPrompt["images"]> = imageOnly
+        ? [
+            {
+              type: "image",
+              data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6KQAAAABJRU5ErkJggg==",
+              mimeType: "image/png",
+            },
+          ]
+        : [];
+      const second = await session.send(
+        text,
+        imageOnly
+          ? { requestId: "recall-B", delivery, images }
+          : { requestId: "recall-B", delivery },
+      );
+      await queuedFrame(
+        agent,
+        "up-recall",
+        `recall-native${imageOnly ? "-images" : ""}-before`,
+        async (setup) => {
+          expect(setup.captureCharFrame()).not.toContain(
+            "Up on an empty composer recalls your latest queued message",
+          );
+          const repeated = parseKeypress(Buffer.from("\u001b[57352;1:2u"), {
+            useKittyKeyboard: true,
+          });
+          expect(repeated?.name).toBe("up");
+          expect(repeated?.eventType).toBe("press");
+          expect(repeated?.repeated).toBe(true);
+          if (repeated === null) throw new Error("Kitty repeat did not decode");
+          await act(async () => {
+            setup.renderer.keyInput.processParsedKey(repeated);
+            await setup.renderOnce();
+          });
+          expect(
+            (await session.read()).pending.prompts.map(
+              (prompt) => prompt.commandId,
+            ),
+          ).toEqual([first.commandId, second.commandId]);
+          for (const modifier of [
+            { shift: true },
+            { ctrl: true },
+            { meta: true },
+          ]) {
+            await act(async () => {
+              setup.mockInput.pressArrow("up", modifier);
+              await setup.renderOnce();
+            });
+            expect(
+              (await session.read()).pending.prompts.map(
+                (prompt) => prompt.commandId,
+              ),
+            ).toEqual([first.commandId, second.commandId]);
+          }
+          await act(async () => {
+            setup.mockInput.pressArrow("up");
+            await setup.renderOnce();
+          });
+          await act(async () =>
+            setup.waitForFrame((frame) =>
+              frame.includes(
+                imageOnly ? "1 attached image(s)" : "› B recall target",
+              ),
+            ),
+          );
+          expect(
+            (await session.read()).pending.prompts.map(
+              (prompt) => prompt.commandId,
+            ),
+          ).toEqual([first.commandId]);
+          await captureFrame(
+            setup,
+            process.env.TUI_QUEUE_SHOTS,
+            `recall-native${imageOnly ? "-images" : ""}-after`,
+          );
+          await act(async () => {
+            setup.mockInput.pressArrow("up");
+            await setup.renderOnce();
+          });
+          expect(
+            (await session.read()).pending.prompts.map(
+              (prompt) => prompt.commandId,
+            ),
+          ).toEqual([first.commandId]);
+          await act(async () => {
+            setup.mockInput.pressEnter();
+            await setup.renderOnce();
+          });
+          await act(async () =>
+            setup.waitForFrame((frame) => frame.includes("› Ask anything")),
+          );
+          const pending = (await session.read()).pending.prompts;
+          expect(pending).toHaveLength(2);
+          const resent = pending.find(
+            (prompt) => prompt.commandId !== first.commandId,
+          );
+          expect(resent).toMatchObject({ text, delivery });
+          if (resent === undefined) throw new Error("Missing native resend");
+          if (imageOnly) expect(resent.images).toEqual(images);
+          expect(resent.requestId).not.toBe("recall-B");
+          expect(resent.commandId).not.toBe(second.commandId);
+          await act(async () => {
+            setup.mockInput.pressArrow("up");
+            await setup.renderOnce();
+          });
+          await act(async () =>
+            setup.waitForFrame((frame) =>
+              frame.includes(
+                imageOnly ? "1 attached image(s)" : "› B recall target",
+              ),
+            ),
+          );
+          expect(
+            (await session.read()).pending.prompts.map(
+              (prompt) => prompt.commandId,
+            ),
+          ).toEqual([first.commandId]);
+        },
+      );
+    } finally {
+      await agent.close();
+      fixture.close();
+    }
+  });
 }
 
 test("one conversation awaits its host without claiming another conversation blocks it", async () => {
@@ -177,6 +320,7 @@ test("a queued conversation identifies the actual Session holding the Agent", as
     model: {
       acquire: () =>
         Promise.resolve({
+          retryable: () => false,
           model: faux.getModel(),
           stream: faux.provider.streamSimple.bind(faux.provider),
           release: () => Promise.resolve(),
@@ -324,6 +468,7 @@ test("Esc stops only the current run and the next queued message runs", async ()
     model: {
       acquire: () =>
         Promise.resolve({
+          retryable: () => false,
           model: faux.getModel(),
           stream: faux.provider.streamSimple.bind(faux.provider),
           release: () => Promise.resolve(),

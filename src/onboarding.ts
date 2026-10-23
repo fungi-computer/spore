@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import { Writable, type Readable } from "node:stream";
-import { Cli, isCancel } from "@fungi.computer/lantern";
+import { Cli } from "@fungi.computer/lantern";
 import writeFileAtomic from "write-file-atomic";
 import { z } from "zod";
 import { chooseSignInDoor, type SignInDoor } from "./sign-in-choice.js";
@@ -73,18 +73,9 @@ export async function runOnboarding(
   const door = await chooseSignInDoor(cli, { allowSkip: true });
   if (door === undefined) return cancelled(cli);
   if (door !== "later") await options.signIn(door, cli);
-  const start = await cli.confirm({
-    message: "Open Fungi now?",
-    initialValue: true,
-  });
-  if (isCancel(start)) return cancelled(cli);
   await saveSetup(options.path ?? setupPath(), savedDoor[door]);
-  cli.outro(
-    start
-      ? "Ready to grow."
-      : "Ready to grow. Next: fungi · fungi login · fungi doctor · fungi --help",
-  );
-  return start;
+  cli.outro("Ready to grow.");
+  return true;
 }
 
 function cancelled(cli: Cli): false {

@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { admitTerminalTermination } from "../src/panes/terminal/quit.js";
-import type { PaneNotice } from "../src/button/index.js";
+import type { ToastInput } from "../src/button/index.js";
 
 test("failed job inspection keeps the shell open and explains the refused quit", async () => {
-  const notices: PaneNotice[] = [];
+  const notices: ToastInput[] = [];
   let confirmations = 0;
   const allowed = await admitTerminalTermination(
     () => Promise.reject(new Error("ps failed")),
@@ -19,7 +19,8 @@ test("failed job inspection keeps the shell open and explains the refused quit",
   expect(confirmations).toBe(0);
   expect(notices).toEqual([
     {
-      tone: "error",
+      variant: "error",
+      duration: "until-dismissed",
       message:
         "Could not check shell jobs. Shells are still running; try again.",
     },
@@ -27,7 +28,7 @@ test("failed job inspection keeps the shell open and explains the refused quit",
 });
 
 test("idle shells quit without a question; running jobs require consent", async () => {
-  const notify = () => {
+  const toast = () => {
     throw new Error("Unexpected notice");
   };
   const confirm = () => Promise.resolve(false);
@@ -35,21 +36,17 @@ test("idle shells quit without a question; running jobs require consent", async 
     await admitTerminalTermination(
       () => Promise.resolve(false),
       confirm,
-      notify,
+      toast,
     ),
   ).toBe(true);
   expect(
-    await admitTerminalTermination(
-      () => Promise.resolve(true),
-      confirm,
-      notify,
-    ),
+    await admitTerminalTermination(() => Promise.resolve(true), confirm, toast),
   ).toBe(false);
   expect(
     await admitTerminalTermination(
       () => Promise.resolve(true),
       () => Promise.resolve(true),
-      notify,
+      toast,
     ),
   ).toBe(true);
 });

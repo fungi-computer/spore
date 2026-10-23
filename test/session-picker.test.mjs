@@ -23,6 +23,10 @@ const sessions = [
     createdAt: 1,
     updatedAt: 2,
     resume: async () => ({
+      sandboxStatus: async () => ({
+        state: "available",
+        requireSandbox: false,
+      }),
       agentId: "agent-fixture",
       sessionId: "session-fixture",
       databasePath: "/private/not-rendered.sqlite",
@@ -74,7 +78,17 @@ test("cancels before opening a selected host", async () => {
   await runTuiCli(
     { invocationRoot: "/tmp", resume: true },
     {
-      discoverSessions: async () => ({ agentCount: 1, sessions, problems: [] }),
+      discoverSessions: async () => ({
+        agents: [
+          {
+            agentId: "one",
+            databasePath: "/project/one/agent.sqlite",
+            sessionCount: 1,
+          },
+        ],
+        sessions,
+        problems: [],
+      }),
       createRenderer: async () => renderer,
       createRoot: () => root,
       renderPicker: (_root, _sessions, _onSelect, onCancel) => onCancel(),
@@ -121,6 +135,10 @@ test("the maintained renderer key handler cancels the focused chooser", async ()
 test("--last opens the newest discovered store without a picker", async () => {
   let resumed = false;
   const resumedHost = {
+    sandboxStatus: async () => ({
+      state: "available",
+      requireSandbox: false,
+    }),
     agentId: "agent-fixture",
     sessionId: "session-fixture",
     databasePath: "/tmp/newest.sqlite",
@@ -157,6 +175,10 @@ test("picker selection reopens its hidden existing database target", async () =>
   let pickerRendered = false;
   let resumed = false;
   const host = {
+    sandboxStatus: async () => ({
+      state: "available",
+      requireSandbox: false,
+    }),
     agentId: "agent-fixture",
     sessionId: "session-fixture",
     databasePath: "/tmp/picked.sqlite",
@@ -206,7 +228,22 @@ test("ordinary startup shows the conversation chooser for multiple Agent stores"
       loadThemePreference: async () => ({ theme: "terminal" }),
       createServiceManager: () => ({
         ...serviceManager,
-        discover: async () => ({ agentCount: 2, sessions, problems: [] }),
+        discover: async () => ({
+          agents: [
+            {
+              agentId: "one",
+              databasePath: "/project/one/agent.sqlite",
+              sessionCount: 1,
+            },
+            {
+              agentId: "two",
+              databasePath: "/project/two/agent.sqlite",
+              sessionCount: 1,
+            },
+          ],
+          sessions,
+          problems: [],
+        }),
         connect: async () => {
           connections += 1;
           throw new Error("must not choose an Agent");

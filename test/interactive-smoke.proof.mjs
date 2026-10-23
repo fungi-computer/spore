@@ -23,6 +23,7 @@ const packageRoot = fileURLToPath(new URL("..", import.meta.url));
 const repository = resolve(packageRoot, "../..");
 const pickerFooter = "↑↓ choose · Enter select · Esc cancel";
 const composerPlaceholder = "Ask anything";
+const terminalPrompt = "smoke-terminal> ";
 const keys = {
   leader: "\x0b",
   enter: "\r",
@@ -127,6 +128,12 @@ async function prepareVariant(root, variant, hubOrigin) {
   await mkdir(join(home, ".fungi"), { recursive: true, mode: 0o700 });
   await mkdir(project, { mode: 0o700 });
   await writeFile(join(project, "README.md"), "Synthetic smoke project.\n");
+  // Observe the real shell without depending on removed pane status chrome.
+  await writeFile(
+    join(home, ".profile"),
+    `PS1='${terminalPrompt}'; export PS1\n`,
+    { mode: 0o600 },
+  );
   // A person who already finished onboarding, as on an installed machine.
   await writeFile(
     join(home, ".fungi/onboarding.json"),
@@ -166,6 +173,7 @@ async function prepareVariant(root, variant, hubOrigin) {
     XDG_DATA_HOME: join(home, ".local/share"),
     XDG_STATE_HOME: join(home, ".local/state"),
     TERM: "xterm-256color",
+    SHELL: "/bin/sh",
     LANG: "C.UTF-8",
   };
   return { home, project, env };
@@ -200,7 +208,8 @@ function pickerRows(lines) {
   for (let index = footer - 1; index >= 0; index -= 1) {
     const cell = lines[index].slice(column);
     if (cell.trim() === "") continue;
-    const match = /^(▶ | {2})(\S.*?)(?: {2,}|$)/u.exec(cell);
+    if (cell.trim() === "/ type to filter") continue;
+    const match = /^(?:[1-9] | {2})(▶ | {2})(\S.*?)(?: {2,}|$)/u.exec(cell);
     if (match === null) {
       return { title: cell.trim(), choices: choices.reverse() };
     }
@@ -242,13 +251,17 @@ async function runVariant(command, variant, appDirectoryResponseSchema) {
     return predicate(screen.text(), screen.lines());
   };
   const expect = async (predicate, message, timeout) => {
-    if (!(await waitFor(predicate, timeout))) throw new Error(message);
+    if (!(await waitFor(predicate, timeout)))
+      throw new Error(`${message}\n${screen.text()}`);
   };
-  const leaderShown = (_text, lines) => pickerRows(lines)?.title === "Panes";
-  /** Ctrl K then a key; true once the Panes keys gave way to its action. */
+  const leaderShown = (text) =>
+    text.includes("Close pane") &&
+    text.includes("All commands") &&
+    !text.includes(pickerFooter);
+  /** Ctrl K then a key; true once the nonmodal hints gave way to its action. */
   const leader = async (key) => {
     await type(keys.leader);
-    await expect(leaderShown, "Ctrl K did not show the Panes keys");
+    await expect(leaderShown, "Ctrl K did not show the which-key hints");
     await type(key);
     return waitFor((text, lines) => !leaderShown(text, lines), 1_500);
   };
@@ -277,15 +290,15 @@ async function runVariant(command, variant, appDirectoryResponseSchema) {
   const erase = async (count) => {
     for (let index = 0; index < count; index += 1) await type(keys.backspace);
   };
-  const slashMenuShown = (text) =>
-    /\/resume\s+Resume a conversation/u.test(text);
+  const slashMenuShown = (text) => /\/help\s+Show commands/u.test(text);
   const assertSlashMenu = async () => {
     await type("/");
     const shown = await waitFor(slashMenuShown, 3_000);
+    const frame = screen.text();
     await erase(1);
     if (!shown)
       throw new Error(
-        'Typing "/" in the conversation did not open the slash menu',
+        `Typing "/" in the conversation did not open the slash menu:\n${frame}`,
       );
   };
   const closeQuestion = "Close local shell and terminate its jobs?";
@@ -293,7 +306,7 @@ async function runVariant(command, variant, appDirectoryResponseSchema) {
   const closeFocusedTerminal = async () => {
     await leader("x");
     const closed = await waitFor(
-      (text) => !text.includes("Local machine ·"),
+      (text) => !text.includes(terminalPrompt),
       3_000,
     );
     if (screen.text().includes(closeQuestion)) {
@@ -305,7 +318,7 @@ async function runVariant(command, variant, appDirectoryResponseSchema) {
     if (!closed)
       throw new Error("Ctrl K x on an idle terminal did not close it");
   };
-  const terminalOpen = (text) => /Local machine · \S/u.test(text);
+  const terminalOpen = (text) => text.includes(terminalPrompt);
   /** The shell runs the command; the conversation composer never sees it. */
   const assertTerminalTakesTyping = async (sum) => {
     const typed = `echo smoke-$((40+${String(sum - 40)}))`;
@@ -361,13 +374,50 @@ async function runVariant(command, variant, appDirectoryResponseSchema) {
   };
 
   try {
+    const bootDeadline = Date.now() + 60_000;
+    await expect(
+      (text) =>
+        text.includes("No conversations in this folder yet") &&
+        text.includes("+ New session"),
+      "The new-project landing never rendered",
+      Math.max(0, bootDeadline - Date.now()),
+    );
+    await type("n");
     await expect(
       (text) => text.includes(composerPlaceholder),
       "The conversation composer never rendered",
-      60_000,
+      Math.max(0, bootDeadline - Date.now()),
     );
 
     await step('(a) "/" opens the slash menu', assertSlashMenu);
+
+    await step(
+      "(b) an unmatched leader key leaves the composer focused and unchanged",
+      async () => {
+        const draft = "leader-discard-draft";
+        await type(draft);
+        await expect(
+          (text) => text.includes(draft),
+          "Draft did not reach the composer",
+        );
+        // z is the real Zoom binding; q is unbound in this shipped shell.
+        // The decoded-key fixture separately proves an unmatched Ctrl-K,z.
+        await type(keys.leader);
+        await type("q");
+        await type("!");
+        await expect(
+          (text) => text.includes(`${draft}!`),
+          "The unmatched follow-up changed the draft or stole composer focus",
+        );
+        if (screen.text().includes(`${draft}q`))
+          throw new Error("The unmatched leader key reached the composer");
+        await erase(draft.length + 1);
+        await expect(
+          (text) => text.includes(composerPlaceholder),
+          "The composer did not remain editable after discarding the follow-up",
+        );
+      },
+    );
 
     let listed = [];
     await step(
@@ -395,6 +445,8 @@ async function runVariant(command, variant, appDirectoryResponseSchema) {
     await step("(c) read every choice the pane picker shows", async () => {
       await openPicker();
       listed = pickerRows(screen.lines())?.choices.map((row) => row.name) ?? [];
+      if (listed.length === 0)
+        throw new Error("The open pane picker listed no choices");
       await type(keys.escape);
       // A failing App read goes first: that is how Levi's install broke.
       listed.sort(
@@ -409,18 +461,21 @@ async function runVariant(command, variant, appDirectoryResponseSchema) {
             ? "App directory refused with HTTP 503"
             : "Sign in to Fungi";
         await step(
-          `(c) Apps: a refused choice shows "${reason}" and the next key clears it`,
+          `(c) Apps: a refused choice shows "${reason}" until Escape dismisses it`,
           async () => {
             await openChoice("Apps");
             await expect(
               (text) => text.includes(reason),
               `Choosing Apps showed no "${reason}" notice: a silent no-op`,
             );
-            // Any key dismisses the notice; Down leaves the empty composer as is.
+            // Attention survives ordinary keys; Escape dismisses only the toast.
             await type(keys.down);
+            if (!screen.text().includes(reason))
+              throw new Error("An ordinary key dismissed the attention toast");
+            await type(keys.escape);
             await expect(
               (text) => !text.includes(reason),
-              "The refused-choice notice stayed after the next key",
+              "The refused-choice notice stayed after Escape",
               2_000,
             );
           },
@@ -508,10 +563,10 @@ async function runVariant(command, variant, appDirectoryResponseSchema) {
     await step(
       "(b) Ctrl K o then Enter opens the listed Local terminal",
       async () => {
-        const before = occurrences(screen.text(), "Local machine ·");
+        const before = occurrences(screen.text(), terminalPrompt);
         await openChoice("Local terminal");
         await expect(
-          (text) => occurrences(text, "Local machine ·") > before,
+          (text) => occurrences(text, terminalPrompt) > before,
           "Choosing Local terminal from Ctrl K o did not open a terminal pane",
         );
       },
@@ -543,10 +598,10 @@ async function runVariant(command, variant, appDirectoryResponseSchema) {
     await step(
       "(d) a terminal with a running job asks before Ctrl K x terminates it",
       async () => {
-        const before = occurrences(screen.text(), "Local machine ·");
+        const before = occurrences(screen.text(), terminalPrompt);
         await openChoice("Local terminal");
         await expect(
-          (text) => occurrences(text, "Local machine ·") > before,
+          (text) => occurrences(text, terminalPrompt) > before,
           "Ctrl K o did not open a Local terminal pane",
         );
         await type(`sleep 30 &${keys.enter}`);
@@ -568,7 +623,7 @@ async function runVariant(command, variant, appDirectoryResponseSchema) {
         );
         await choose("Terminate and close");
         await expect(
-          (text) => !text.includes("Local machine ·"),
+          (text) => !text.includes(terminalPrompt),
           "The terminal pane is still shown after Terminate and close",
         );
       },
@@ -621,7 +676,7 @@ async function runVariant(command, variant, appDirectoryResponseSchema) {
 const command = await launcherCommand();
 // Imported after the build: a fresh checkout has no Oyster dist before it.
 const { appDirectoryResponseSchema } =
-  await import("@fungi.computer/oyster/shell/app-directory");
+  await import("@fungi.computer/nacre/app-directory");
 const results = [
   ...(await runVariant(command, "signed-out", appDirectoryResponseSchema)),
   ...(await runVariant(command, "signed-in", appDirectoryResponseSchema)),

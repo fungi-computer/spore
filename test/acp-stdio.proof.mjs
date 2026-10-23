@@ -1,9 +1,18 @@
 import assert from "node:assert/strict";
 import console from "node:console";
 import process from "node:process";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { access, chmod, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -27,7 +36,15 @@ const bundle = resolve(
 await access(bundle);
 const launcher = join(dirname(bundle), "fungi.cjs");
 await access(launcher);
+// The embedded owner must advertise the same real build as the packed client.
+process.env.FUNGI_BUNDLED_BUILD_ID = JSON.parse(
+  execFileSync("node", [launcher, "--internal-build-id"], { encoding: "utf8" }),
+);
 const root = await mkdtemp(join(tmpdir(), "fungi-acp-bundle-"));
+const evidenceDirectory =
+  process.env.SPORE_PACKED_PROOF_RECEIPT_DIR ??
+  (await mkdtemp(join(tmpdir(), "fungi-acp-evidence-")));
+await mkdir(evidenceDirectory, { recursive: true, mode: 0o700 });
 const home = join(root, "home");
 const project = join(root, "project");
 const directory = join(home, ".fungi/service");
@@ -38,18 +55,26 @@ const faux = fauxProvider({
   tokensPerSecond: 100,
   tokenSize: { min: 1, max: 1 },
 });
+const patchToolCallId = "acp-native-patch";
+const patchUpdates = [];
 faux.setResponses([
+  fauxAssistantMessage("First plain answer."),
+  fauxAssistantMessage("Second plain answer."),
   fauxAssistantMessage(
     fauxToolCall("execute", {
-      code: 'async () => await Local_Computer.exec({command:"printf ACP_WORKERD_OK > tool-result.txt"})',
+      code: 'return await env.computers.local.exec({command:"printf ACP_WORKERD_OK > tool-result.txt"})',
     }),
     { stopReason: "toolUse" },
   ),
   fauxAssistantMessage(
-    fauxToolCall("apply_patch", {
-      patch:
-        "*** Begin Patch\n*** Add File: native-acp.txt\n+ACP_NATIVE_OK\n*** End Patch\n",
-    }),
+    fauxToolCall(
+      "apply_patch",
+      {
+        patch:
+          "*** Begin Patch\n*** Add File: native-acp.txt\n+ACP_NATIVE_OK\n*** End Patch\n",
+      },
+      { id: patchToolCallId },
+    ),
     { stopReason: "toolUse" },
   ),
   fauxAssistantMessage("A single streamed answer."),
@@ -70,6 +95,41 @@ const running = runPrivateLocalService(directory, (options) =>
 const manager = createPrivateLocalServiceManager({ directory });
 let child;
 let serviceStarted = false;
+let passed = false;
+let phase = "initialize";
+let stderr = "";
+let failure;
+async function retainEvidence() {
+  let failureDetails;
+  if (failure instanceof Error) {
+    failureDetails = {
+      name: failure.name,
+      message: failure.message,
+      stack: failure.stack,
+    };
+    if (failure instanceof acp.RequestError) {
+      failureDetails.code = failure.code;
+      failureDetails.data = failure.data;
+    }
+  }
+  await writeFile(
+    join(evidenceDirectory, "native-apply-patch.json"),
+    JSON.stringify(
+      {
+        toolCallId: patchToolCallId,
+        updates: patchUpdates,
+        fixtureRoot: root,
+        phase,
+        passed,
+        stderr,
+        failure: failureDetails,
+      },
+      null,
+      2,
+    ),
+    { mode: 0o600 },
+  );
+}
 try {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     if (await manager.status()) {
@@ -88,14 +148,12 @@ try {
     env: { ...process.env, HOME: home },
     stdio: ["pipe", "pipe", "pipe"],
   });
-  let stderr = "";
   child.stderr.on("data", (bytes) => {
     stderr += bytes.toString();
   });
   const exited = once(child, "exit");
   const updates = [];
   let sessionId;
-  let phase = "prompt";
   const cancellationStarted = Promise.withResolvers();
   const text = () =>
     updates
@@ -110,10 +168,17 @@ try {
     Writable.toWeb(child.stdin),
     Readable.toWeb(child.stdout),
   );
+  await retainEvidence();
   await acp
     .client({ name: "bundled-stdio-proof" })
     .onNotification(acp.methods.client.session.update, ({ params }) => {
       updates.push(params.update);
+      if (
+        (params.update.sessionUpdate === "tool_call" ||
+          params.update.sessionUpdate === "tool_call_update") &&
+        params.update.toolCallId === patchToolCallId
+      )
+        patchUpdates.push(params.update);
       if (
         phase === "cancel" &&
         params.update.sessionUpdate === "agent_message_chunk"
@@ -131,11 +196,25 @@ try {
         initialized.agentCapabilities.sessionCapabilities.list,
         {},
       );
+      phase = "new";
       const created = await ctx.request(acp.methods.agent.session.new, {
         cwd: project,
         mcpServers: [],
       });
       sessionId = created.sessionId;
+      phase = "two plain prompts";
+      await retainEvidence();
+      for (const expected of ["First plain answer.", "Second plain answer."]) {
+        const plain = await ctx.request(acp.methods.agent.session.prompt, {
+          sessionId,
+          prompt: [{ type: "text", text: "Reply without using tools." }],
+        });
+        assert.equal(plain.stopReason, "end_turn");
+        assert.equal(text(), expected);
+        updates.length = 0;
+      }
+      phase = "prompt";
+      await retainEvidence();
       const answer = await ctx.request(acp.methods.agent.session.prompt, {
         sessionId,
         prompt: [{ type: "text", text: "Reply once." }],
@@ -151,12 +230,17 @@ try {
         await readFile(join(project, "native-acp.txt"), "utf8"),
         "ACP_NATIVE_OK\n",
       );
+      console.log(
+        "Packed ACP pre-cancel proof passed: initialize, new, workerd tool, native patch tool, exact streaming (faux inference)",
+      );
       phase = "cancel";
+      await retainEvidence();
       const pending = ctx.request(acp.methods.agent.session.prompt, {
         sessionId,
         prompt: [{ type: "text", text: "Write a long answer." }],
       });
-      await cancellationStarted.promise;
+      // A rejected prompt cannot emit a chunk; preserve its actual error.
+      await Promise.race([cancellationStarted.promise, pending]);
       await ctx.notify(acp.methods.agent.session.cancel, { sessionId });
       assert.equal((await pending).stopReason, "cancelled");
       const owned = await manager.inspect({
@@ -181,20 +265,26 @@ try {
       );
       updates.length = 0;
       phase = "load";
+      await retainEvidence();
       await ctx.request(acp.methods.agent.session.load, {
         cwd: project,
         sessionId,
         mcpServers: [],
       });
-      assert.ok(text().startsWith("A single streamed answer."));
+      assert.ok(text().startsWith("First plain answer."));
       assert.equal(text().split("A single streamed answer.").length, 2);
     })
     .catch((cause) => {
+      failure = cause;
       throw new Error(`Bundled ACP failed during ${phase}: ${stderr}`, {
         cause,
       });
     });
+  phase = "disconnect";
+  await retainEvidence();
   child.stdin.end();
+  phase = "await-exit";
+  await retainEvidence();
   assert.deepEqual(await exited, [0, null], stderr);
   const retained = await manager.inspect({
     invocationRoot: project,
@@ -206,11 +296,30 @@ try {
     await retained.close();
   }
   console.log(
-    "Bundled ACP stdio: initialize, new, workerd tool, native patch tool, exact streaming, owner cancellation, list, load and disconnect retention passed (faux inference)",
+    "Bundled ACP stdio: initialize, new, two plain prompts, workerd tool, native patch tool, exact streaming, owner cancellation, list, load and disconnect retention passed (faux inference)",
   );
+  passed = true;
 } finally {
-  if (child !== undefined && child.exitCode === null) child.kill();
-  if (serviceStarted) await manager.stop();
-  await running;
-  await rm(root, { recursive: true, force: true });
+  try {
+    await retainEvidence();
+  } finally {
+    if (child !== undefined && child.exitCode === null) child.kill();
+    // This fixture embeds the listener; invoke its owned shutdown handler rather
+    // than the external manager that must never terminate its caller's process.
+    if (serviceStarted) process.emit("SIGTERM", "SIGTERM");
+    try {
+      await running;
+    } finally {
+      try {
+        // ACP payloads and failed stores can contain credentials; keep them private.
+        if (!passed)
+          await cp(root, join(evidenceDirectory, "acp-session-store"), {
+            recursive: true,
+          });
+        console.error(`ACP proof evidence retained at ${evidenceDirectory}`);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  }
 }

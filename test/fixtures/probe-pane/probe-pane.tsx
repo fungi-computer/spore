@@ -44,7 +44,7 @@ function ProbeView({
             createRequestId: "probe-new-conversation",
           });
           if (outcome.kind === "refused")
-            kit.notify({ tone: "error", message: outcome.reason });
+            kit.toast({ variant: "error", message: outcome.reason });
         },
       },
     ]);

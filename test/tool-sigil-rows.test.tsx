@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { act } from "react";
 import { ScrollBoxRenderable, RGBA, type Renderable } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "@fungi.computer/agar/query";
 import { createWhistle } from "@fungi.computer/whistle";
@@ -49,6 +50,7 @@ for (const width of [80, 160]) {
                     code: glyph,
                     command: glyph,
                     edit: glyph,
+                    agent: glyph,
                     error: glyph,
                     other: glyph,
                     read: glyph,
@@ -197,9 +199,7 @@ for (const width of [80, 160]) {
           ).toBe(true);
         }
       } finally {
-        act(() => {
-          setup.renderer.destroy();
-        });
+        await destroyTestRenderer(setup);
         query.clear();
         commands.close();
       }

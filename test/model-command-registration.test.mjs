@@ -76,6 +76,10 @@ test("slash model saves update one mounted frame without duplicate commands", as
             connect: async () => ({
               agentId: "agent-fixture",
               sessionId: "session-fixture",
+              sandboxStatus: async () => ({
+                state: "available",
+                requireSandbox: false,
+              }),
               databasePath: "/tmp/fixture.sqlite",
               effectiveModel: async () => ({
                 agentName: "Shiitake",
@@ -118,7 +122,6 @@ test("slash model saves update one mounted frame without duplicate commands", as
       await act(async () => setup.renderOnce());
       assert.match(setup.captureCharFrame(), /Fixture · Fixture model/u);
       // Provider, model and thinking level all use Parakeet prompts.
-      await act(async () => setup.mockInput.pressArrow("down"));
       await act(async () => setup.mockInput.pressEnter());
       await act(async () => setup.renderOnce());
       assert.match(
@@ -146,9 +149,11 @@ test("slash model saves update one mounted frame without duplicate commands", as
       assert.equal(fixture.watchCalls(), 1);
     }
     for (let attempt = 0; attempt < 2; attempt++) {
-      const help = executeAlias(observedCommands, "help", {
-        origin: "slash",
-      });
+      const { help } = await act(async () => ({
+        help: executeAlias(observedCommands, "help", {
+          origin: "slash",
+        }),
+      }));
       await act(async () => delay(10));
       await act(async () => setup.renderOnce());
       assert.match(setup.captureCharFrame(), /Commands/u);

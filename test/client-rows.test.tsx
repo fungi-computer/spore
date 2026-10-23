@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { createQueryClient } from "@fungi.computer/agar/query";
 import {
   QueryClientProvider,
@@ -193,16 +194,16 @@ test("keyboard row picker dispatches the owning catalog prompt and opens its tar
     await frame("New text");
     await act(async () => setup.mockInput.typeText("updated"));
     await key("RETURN");
-    await frame("Saved updated");
+    await act(async () =>
+      setup.waitForFrame((value) => !value.includes("New text")),
+    );
+    expect(setup.captureCharFrame()).not.toContain("Saved updated");
     expect(calls).toEqual([
       ["rows-proof", "change", { current: "old" }],
       ["rows-proof", "change", { current: "old", answer: "updated" }],
     ]);
-    await frame("Enter close");
-    await key("RETURN");
-    await act(async () =>
-      setup.waitForFrame((value) => !value.includes("Enter close")),
-    );
+    expect(setup.captureCharFrame()).not.toContain("Enter close");
+    expect(setup.captureCharFrame()).not.toContain("New text");
     await picker();
     await key("RETURN");
     await act(async () => setup.renderOnce());
@@ -216,9 +217,7 @@ test("keyboard row picker dispatches the owning catalog prompt and opens its tar
     expect(setup.captureCharFrame()).toContain("Probe panel");
     expect(fixture.watchCalls()).toBe(1);
   } finally {
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     commands.close();
     query.clear();
     await fixture.waitForClose();

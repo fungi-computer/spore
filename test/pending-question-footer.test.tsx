@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { createQueryClient } from "@fungi.computer/agar/query";
 import {
   QueryClientProvider,
@@ -42,6 +43,7 @@ for (const [width, height] of sizes) {
   test(`pending questions expand the footer without stealing the draft (${String(width)}×${String(height)})`, async () => {
     notifyManager.setScheduler(queueMicrotask);
     const fixture = createTuiFixture();
+    const declineResponse = Promise.withResolvers<undefined>();
     let pending: typeof asks = [];
     const calls: unknown[] = [];
     const slots = (): SessionExtensionSlots => ({
@@ -138,6 +140,9 @@ for (const [width, height] of sizes) {
             };
           pending = pending.filter((ask) => ask.askId !== parsed.askId);
           await publish();
+          // The watch can withdraw an ask before its command response arrives.
+          if ("selection" in parsed && parsed.selection === "Decline")
+            await declineResponse.promise;
           return {
             type: "done",
             notice: {
@@ -259,11 +264,21 @@ for (const [width, height] of sizes) {
       await key("ARROW_UP", { meta: true });
       await key("RETURN");
       await frame("Choose your answer");
-      await key("RETURN");
-      await frame("Question answered");
-      await frame("Enter close");
+      await captureFrame(
+        setup,
+        process.env.TUI_QUESTION_CAPTURE_DIR,
+        `answer-picker-${String(width)}`,
+      );
       await key("RETURN");
       await frame("Which color should we use?");
+      await captureFrame(
+        setup,
+        process.env.TUI_QUESTION_CAPTURE_DIR,
+        `answer-result-${String(width)}`,
+      );
+      expect(setup.captureCharFrame()).not.toContain("Enter close");
+      expect(setup.captureCharFrame()).not.toContain("Choose your answer");
+      expect(setup.captureCharFrame()).not.toContain("Question answered");
       expect(setup.captureCharFrame()).not.toContain(
         "Where should the notes live?",
       );
@@ -277,24 +292,36 @@ for (const [width, height] of sizes) {
           arguments: { askId: "question-color" },
         });
       });
-      // Let the command's dialog open outside the frame wait's act scope.
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
+      await act(async () => setup.renderOnce());
       await frame("Choose your answer");
       await key("ARROW_DOWN");
       await key("ARROW_DOWN");
       await key("RETURN");
-      await frame("Question declined");
-      await key("RETURN");
-      await act(async () =>
+      const withdrawnFrame = await act(async () =>
         setup.waitForFrame(
           (value) => !value.includes("Which color should we use?"),
         ),
       );
-      expect(setup.captureCharFrame()).toContain("Keep this live draft here!?");
-      expect(setup.captureCharFrame()).toContain(idleStatus);
-      expect(setup.captureCharFrame()).not.toContain("waiting on you");
+      expect(withdrawnFrame).toContain("Answer a question");
+      expect(withdrawnFrame).toContain("Esc cancel");
+      await act(async () => {
+        declineResponse.resolve(undefined);
+        await setup.renderOnce();
+      });
+      // Finish React work before polling the native dialog's prompt/status view.
+      const settledFrame = await setup.waitForFrame(
+        (value) =>
+          !value.includes("Which color should we use?") &&
+          !value.includes("Choose your answer") &&
+          !value.includes("Answer a question"),
+      );
+      expect(settledFrame).not.toContain("Enter close");
+      expect(settledFrame).not.toContain("Answer a question");
+      expect(settledFrame).not.toContain("Choose your answer");
+      expect(settledFrame).not.toContain("Question declined");
+      expect(settledFrame).toContain("Keep this live draft here!?");
+      expect(settledFrame).toContain(idleStatus);
+      expect(settledFrame).not.toContain("waiting on you");
       await captureFrame(
         setup,
         process.env.TUI_QUESTION_CAPTURE_DIR,
@@ -302,9 +329,8 @@ for (const [width, height] of sizes) {
       );
       expect(calls).toHaveLength(4);
     } finally {
-      act(() => {
-        setup.renderer.destroy();
-      });
+      declineResponse.resolve(undefined);
+      await destroyTestRenderer(setup);
       commands.close();
       query.clear();
       await fixture.waitForClose();

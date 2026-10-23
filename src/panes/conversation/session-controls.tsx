@@ -18,8 +18,6 @@ export function useSessionControls(
     create: (() => void | Promise<void>) | undefined;
     onForked: ((sessionId: string) => void | Promise<void>) | undefined;
     onTitled: ((title: string | null) => void | Promise<void>) | undefined;
-    onEditQueued: (text: string) => void;
-    canEditQueued: () => boolean;
   }>,
 ) {
   const { session, commands } = input;
@@ -41,10 +39,6 @@ export function useSessionControls(
       onForked: async (sessionId: string) => {
         if (selected()) await view.current.onForked?.(sessionId);
       },
-      onEditQueued: (text: string) => {
-        if (selected()) view.current.onEditQueued(text);
-      },
-      canEditQueued: () => selected() && view.current.canEditQueued(),
       onTitled: async (title: string | null) => {
         if (selected()) await view.current.onTitled?.(title);
       },

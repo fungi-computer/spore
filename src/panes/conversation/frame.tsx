@@ -1,23 +1,33 @@
 import { ScrollBoxRenderable } from "@opentui/core";
 import {
   formatContextUsage,
-  formatModelIdentity,
+  formatModelWithLevel,
 } from "@fungi.computer/parakeet/headless";
+import { tuiDraftStorage } from "../../button/index.js";
 import {
+  messageAuthor,
   terminalText,
   terminalCellWidth,
   fitFooterCaption,
   sigilGutterText,
+  sigilGutterTotalWidth,
 } from "../../button/index.js";
 import { TerminalClientRows, useClientRowCommands } from "./client-rows.js";
 import type { RowV1 } from "@fungi.computer/gills";
-import type { ClientEntryV1 } from "../../button/index.js";
+import type {
+  ClientEntryV1,
+  TuiPresentation,
+  StopAllResult,
+  TuiSandboxSource,
+  TuiSandboxStatus,
+} from "../../button/index.js";
 import {
   usePaneKit,
   usePaneViewport,
   usePaneFocused,
   usePanePresentation,
   usePaneKeyboard,
+  useToast,
 } from "../../button/index.js";
 import { defineIdFamily } from "../../button/index.js";
 import type { WhistleContributionLease } from "@fungi.computer/whistle";
@@ -30,6 +40,7 @@ import {
   useSlashCommands,
   useStatus,
   type ParakeetCommandRuntime,
+  type ParakeetDraftIdentity,
   type ParakeetSession,
   type ParakeetInteractions,
   type SlashCommandController,
@@ -45,6 +56,7 @@ import {
 } from "react";
 
 import { TerminalComposer } from "./terminal-composer.js";
+import { stopAllFailure, stopAllSummary } from "./stop-all-summary.js";
 import {
   useTerminalCancellation,
   useTerminalBindings,
@@ -67,12 +79,22 @@ import {
 import type { TuiModelSource } from "../../button/index.js";
 import { useModelControls } from "../../button/index.js";
 import { useInteractionDialog } from "../../button/index.js";
+import {
+  useMcpApprovalDialog,
+  useMcpFormApprovalDialog,
+  type McpApprovalSource,
+} from "../../button/index.js";
 import { SlashCompletionList } from "../../button/index.js";
 import {
   TerminalTranscript,
   type EmptyConversationState,
 } from "./transcript.js";
 import { reportFailure } from "../../button/index.js";
+import type { ServiceRebind } from "../../button/index.js";
+import {
+  ServiceRecoveryOverlay,
+  useServiceRecovery,
+} from "./service-recovery.js";
 
 const recoveryRequests = defineIdFamily({
   family: "tui-error-recovery",
@@ -84,17 +106,21 @@ export type TuiFrameProps = Readonly<{
   /** The project folder as shown to the person (home shortened to `~`). */
   folder?: string | undefined;
   interactionStore?: ParakeetInteractions | undefined;
+  mcpApprovals?: McpApprovalSource | undefined;
   clients?: readonly ClientEntryV1[] | undefined;
   onOpen?:
     ((target: NonNullable<RowV1["open"]>) => void | Promise<void>) | undefined;
   /** The terminal's Whistle runtime; Parakeet adds its commands to it. */
   commands: ParakeetCommandRuntime;
   onExit?: (() => void) | undefined;
+  onStopAll?: (() => Promise<StopAllResult>) | undefined;
   session: ParakeetSession;
+  draftIdentity?: ParakeetDraftIdentity | undefined;
   initialTheme?: ThemeName | undefined;
   onThemeConfirm?: ((theme: ThemeName) => Promise<void>) | undefined;
   themeError?: string | undefined;
   modelSource?: TuiModelSource | undefined;
+  sandboxSource?: TuiSandboxSource | undefined;
   /** The owner's current title, read when the derived title comes back. */
   sessionTitle?:
     ((signal: AbortSignal) => Promise<string | undefined>) | undefined;
@@ -108,6 +134,9 @@ export type TuiFrameProps = Readonly<{
   inputHandoff?:
     import("../../button/index.js").TerminalInputHandoff | undefined;
   onObservationUnavailable?: (() => boolean | Promise<boolean>) | undefined;
+  /** Point this pane at the service service.json now names; absent for remote Sessions. */
+  onRebindService?:
+    ((signal: AbortSignal) => Promise<ServiceRebind>) | undefined;
   initialCommandError?: string | undefined;
   initialCommandNotice?: string | undefined;
 }>;
@@ -137,12 +166,21 @@ export type TuiFrameContentProps = TuiFrameProps &
     }>;
   }>;
 
-export function TuiFrameContent({ session, ...props }: TuiFrameContentProps) {
+export function TuiFrameContent({
+  session,
+  draftIdentity,
+  ...props
+}: TuiFrameContentProps) {
+  const toast = useToast();
   return (
     <ParakeetProvider
       session={session}
+      draftStorage={tuiDraftStorage}
+      draftIdentity={draftIdentity}
       clients={props.clients}
       interactionStore={props.interactionStore}
+      authorOf={messageAuthor}
+      onToast={toast.show}
     >
       <TuiFrameConversation {...props} session={session} />
     </ParakeetProvider>
@@ -164,18 +202,42 @@ const noticeColors = {
   error: "error",
 } as const;
 
+/** A footer notice: the dot owns a fixed column, so wrapped text never runs under it. */
+function FooterNotice({
+  color,
+  inset,
+  children,
+}: Readonly<{
+  color: TuiPresentation["colors"]["error"];
+  inset: number;
+  children: string;
+}>) {
+  return (
+    <box flexDirection="row" marginX={inset}>
+      <text width={sigilGutterTotalWidth} flexShrink={0} fg={color}>
+        {sigilGutterText("●")}
+      </text>
+      <text flexGrow={1} flexShrink={1} fg={color}>
+        {children}
+      </text>
+    </box>
+  );
+}
+
 function TuiFrameConversation({
-  clients,
   commands,
   interactionStore,
+  mcpApprovals,
   applicationCommands,
   onExit,
+  onStopAll,
   session,
   onOpen,
   initialTheme = "terminal",
   onThemeConfirm = saveThemePreference,
   themeError,
   modelSource,
+  sandboxSource,
   folder,
   onTitled,
   reloadSources,
@@ -184,10 +246,24 @@ function TuiFrameConversation({
   onForked,
   inputHandoff,
   onObservationUnavailable,
+  onRebindService,
   initialCommandError,
   initialCommandNotice,
 }: TuiFrameContentProps) {
   const kit = usePaneKit();
+  const stopAll =
+    onStopAll === undefined
+      ? undefined
+      : async () => {
+          // Both keyboard and slash callers share the same notification owner.
+          // A rejected transport/discovery request must not become a notice.
+          try {
+            kit.toast(stopAllSummary(await onStopAll()));
+          } catch (cause) {
+            reportFailure("session-stop-all", cause);
+            kit.toast(stopAllFailure(cause));
+          }
+        };
   const focused = usePaneFocused();
   const dialogOpen = useSyncExternalStore(
     kit.dialogs.open.subscribe,
@@ -199,12 +275,61 @@ function TuiFrameConversation({
     isOpen: dialogOpen,
   };
   const composer = useComposer();
+  useEffect(
+    () =>
+      kit.sessions.registerDraftCheckpoint?.(session, composer.checkpointDraft),
+    [kit.sessions, session, composer.checkpointDraft],
+  );
   const sessionStatus = useStatus();
+  const [sandboxRead, setSandboxRead] = useState<{
+    identity: string;
+    status: TuiSandboxStatus;
+  }>();
+  const sandboxStatus =
+    sandboxRead?.identity === sandboxSource?.identity
+      ? sandboxRead?.status
+      : undefined;
+  const [sandboxNoticeFor, setSandboxNoticeFor] = useState<string>();
+  useEffect(() => {
+    if (sandboxSource === undefined) return;
+    const controller = new AbortController();
+    void sandboxSource.read(controller.signal).then(
+      (status) => {
+        if (controller.signal.aborted) return;
+        setSandboxRead({ identity: sandboxSource.identity, status });
+        if (status.state === "available" || status.requireSandbox)
+          setSandboxNoticeFor(undefined);
+      },
+      (cause: unknown) => {
+        if (!controller.signal.aborted)
+          reportFailure("local-sandbox-status", cause);
+      },
+    );
+    return () => {
+      controller.abort();
+    };
+  }, [sandboxSource, sessionStatus.status, sessionStatus.commandId]);
+  useEffect(() => {
+    if (
+      focused &&
+      !dialogOpen &&
+      sandboxSource !== undefined &&
+      sandboxStatus?.state === "unavailable" &&
+      !sandboxStatus.requireSandbox &&
+      sandboxSource.takeUnavailableNotice()
+    )
+      setSandboxNoticeFor(sandboxSource.identity);
+  }, [focused, dialogOpen, sandboxSource, sandboxStatus]);
   const contributions = useClientContributions();
   const timeline = useTimeline();
   const placed = useMemo(
-    () => placeClientTimeline(contributions, timeline.commandAnchors),
-    [contributions, timeline.commandAnchors],
+    () =>
+      placeClientTimeline(
+        contributions,
+        timeline.commandAnchors,
+        timeline.positionAnchors,
+      ),
+    [contributions, timeline.commandAnchors, timeline.positionAnchors],
   );
   const rowActions = useClientRowCommands(commands, onOpen);
   // Attention rows expose their own advertised commands; the pane stays
@@ -260,43 +385,12 @@ function TuiFrameConversation({
     }
     return false;
   });
-  useEffect(() => {
-    if (sessionStatus.observation.status !== "unavailable") return;
-    const cancellation = new AbortController();
-    const isCurrent = () => !cancellation.signal.aborted;
-    let attempts = 0;
-    let timer: ReturnType<typeof setTimeout>;
-    const recover = async () => {
-      try {
-        const upgraded = await onObservationUnavailable?.();
-        if (!isCurrent() || upgraded) return;
-        const outcome = await sessionStatus.reconnect();
-        if (outcome.kind === "reconnected") return;
-        if (!isCurrent()) return;
-      } catch (cause) {
-        reportFailure("session-observation-recovery", cause);
-        if (!isCurrent()) return;
-      }
-      attempts += 1;
-      timer = setTimeout(
-        () => {
-          void recover();
-        },
-        Math.min(1_000 * 2 ** attempts, 30_000),
-      );
-    };
-    timer = setTimeout(() => {
-      void recover();
-    }, 1_000);
-    return () => {
-      cancellation.abort();
-      clearTimeout(timer);
-    };
-  }, [
-    sessionStatus.observation.status,
-    sessionStatus.reconnect,
+  const serviceRecovery = useServiceRecovery({
+    observation: sessionStatus.observation.status,
+    reconnect: sessionStatus.reconnect,
     onObservationUnavailable,
-  ]);
+    rebindService: onRebindService,
+  });
   const themeControls = useThemeControls(dialog, {
     commands,
     initialTheme,
@@ -411,19 +505,30 @@ function TuiFrameConversation({
     );
     return true;
   });
-  const commandNotice = initialCommandNotice ?? modelControls.loginNotice;
   useEffect(() => {
     if (initialCommandError !== undefined)
       store.report({ tone: "error", message: initialCommandError });
-    else if (commandNotice !== undefined)
-      store.report({ tone: "info", message: commandNotice });
-  }, [initialCommandError, commandNotice, store]);
+    else if (initialCommandNotice !== undefined)
+      store.report({ tone: "info", message: initialCommandNotice });
+  }, [initialCommandError, initialCommandNotice, store]);
+  const approvalPending = useMcpApprovalDialog({
+    source: mcpApprovals,
+    dialog,
+    colors,
+    enabled: focused,
+  });
+  const formApprovalPending = useMcpFormApprovalDialog({
+    session,
+    dialog,
+    colors,
+    enabled: focused && !approvalPending,
+  });
   useInteractionDialog({
     dialog,
     colors,
     slash,
     inputHandoff,
-    enabled: focused,
+    enabled: focused && !approvalPending && !formApprovalPending,
   });
   const inset = 1;
   const draft = useRef(composer.draft);
@@ -439,15 +544,6 @@ function TuiFrameConversation({
     create: onNew,
     onForked,
     onTitled,
-    onEditQueued: (text) => {
-      if (
-        composer.draft.length === 0 ||
-        composer.draft.trim() === "/queue edit-last"
-      )
-        composer.setDraft(text);
-    },
-    canEditQueued: () =>
-      draft.current.length === 0 || draft.current.trim() === "/queue edit-last",
   });
 
   const waiting =
@@ -476,6 +572,7 @@ function TuiFrameConversation({
         ? "prompt"
         : null,
     cancel: composer.cancel,
+    stopAll,
     onCancelFailure: (cause) => {
       store.report({
         tone: "error",
@@ -521,6 +618,7 @@ function TuiFrameConversation({
     commands,
     application: applicationCommands,
     cancellation,
+    stopAll,
     reconnect: sessionStatus.reconnect,
     retry: () => {
       if (!canRetry) return false;
@@ -572,19 +670,22 @@ function TuiFrameConversation({
   // "● " is already exactly the shared gutter's two cells (dot, then the
   // cell every row's text column starts after), so this line already sits
   // in the same gutter as every other row without building one specially.
+  // Only the host-selected model carries a thinking level; a reply's model does not.
+  const footerModelIdentity =
+    footerModel === undefined
+      ? undefined
+      : formatModelWithLevel(footerModel, modelControls.selectedReasoning);
   const footer = footerLayout({
     width: width - 2 * inset,
     status: `● ${waitingOnAnswer ? "waiting on you" : sessionStateLabel(displayedState)}`,
     compactStatus: `● ${waitingOnAnswer ? "waiting on you" : compactSessionStateLabel(displayedState)}`,
-    model:
-      footerModel === undefined ? undefined : formatModelIdentity(footerModel),
+    model: footerModelIdentity,
     context:
       sessionStatus.context === undefined
         ? undefined
         : formatContextUsage(sessionStatus.context),
   });
-  const footerModelText =
-    footerModel === undefined ? undefined : formatModelIdentity(footerModel);
+  const footerModelText = footerModelIdentity;
   const signInRequired = modelControls.signInRequired;
   const emptyState = useMemo<EmptyConversationState>(
     () => ({
@@ -599,8 +700,25 @@ function TuiFrameConversation({
     () => [
       { slot: "state", order: 0, text: footer.statusText, tone: statusTone },
       { slot: "model", order: 1, text: footer.modelText, tone: "muted" },
+      ...(sandboxStatus === undefined
+        ? []
+        : [
+            {
+              slot: "chips",
+              order: 0,
+              text:
+                sandboxStatus.state === "available"
+                  ? sandboxStatus.requireSandbox
+                    ? "sandbox required"
+                    : "sandbox on"
+                  : sandboxStatus.requireSandbox
+                    ? "sandbox required · unavailable"
+                    : "UNSANDBOXED",
+              tone: sandboxStatus.state === "available" ? "muted" : "warning",
+            } satisfies PaneStatusItem,
+          ]),
     ],
-    [footer.statusText, footer.modelText, statusTone],
+    [footer.statusText, footer.modelText, statusTone, sandboxStatus],
   );
   usePaneStatus(footerItems);
   return (
@@ -613,7 +731,6 @@ function TuiFrameConversation({
     >
       <TerminalTranscript
         emptyState={emptyState}
-        clients={clients}
         detailsRequest={detailsRequest}
         groupRequest={groupRequest}
         inputEnabled={focused && !dialog.isOpen && inspectedRow === undefined}
@@ -641,11 +758,33 @@ function TuiFrameConversation({
           </text>
           <TerminalComposer
             focused={focused && !dialog.isOpen && !showingAttention}
+            readOnly={composer.recallState.kind === "recalling"}
             inputHandoff={inputHandoff}
             maxHeight={maxRows}
             colors={colors}
             onKeyDown={(event) => {
               const current = slashRef.current;
+              if (
+                focused &&
+                !dialog.isOpen &&
+                !showingAttention &&
+                !current.open &&
+                event.name === "up" &&
+                event.eventType === "press" &&
+                !event.repeated &&
+                !event.ctrl &&
+                !event.meta &&
+                !event.shift &&
+                !event.option &&
+                !event.super &&
+                !event.hyper &&
+                draft.current === "" &&
+                (composer.images?.length ?? 0) === 0
+              ) {
+                event.preventDefault();
+                void composer.recall();
+                return;
+              }
               if (
                 event.name === "tab" &&
                 !event.shift &&
@@ -676,6 +815,16 @@ function TuiFrameConversation({
             value={composer.draft}
           />
         </box>
+        {composer.recallState.kind === "recalling" ? (
+          <text fg={colors.foreground} attributes={2}>
+            Recalling queued message…
+          </text>
+        ) : null}
+        {(composer.images?.length ?? 0) > 0 ? (
+          <text fg={colors.foreground} attributes={2}>
+            {String(composer.images?.length)} attached image(s)
+          </text>
+        ) : null}
         <PaneStatusLine inset={inset} />
         {contributions.map(({ entryId, value }) => {
           const rows =
@@ -808,18 +957,35 @@ function TuiFrameConversation({
           </box>
         )}
         {themeControls.error ? (
-          <text fg={colors.error} marginX={inset}>
-            {sigilGutterText("●")}
+          <FooterNotice color={colors.error} inset={inset}>
             {terminalText(themeControls.error)}
-          </text>
+          </FooterNotice>
         ) : null}
         {notice !== undefined && !dialog.isOpen ? (
-          <text fg={colors[noticeColors[notice.tone]]} marginX={inset}>
-            {sigilGutterText("●")}
+          <FooterNotice color={colors[noticeColors[notice.tone]]} inset={inset}>
             {terminalText(notice.message)}
-          </text>
+          </FooterNotice>
+        ) : null}
+        {modelControls.loginNotice !== undefined && !dialog.isOpen ? (
+          <FooterNotice color={colors.info} inset={inset}>
+            {modelControls.loginNotice}
+          </FooterNotice>
+        ) : null}
+        {sandboxSource !== undefined &&
+        sandboxNoticeFor === sandboxSource.identity &&
+        sandboxStatus?.state === "unavailable" &&
+        !sandboxStatus.requireSandbox &&
+        !dialog.isOpen ? (
+          <FooterNotice color={colors.warning} inset={inset}>
+            {terminalText(
+              `Sandbox unavailable; running unsandboxed. ${sandboxStatus.reason.message}\nSandboxing, when available:\nLimits what the agent's commands can change to your project folder and blocks their network access. They can still read other files on this computer, and this is not a security boundary against a hostile program.`,
+            )}
+          </FooterNotice>
         ) : null}
       </box>
+      {serviceRecovery === undefined ? null : (
+        <ServiceRecoveryOverlay view={serviceRecovery} colors={colors} />
+      )}
     </box>
   );
 }

@@ -5,6 +5,7 @@
 import { expect, test } from "bun:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { createQueryClient } from "@fungi.computer/agar/query";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createWhistle } from "@fungi.computer/whistle";
@@ -65,9 +66,7 @@ test("drops a footerless extension's omitted notice and unanchored rows entirely
     expect(frame).not.toContain("Orphan committed row");
     expect(frame).not.toContain("Extension changes");
   } finally {
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     query.clear();
     commands.close();
   }

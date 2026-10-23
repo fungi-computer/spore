@@ -17,6 +17,24 @@ import {
   saveThemePreference,
 } from "../src/button/theme-preferences.js";
 
+test("the update policy survives theme changes and rejects unsupported modes", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "fungi-update-policy-"));
+  const path = join(directory, "tui.json");
+  try {
+    await writeFile(path, '{"update":"off"}');
+    assert.equal((await loadThemePreference(path)).update, "off");
+    await saveThemePreference("latte", path);
+    assert.equal((await loadThemePreference(path)).update, "off");
+    await writeFile(path, '{"update":"auto"}');
+    assert.match(
+      (await loadThemePreference(path)).error ?? "",
+      /update off or notify/,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("theme choices replace a complete file atomically and survive reopening", async () => {
   const directory = await mkdtemp(join(tmpdir(), "fungi-theme-"));
   const path = join(directory, "preferences", "tui.json");

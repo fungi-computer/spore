@@ -1,19 +1,26 @@
 import { createCliRenderer, resolveRenderLib } from "@opentui/core";
-import { registerModBindings } from "@opentui/keymap/addons";
+import {
+  registerModBindings,
+  registerLeader,
+  registerEscapeClearsPendingSequence,
+  registerBackspacePopsPendingSequence,
+} from "@opentui/keymap/addons";
+import { KeymapProvider } from "@opentui/keymap/react";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { createRoot } from "@opentui/react";
+import { createElement } from "react";
 import { QueryClient } from "@tanstack/query-core";
 import {
   createAppSurfaceCommandHost,
   type AppSurfaceCommandHost,
-} from "@fungi.computer/oyster/shell/command-host";
+} from "@fungi.computer/nacre/command-host";
 import {
   createWhistle,
   createWhistleKeymapAdapter,
   type WhistleKeymapHost,
   type WhistleRuntime,
 } from "@fungi.computer/whistle";
-import { leaderKeys } from "@fungi.computer/oyster/shell/keys";
+import { KeyHintsContext, WhichKeyStrip } from "./shell/which-key.js";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
@@ -53,6 +60,7 @@ export type TerminalApplication = Readonly<{
     mode: "auto" | "on" | "off",
   ) => Promise<ToolSigils | undefined>;
   commands: WhistleRuntime;
+  keymap: ReturnType<typeof createDefaultOpenTuiKeymap> | undefined;
   commandHost: AppSurfaceCommandHost;
   queryClient: QueryClient;
   root: ReturnType<typeof createRoot>;
@@ -271,20 +279,25 @@ export async function openTerminalApplication(
             ? yield* acquire(
                 () => {
                   const nativeKeymap = createDefaultOpenTuiKeymap(renderer);
-                  const detachModBindings = registerModBindings(nativeKeymap);
+                  const detach = [
+                    registerModBindings(nativeKeymap),
+                    registerLeader(nativeKeymap, { trigger: "ctrl+k" }),
+                    registerEscapeClearsPendingSequence(nativeKeymap),
+                    registerBackspacePopsPendingSequence(nativeKeymap),
+                    nativeKeymap.intercept("key:after", (context) => {
+                      if (
+                        !context.handled &&
+                        context.reason === "sequence-miss" &&
+                        context.pendingSequence.length === 0
+                      )
+                        context.consume();
+                    }),
+                  ];
                   const adapter = createWhistleKeymapAdapter(
                     {
                       registerLayer: (layer) =>
                         nativeKeymap.registerLayer({
-                          // The shell owns these two-step choices; OpenTUI owns direct chords.
-                          bindings: layer.bindings.filter(
-                            (binding) =>
-                              !leaderKeys(commandHost.active()).some(
-                                (row) =>
-                                  row.commandId === binding.cmd &&
-                                  row.binding === binding.key,
-                              ),
-                          ),
+                          bindings: layer.bindings,
                           commands: layer.commands,
                           target: renderer.root,
                           priority: 100,
@@ -298,9 +311,10 @@ export async function openTerminalApplication(
                     "keyboard",
                   );
                   return {
+                    native: nativeKeymap,
                     cleanup: () => {
                       adapter.cleanup();
-                      detachModBindings();
+                      for (const dispose of detach.toReversed()) dispose();
                     },
                   };
                 },
@@ -310,7 +324,27 @@ export async function openTerminalApplication(
               )
             : undefined;
         const root = yield* acquire(
-          () => dependencies.createRoot(renderer),
+          () => {
+            const root = dependencies.createRoot(renderer);
+            if (keymap === undefined) return root;
+            const hints = createElement(WhichKeyStrip, { host: commandHost });
+            return {
+              unmount: root.unmount,
+              render: (node) => {
+                root.render(
+                  createElement(
+                    KeymapProvider,
+                    { keymap: keymap.native },
+                    createElement(
+                      KeyHintsContext.Provider,
+                      { value: hints },
+                      node,
+                    ),
+                  ),
+                );
+              },
+            } satisfies ReturnType<typeof createRoot>;
+          },
           (active) => {
             active.unmount();
           },
@@ -367,6 +401,7 @@ export async function openTerminalApplication(
         }
       },
       commands: resources.commands,
+      keymap: resources.keymap?.native,
       commandHost: resources.commandHost,
       queryClient: resources.queryClient,
       root: resources.root,

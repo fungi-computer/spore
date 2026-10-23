@@ -401,8 +401,15 @@ for (const close of [
   () => owner?.close(),
   async () => {
     if (serviceRun === undefined) return;
-    await manager.stop();
+    // This listener shares our PID; deliver its ordinary shutdown signal to
+    // the handler, as Local's listener proofs do, rather than terminating us.
+    assert.equal(process.emit("SIGTERM", "SIGTERM"), true);
     await serviceRun;
+    assert.equal(
+      await manager.status(),
+      undefined,
+      "in-process shutdown removes service discovery after draining its owners",
+    );
   },
 ]) {
   try {

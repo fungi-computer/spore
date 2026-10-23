@@ -2,16 +2,29 @@ import { describe, expect, test } from "bun:test";
 
 import { goalContract } from "@fungi.computer/shiitake-extensions/goal";
 
-import { createTuiFixture } from "./fixture.js";
+import { createTuiFixture, fixtureGoalStartedAt } from "./fixture.js";
 
 describe("TUI Session fixture", () => {
+  test("distinct fixture owners have distinct durable identities matching their Session", async () => {
+    const first = createTuiFixture();
+    const second = createTuiFixture();
+    expect(first.identity).not.toEqual(second.identity);
+    expect((await first.session.read()).sessionId).toBe(
+      first.identity.sessionId,
+    );
+    expect((await second.session.read()).sessionId).toBe(
+      second.identity.sessionId,
+    );
+  });
+
   test("projects an accepted prompt through public owner update and progress frames", async () => {
     const fixture = createTuiFixture({
       goal: {
         revision: "fixture-goal",
         objective: "Preserve fixture goal",
         state: "active",
-        stopReason: null,
+        startedAt: fixtureGoalStartedAt,
+        pauseCause: null,
       },
     });
     const watch = await fixture.session.watch();
@@ -51,6 +64,7 @@ describe("TUI Session fixture", () => {
         total: 1,
         prompts: [
           {
+            requestId: "fixture-request",
             commandId: "owner-fixture-request",
             delivery: "followUp",
             text: "Native prompt",

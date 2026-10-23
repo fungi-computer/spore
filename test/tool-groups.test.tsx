@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { setTimeout as settle } from "node:timers/promises";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import {
@@ -79,11 +80,9 @@ async function mount(
   await act(async () => setup.renderOnce());
   return {
     setup,
-    dispose: () => {
+    dispose: async () => {
       keymap.cleanup();
-      act(() => {
-        setup.renderer.destroy();
-      });
+      await destroyTestRenderer(setup);
       client.clear();
       commands.close();
     },
@@ -169,7 +168,7 @@ test("consecutive calls render as one group; a failure opens it on the failed ca
       section.files.map((file) => file.unified),
     );
   } finally {
-    dispose();
+    await dispose();
   }
 });
 
@@ -186,7 +185,7 @@ test("a running group shows completed calls beside its live line", async () => {
     expect(frame).toContain("Read apps/tui/src/frame.tsx");
     expect(frame).toContain("Running pnpm --dir apps/tui run typecheck");
   } finally {
-    dispose();
+    await dispose();
   }
 });
 
@@ -262,7 +261,7 @@ test("a one-file patch diff shows its path header", async () => {
     expect(drawn).toHaveLength(1);
     expect(drawn[0]?.diff).toContain("+new");
   } finally {
-    dispose();
+    await dispose();
   }
 });
 
@@ -401,7 +400,7 @@ for (const width of [33, 48])
           expectedTint(palette.success),
         );
       } finally {
-        dispose();
+        await dispose();
       }
     });
 
@@ -489,7 +488,7 @@ for (const width of [33, 48])
       );
       expect(frame).toContain("+addedcontent");
     } finally {
-      dispose();
+      await dispose();
     }
   });
 
@@ -509,6 +508,7 @@ for (const role of ["user", "assistant"] as const) {
     const snapshot: SessionSnapshot = {
       ...groupedToolsDesignSnapshot,
       messages: [{ ...source, value }],
+      toolOutput: [],
       progress: null,
     };
     const { setup, dispose } = await mount(snapshot);
@@ -529,7 +529,7 @@ for (const role of ["user", "assistant"] as const) {
           .join(""),
       ).not.toMatch(/[^\P{Cc}\n\t]|\p{Cf}/u);
     } finally {
-      dispose();
+      await dispose();
     }
   });
 }
@@ -609,7 +609,7 @@ for (const tool of ["read", "execute", "apply_patch", "custom"] as const) {
         ).not.toMatch(/[^\P{Cc}\n\t]|\p{Cf}/u);
         frames.push(screen);
       } finally {
-        dispose();
+        await dispose();
       }
     }
     if (tool === "read") expect(frames[1]).toBe(frames[0]);
@@ -640,6 +640,7 @@ test("expanded thinking is terminal-safe", async () => {
         },
       },
     ],
+    toolOutput: [],
     progress: null,
   };
   const { setup, dispose } = await mount(snapshot);
@@ -651,7 +652,7 @@ test("expanded thinking is terminal-safe", async () => {
     expect(screen).toContain("safe reasoning");
     expect(screen).not.toMatch(/[^\P{Cc}\n\t]|\p{Cf}/u);
   } finally {
-    dispose();
+    await dispose();
   }
 });
 
@@ -661,6 +662,7 @@ for (const state of ["observation unavailable", "stopped cause"] as const) {
     const snapshot: SessionSnapshot = {
       ...groupedToolsDesignSnapshot,
       messages: [],
+      toolOutput: [],
       progress: null,
       terminals:
         state === "stopped cause"
@@ -687,7 +689,7 @@ for (const state of ["observation unavailable", "stopped cause"] as const) {
       expect(screen).toContain("safe end");
       expect(screen).not.toMatch(/[^\P{Cc}\n\t]|[\u202a-\u202e\u2066-\u2069]/u);
     } finally {
-      dispose();
+      await dispose();
     }
   });
 }
@@ -710,7 +712,7 @@ for (const width of [80, 160]) {
       expect(new Set(columns).size).toBe(1);
       expect(columns[0]).toBeGreaterThan(width - 8);
     } finally {
-      dispose();
+      await dispose();
     }
   });
 }
@@ -777,7 +779,7 @@ for (const count of [2, 3, 5])
         expect(folded).toContain("Show all 5 calls");
       }
     } finally {
-      dispose();
+      await dispose();
     }
   });
 
@@ -841,7 +843,7 @@ for (const [width, height] of [
         expect(textCell?.text).toMatch(/[A-Z]/u);
       }
     } finally {
-      dispose();
+      await dispose();
     }
   });
 
@@ -889,7 +891,7 @@ for (const { name, snapshot, label, color } of [
       expect(status?.fg).toEqual(RGBA.fromHex(color).toInts());
       expect(lines[y]).not.toMatch(/[✓✗]/u);
     } finally {
-      dispose();
+      await dispose();
     }
   });
 
@@ -941,6 +943,6 @@ for (const width of [80, 160])
         1,
       );
     } finally {
-      dispose();
+      await dispose();
     }
   });

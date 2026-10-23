@@ -11,12 +11,26 @@
  * `launcher` puts it in **Open pane** without a shell edit. Apps reach the
  * terminal through Gills, which are admitted data, never pane code.
  */
-import type { ParakeetSession } from "@fungi.computer/parakeet/headless";
-import type { PaneCommands } from "@fungi.computer/oyster/shell/command-host";
+import type {
+  ParakeetSession,
+  ParakeetDraftCheckpoint,
+} from "@fungi.computer/parakeet/headless";
+import type { StopAllResult } from "@fungi.computer/truffle/service";
+import type { PaneCommands } from "@fungi.computer/nacre/command-host";
 import type { Renderable, KeyEvent, PasteEvent } from "@opentui/core";
 import { createElement, type ComponentType, type ReactNode } from "react";
 
 import type { TuiPresentation } from "./presentation.js";
+import type { ToastInput } from "./toast-store.js";
+
+/** Outcome of the Agent-tree stop capability exposed to panes. */
+export type { StopAllResult };
+export { tuiDraftStorage } from "./draft-storage.js";
+export {
+  createSandboxNoticeClaims,
+  type TuiSandboxSource,
+  type TuiSandboxStatus,
+} from "./local-sandbox.js";
 
 /** A read-only value that changes over the pane's lifetime. */
 export type PaneValue<Value> = Readonly<{
@@ -48,7 +62,7 @@ export type PaneInput = Readonly<{
  * command `projections.bindings`; the shell's single keymap layer projects the
  * focused scope. Bindings are the command path; `onKey` handles raw text input.
  */
-export type { PaneCommands } from "@fungi.computer/oyster/shell/command-host";
+export type { PaneCommands } from "@fungi.computer/nacre/command-host";
 
 /** One dialog on the shell's stack, drawn with the shell's dialog frame. */
 export type PaneDialogHandle = Readonly<{
@@ -128,11 +142,6 @@ export type PaneOpenOutcome =
   | Readonly<{ kind: "opened" | "focused"; paneId: string }>
   | Readonly<{ kind: "refused"; reason: string }>;
 
-export type PaneNotice = Readonly<{
-  tone: Exclude<PaneTone, "muted">;
-  message: string;
-}>;
-
 /** The admitted Session contract consumed by Parakeet conversation panes. */
 export type PaneSession = ParakeetSession;
 
@@ -157,7 +166,10 @@ export type PaneSessionContext = Readonly<{
   interactions?:
     | import("@fungi.computer/parakeet/headless").ParakeetInteractions
     | undefined;
+  mcpApprovals?: import("./mcp-approval.js").McpApprovalSource | undefined;
   models?: import("./model-query.js").TuiModelSource | undefined;
+  sandbox?: import("./local-sandbox.js").TuiSandboxSource | undefined;
+  stopAll?: (() => Promise<StopAllResult>) | undefined;
   /** The owner's current title: the user's title, else the first prompt's. */
   sessionTitle?:
     ((signal: AbortSignal) => Promise<string | undefined>) | undefined;
@@ -167,6 +179,8 @@ export type PaneSessionContext = Readonly<{
     | undefined;
   observationUnavailable?:
     ((paneId: string) => boolean | Promise<boolean>) | undefined;
+  /** Point the Session at the service service.json now names, after a restart. */
+  rebindService?: ((signal: AbortSignal) => Promise<ServiceRebind>) | undefined;
   initialError?: string | undefined;
   initialNotice?: string | undefined;
 }>;
@@ -188,6 +202,14 @@ export type PaneRendering = Readonly<{
 export type PaneSessions = Readonly<{
   describe?: (session: PaneSession) => PaneSessionContext;
 
+  /** Register a live owner callback for a host handoff; never copies draft state. */
+  registerDraftCheckpoint?:
+    | ((
+        session: PaneSession,
+        checkpoint: () => ParakeetDraftCheckpoint,
+      ) => () => void)
+    | undefined;
+
   /**
    * Acquire one Session for this pane. Observation is released with the pane;
    * closing a pane never cancels durable work.
@@ -204,9 +226,7 @@ export type PaneApps = Readonly<{
   signedIn: (signal: AbortSignal) => Promise<boolean>;
   read: (
     signal: AbortSignal,
-  ) => Promise<
-    import("@fungi.computer/oyster/shell/app-directory").AppDirectory
-  >;
+  ) => Promise<import("@fungi.computer/nacre/app-directory").AppDirectory>;
   requestGill: (
     surfaceId: string,
     request: import("@fungi.computer/gills").GillRequest,
@@ -232,7 +252,8 @@ export type PaneKit = Readonly<{
   replace: (target: PaneTarget) => Promise<PaneOpenOutcome>;
   /** Open a target in a new pane beside this one; an open target is focused. */
   open: (target: PaneTarget) => Promise<PaneOpenOutcome>;
-  notify: (notice: PaneNotice) => void;
+  /** Show a transient message as a toast. */
+  toast: (input: ToastInput) => void;
   sessions: PaneSessions;
   apps?: PaneApps | undefined;
   theme: PaneValue<TuiPresentation>;
@@ -307,6 +328,10 @@ export function definePaneKind<Target extends PaneTarget>(
 }
 
 export type { TuiPresentation } from "./presentation.js";
+
+/** Whether service.json now names a service that answers. */
+export type ServiceRebind =
+  Readonly<{ kind: "rebound" }> | Readonly<{ kind: "unavailable" }>;
 export { applyNativeTerminalDefaults } from "./presentation.js";
 export { reportFailure } from "./log-event.js";
 export { footerLayout, fitFooterCaption } from "./footer-layout.js";
@@ -316,16 +341,25 @@ export type { ThemeName } from "./theme-preferences.js";
 export { useModelControls } from "./model-controls.js";
 export type { TuiModelSource } from "./model-query.js";
 export { useDialog, DialogHost } from "./dialog.js";
+export { DialogSurface } from "./dialog-surface.js";
 export type { DialogController } from "./dialog.js";
 export { useInteractionDialog } from "./interaction-dialog.js";
+export {
+  useMcpApprovalDialog,
+  loadMcpApprovalSource,
+  type McpApprovalSource,
+} from "./mcp-approval.js";
+export { useMcpFormApprovalDialog } from "./mcp-form-approval.js";
 export { SlashCompletionList } from "./slash-completion.js";
-export { CopySurface, copySurfaceColors } from "./copy-surface.js";
+export { CopySurface } from "./copy-surface.js";
 export { toolCodeQuery } from "./tool-code-query.js";
 export { TerminalMarkdown } from "./terminal-markdown.js";
 export type { TerminalInputHandoff } from "./terminal-input-handoff.js";
 export { useQuery } from "@tanstack/react-query";
 
 export { defineIdFamily } from "@fungi.computer/cairn/id";
+/** The host's reading of a message's metadata: who wrote the line. */
+export { messageAuthor } from "@fungi.computer/agar/agents";
 
 export {
   PaneProvider,
@@ -340,7 +374,8 @@ export {
 export { z } from "zod";
 
 export { Picker } from "./picker.js";
-export { NoticeLine } from "./notice.js";
+export { ToastProvider, useToast, toastDurationMs } from "./toast.js";
+export type { ToastInput } from "./toast.js";
 export { toneColor } from "./tone.js";
 
 export { PaneStatusLine, usePaneStatus } from "./status.js";

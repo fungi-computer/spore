@@ -85,6 +85,7 @@ const snapshot = (state) => ({
   cursor: null,
   hasMore: false,
   messages: [],
+  toolOutput: [],
   progress: null,
   sessionId: "proof",
   terminals: [],

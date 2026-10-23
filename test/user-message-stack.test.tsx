@@ -1,6 +1,7 @@
 import { idleActivity } from "@fungi.computer/parakeet-testing";
 import { expect, test } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createWhistle } from "@fungi.computer/whistle";
 import type {
@@ -70,6 +71,7 @@ function snapshot(
     terminals: [],
     compactions: [],
     activity: idleActivity,
+    toolOutput: [],
     progress: null,
     extensions: {},
     attention: [],
@@ -112,9 +114,7 @@ async function render(
       lines.findIndex((line) => line.includes(text));
     return { frame, lines, bg, rowOf };
   } finally {
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     client.clear();
     commands.close();
   }
@@ -129,11 +129,17 @@ test("pending interrupts precede compact cues with distinct theme colours", asyn
     35,
     [
       {
+        requestId: "request-" + "cue",
         commandId: "cue",
         delivery: "followUp",
         text: "Cue pending text\ncontinued with a very long ending that must not wrap onto another row",
       },
-      { commandId: "interrupt", delivery: "steer", text: "Interrupt pending" },
+      {
+        requestId: "request-" + "interrupt",
+        commandId: "interrupt",
+        delivery: "steer",
+        text: "Interrupt pending",
+      },
     ],
   );
   const interrupt = view.rowOf("Interrupt pending");

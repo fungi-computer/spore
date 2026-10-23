@@ -1,6 +1,7 @@
 import { idleActivity } from "@fungi.computer/parakeet-testing";
 import { expect, test } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import {
@@ -103,6 +104,7 @@ const compactionDividerDesignSnapshot: SessionSnapshot = {
     },
   ],
   activity: idleActivity,
+  toolOutput: [],
   progress: null,
   extensions: {},
   attention: [],
@@ -140,11 +142,9 @@ async function mount(snapshot: SessionSnapshot, width = 100) {
   await act(async () => setup.renderOnce());
   return {
     setup,
-    dispose: () => {
+    dispose: async () => {
       keymap.cleanup();
-      act(() => {
-        setup.renderer.destroy();
-      });
+      await destroyTestRenderer(setup);
       client.clear();
       commands.close();
     },
@@ -189,7 +189,22 @@ test("renders a full-width dim rule stating the compaction's result in plain wor
     expect(oldAnswerIndex).toBeLessThan(dividerIndex);
     expect(recentQuestionIndex).toBeGreaterThan(dividerIndex);
   } finally {
-    dispose();
+    await dispose();
+  }
+});
+
+test("renders the compaction as a divider and never shows its summary as a bubble", async () => {
+  const { setup, dispose } = await mount(compactionDividerDesignSnapshot);
+  try {
+    await act(async () =>
+      setup.waitForFrame((frame) => frame.includes("compacted 120K")),
+    );
+    const frame = setup.captureCharFrame();
+    expect(frame).toContain("compacted 120K → 30K");
+    expect(frame).not.toContain("<summary>");
+    expect(frame).not.toContain("was compacted into the following summary");
+  } finally {
+    await dispose();
   }
 });
 
@@ -218,7 +233,7 @@ test("falls back to the boundary label for an older marker with no tokensAfter",
     expect(frame).toContain("compacted · the agent's memory starts below");
     expect(frame).not.toContain("→");
   } finally {
-    dispose();
+    await dispose();
   }
 });
 
@@ -251,7 +266,7 @@ test("shows a failed compaction as a short notice at its own place in the timeli
     expect(frame).toContain("compaction failed");
     expect(frame).toContain("Compaction failed (model: timeout)");
   } finally {
-    dispose();
+    await dispose();
   }
 });
 
@@ -283,6 +298,66 @@ test("shows a manual compaction with nothing to compact as a short notice", asyn
     const frame = setup.captureCharFrame();
     expect(frame).toContain("nothing to compact");
   } finally {
-    dispose();
+    await dispose();
+  }
+});
+
+test("shows a stale compaction as skipped because the context moved on", async () => {
+  const staleSnapshot: SessionSnapshot = {
+    ...compactionDividerDesignSnapshot,
+    compactions: [],
+    compactionNotices: [
+      {
+        id: "design-notice-stale",
+        sequence: 3,
+        at: 3,
+        trigger: "threshold",
+        result: "stale",
+        diagnostic: null,
+      },
+    ],
+  };
+  const { setup, dispose } = await mount(staleSnapshot);
+  try {
+    await act(async () =>
+      setup.waitForFrame((frame) =>
+        frame.includes("compaction skipped: the context moved on"),
+      ),
+    );
+    expect(setup.captureCharFrame()).toContain(
+      "compaction skipped: the context moved on",
+    );
+  } finally {
+    await dispose();
+  }
+});
+
+test("shows an insufficient compaction as skipped because the summary would not fit", async () => {
+  const insufficientSnapshot: SessionSnapshot = {
+    ...compactionDividerDesignSnapshot,
+    compactions: [],
+    compactionNotices: [
+      {
+        id: "design-notice-insufficient",
+        sequence: 3,
+        at: 3,
+        trigger: "threshold",
+        result: "insufficient",
+        diagnostic: null,
+      },
+    ],
+  };
+  const { setup, dispose } = await mount(insufficientSnapshot);
+  try {
+    await act(async () =>
+      setup.waitForFrame((frame) =>
+        frame.includes("compaction skipped: the summary would not fit"),
+      ),
+    );
+    expect(setup.captureCharFrame()).toContain(
+      "compaction skipped: the summary would not fit",
+    );
+  } finally {
+    await dispose();
   }
 });

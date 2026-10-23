@@ -17,6 +17,7 @@ import {
   subscribeSessionActivity,
 } from "@fungi.computer/parakeet/headless";
 
+const questionExtensionId = "botanical-session-question";
 type Fixture = {
   session: ShiitakeSession;
   push: (frame: SessionFrame) => void;
@@ -32,6 +33,7 @@ function fixture(): Fixture {
     cursor: null,
     hasMore: false,
     messages: [],
+    toolOutput: [],
     progress: null,
     sessionId: "fixture",
     activity: idleActivity,
@@ -57,7 +59,12 @@ function fixture(): Fixture {
       else resolve({ done: false, value: frame });
     },
     session: {
+      withdraw: () => Promise.resolve({ status: "unknown" }),
       address: "fixture://session",
+      latestPending: () =>
+        Promise.reject(
+          new Error("Pending lookup is unused in this observation proof"),
+        ),
       extension: () => ({
         call: () => Promise.reject(new Error("Extensions are unused here")),
       }),
@@ -94,6 +101,63 @@ function fixture(): Fixture {
 }
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
+test("Herdr activity only blocks for human-needed attention, not a person's paused goal", async () => {
+  const fake = fixture();
+  const queryClient = createQueryClient();
+  const snapshot = await fake.session.read();
+  const states: string[] = [];
+  const detach = subscribeSessionActivity(
+    queryClient,
+    fake.session,
+    (activity) => states.push(activity.state),
+    questionExtensionId,
+  );
+  const publish = (attention: SessionSnapshot["attention"]) =>
+    queryClient.setQueryData(sessionQueryOptions(fake.session).queryKey, {
+      observation: "live",
+      snapshot: { ...snapshot, attention },
+      latestPrompt: undefined,
+    });
+  const item = {
+    id: "paused-goal",
+    extensionId: "botanical-session-goal",
+    summary: "The goal is paused",
+    since: 1,
+  };
+  try {
+    // An informational item does not ask a person to act.
+    publish([{ ...item, kind: "goal" }]);
+    assert.equal(states.at(-1), "idle");
+    publish([{ ...item, kind: "goal-blocked" }]);
+    assert.equal(states.at(-1), "blocked");
+    publish([{ ...item, kind: "goal-stalled" }]);
+    assert.equal(states.at(-1), "blocked");
+    publish([
+      {
+        ...item,
+        extensionId: questionExtensionId,
+        kind: "question",
+      },
+    ]);
+    assert.equal(states.at(-1), "blocked");
+    publish([]);
+    assert.equal(states.at(-1), "idle");
+    queryClient.setQueryData(sessionQueryOptions(fake.session).queryKey, {
+      observation: "live",
+      snapshot: {
+        ...snapshot,
+        attention: [{ ...item, kind: "note" }],
+        activity: runningActivity(),
+      },
+      latestPrompt: undefined,
+    });
+    assert.equal(states.at(-1), "working");
+  } finally {
+    detach();
+    queryClient.clear();
+  }
+});
+
 test("client activity shares chat observation and reports unknown without closing chat", async () => {
   const fake = fixture();
   const queryClient = createQueryClient();
@@ -102,8 +166,9 @@ test("client activity shares chat observation and reports unknown without closin
     queryClient,
     fake.session,
     (state) => {
-      if (states.at(-1) !== state) states.push(state);
+      if (states.at(-1) !== state.state) states.push(state.state);
     },
+    questionExtensionId,
   );
   const chat = new QueryObserver(
     queryClient,
@@ -159,23 +224,39 @@ test("public activity gives independent latest-value subscriptions and ends at d
     queryClient,
     undefined,
     controller.signal,
+    questionExtensionId,
   );
   const first = activity[Symbol.asyncIterator]();
   const second = activity[Symbol.asyncIterator]();
   try {
-    assert.deepEqual(await first.next(), { done: false, value: "idle" });
-    assert.deepEqual(await second.next(), { done: false, value: "idle" });
+    assert.deepEqual(await first.next(), {
+      done: false,
+      value: { state: "idle" },
+    });
+    assert.deepEqual(await second.next(), {
+      done: false,
+      value: { state: "idle" },
+    });
     publish({
       ...snapshot,
       activity: runningActivity(),
     });
     await tick();
-    assert.deepEqual(await first.next(), { done: false, value: "working" });
+    assert.deepEqual(await first.next(), {
+      done: false,
+      value: { state: "working" },
+    });
     // The slow iterator leaves working unread; idle then replaces that one slot.
     publish(snapshot);
     await tick();
-    assert.deepEqual(await first.next(), { done: false, value: "idle" });
-    assert.deepEqual(await second.next(), { done: false, value: "idle" });
+    assert.deepEqual(await first.next(), {
+      done: false,
+      value: { state: "idle" },
+    });
+    assert.deepEqual(await second.next(), {
+      done: false,
+      value: { state: "idle" },
+    });
     // Buffered work is discarded when the borrowed selected-Session scope detaches.
     publish({
       ...snapshot,
@@ -190,6 +271,111 @@ test("public activity gives independent latest-value subscriptions and ends at d
     controller.abort();
     await first.return?.();
     await second.return?.();
+    queryClient.clear();
+  }
+});
+
+test("an open agent question reports blocked mid-turn and parked, and answering restores activity", async () => {
+  const fake = fixture();
+  const queryClient = createQueryClient();
+  const snapshot = await fake.session.read();
+  const question = {
+    id: "q1",
+    kind: "question",
+    summary: "Scope",
+    since: 1,
+    extensionId: questionExtensionId,
+  };
+  const publish = (next: SessionSnapshot) =>
+    queryClient.setQueryData(sessionQueryOptions(fake.session).queryKey, {
+      observation: "live",
+      snapshot: next,
+      latestPrompt: undefined,
+    });
+  const states: string[] = [];
+  const headers: (string | undefined)[] = [];
+  const detach = subscribeSessionActivity(
+    queryClient,
+    fake.session,
+    (state) => {
+      if (states.at(-1) !== state.state) states.push(state.state);
+      if (state.state === "blocked") headers.push(state.header);
+    },
+    questionExtensionId,
+  );
+  try {
+    publish(snapshot);
+    publish({ ...snapshot, activity: runningActivity() });
+    publish({
+      ...snapshot,
+      activity: runningActivity(),
+      attention: [question],
+    });
+    publish({ ...snapshot, activity: runningActivity() });
+    publish({ ...snapshot, attention: [question] });
+    publish(snapshot);
+    assert.deepEqual(states, [
+      "unknown",
+      "idle",
+      "working",
+      "blocked",
+      "working",
+      "blocked",
+      "idle",
+    ]);
+    // Only the attention header is observed, never a question body.
+    assert.deepEqual(headers, ["Scope", "Scope"]);
+  } finally {
+    detach();
+    queryClient.clear();
+  }
+});
+
+test("only the question extension's headers reach the activity stream", async () => {
+  const fake = fixture();
+  const queryClient = createQueryClient();
+  const controller = new AbortController();
+  const snapshot = await fake.session.read();
+  const publish = (next: SessionSnapshot) =>
+    queryClient.setQueryData(sessionQueryOptions(fake.session).queryKey, {
+      observation: "live",
+      snapshot: next,
+      latestPrompt: undefined,
+    });
+  const item = {
+    id: "a1",
+    kind: "question",
+    summary: "Scope",
+    since: 1,
+    extensionId: questionExtensionId,
+  };
+  publish({ ...snapshot, attention: [item] });
+  const iterator = clientActivity(
+    fake.session,
+    queryClient,
+    undefined,
+    controller.signal,
+    questionExtensionId,
+  )[Symbol.asyncIterator]();
+  try {
+    assert.deepEqual(await iterator.next(), {
+      done: false,
+      value: { state: "blocked", header: "Scope" },
+    });
+    publish({
+      ...snapshot,
+      attention: [
+        { ...item, extensionId: "other", kind: "note", summary: "free text" },
+      ],
+    });
+    await tick();
+    assert.deepEqual(await iterator.next(), {
+      done: false,
+      value: { state: "idle" },
+    });
+  } finally {
+    controller.abort();
+    await iterator.return?.();
     queryClient.clear();
   }
 });

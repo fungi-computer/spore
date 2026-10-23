@@ -1,6 +1,7 @@
 import { queuedActivity } from "@fungi.computer/parakeet-testing";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
+import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import {
   defaultScheduler,
   notifyManager,
@@ -56,9 +57,7 @@ async function mount() {
     });
   };
   const close = async () => {
-    act(() => {
-      setup.renderer.destroy();
-    });
+    await destroyTestRenderer(setup);
     commands.close();
     client.clear();
     await fixture.waitForClose();

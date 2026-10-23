@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
+import console from "node:console";
+import process from "node:process";
 import {
   access,
   copyFile,
@@ -11,9 +13,10 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
+const { fetch } = globalThis;
 import { parseArgs } from "node:util";
 import { inspectGlibc } from "./inspect-glibc.mjs";
 
@@ -25,7 +28,14 @@ const [tarball, ...nativeTarballs] = positionals;
 if (tarball === undefined) throw new Error("Pass a local CLI tarball");
 const archive = resolve(tarball);
 const root = await mkdtemp(join(tmpdir(), "fungi-cli-proof-"));
-const install = join(root, "install");
+const workArea = fileURLToPath(
+  new URL("../../../.botanical/spore-packed-proof/", import.meta.url),
+);
+await mkdir(workArea, { recursive: true });
+// Match ordinary npm/npx installs outside Linux's private /tmp and /run.
+// Masked-prefix installs remain a separately owned known red for 0.2.0.
+const installWork = await mkdtemp(join(workArea, "install-"));
+const install = join(installWork, "install");
 const installedCli = join(
   install,
   "node_modules/@fungi.computer/spore/dist/cli.js",
@@ -52,7 +62,7 @@ try {
     "--prefix",
     install,
     "--cache",
-    join(root, "cache"),
+    join(installWork, "cache"),
     "--no-audit",
     "--no-fund",
     archive,
@@ -64,13 +74,32 @@ try {
       "node_modules/@fungi.computer/spore/dist/internal/computerd.cjs",
     ),
   );
+  await access(
+    join(
+      install,
+      "node_modules/@fungi.computer/spore/dist/internal/local-image-fit-worker.mjs",
+    ),
+  );
+  const cliBundle = await readFile(installedCli, "utf8");
+  // Tripwire for the known React DEV signature, not semantic call-site analysis
+  // or proof that all user timing is absent.
+  assert.equal(
+    cliBundle.includes("performance.measure") &&
+      (cliBundle.includes("Scheduler \\u269B") ||
+        cliBundle.includes("Scheduler ⚛")),
+    false,
+    "The shipped CLI must exclude React DEV performance timing tracks",
+  );
   const fungi = join(install, "node_modules/.bin/fungi");
   const packageRoot = join(install, "node_modules/@fungi.computer/spore");
   const manifest = JSON.parse(
     await readFile(join(packageRoot, "package.json"), "utf8"),
   );
   assert.equal(manifest.name, "@fungi.computer/spore");
-  assert.equal(manifest.version, "0.0.1");
+  const { version } = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf8"),
+  );
+  assert.equal(manifest.version, version);
   assert.equal(manifest.bin.fungi, "dist/fungi.cjs");
   assert.equal(manifest.os, undefined);
   assert.equal(manifest.cpu, undefined);
@@ -137,7 +166,7 @@ try {
     assert.equal(response.status, 200);
     const status = await response.json();
     assert.equal(
-      status.buildId,
+      status.version,
       createHash("sha256")
         .update(await readFile(installedCli))
         .digest("hex"),
@@ -179,7 +208,7 @@ try {
     installedCli,
   ]);
   if (process.platform === "linux") await inspectGlibc(install);
-  const hiddenNative = join(root, "missing-native-package");
+  const hiddenNative = join(installWork, "missing-native-package");
   await rename(nativeRoot, hiddenNative);
   try {
     const missing = spawnSync(fungi, ["--version"], {
@@ -197,4 +226,5 @@ try {
   console.log(`Packed CLI proof passed on ${platform}`);
 } finally {
   await rm(root, { recursive: true, force: true });
+  await rm(installWork, { recursive: true, force: true });
 }

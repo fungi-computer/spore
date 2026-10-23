@@ -1,9 +1,11 @@
+import { createRequire } from "node:module";
 import { Readable } from "node:stream";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import { expect, test } from "bun:test";
+import { z } from "zod";
 import { createPrivateModels } from "@fungi.computer/truffle";
 import type { LocalAuthCliOptions } from "@fungi.computer/truffle/auth";
 import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
@@ -302,6 +304,31 @@ test.each([true, false])(
   },
 );
 
+test("stop says in one line that a service which ignored SIGTERM was killed", async () => {
+  let output = "";
+  await runFungiCli(
+    ["stop"],
+    {
+      interactive: false,
+      stdout: {
+        write(chunk) {
+          output += String(chunk);
+          return true;
+        },
+      },
+    },
+    {
+      createServiceManager: () => ({
+        ...createPrivateLocalServiceManager(),
+        stop: () => Promise.resolve({ kind: "killed" }),
+      }),
+    },
+  );
+  expect(output).toBe(
+    "Local service did not stop within 5 seconds, so it was killed. Saved Sessions preserved; interrupted turns resume when the service next starts.\n",
+  );
+});
+
 test("stop propagates shutdown failure and rejects selection arguments", async () => {
   const failure = new Error("owner drain failed");
   await assert.rejects(
@@ -547,6 +574,82 @@ test("one-shot CLI sends the endpoint to Local", async () => {
   });
 });
 
+test.each([
+  { flag: undefined, expected: undefined },
+  { flag: "--require-sandbox", expected: true },
+  { flag: "--no-require-sandbox", expected: false },
+])(
+  "one-shot forwards the person's sandbox requirement ($flag)",
+  async ({ flag, expected }) => {
+    const root = await mkdtemp(join(tmpdir(), "fungi-cli-sandbox-"));
+    const home = join(root, "home");
+    const project = join(root, "project");
+    await mkdir(home);
+    await mkdir(project);
+    const stopped = new Error("selection observed before any work");
+    let selected = false;
+    let required: boolean | undefined;
+    try {
+      await assert.rejects(
+        runFungiCli(
+          [
+            "run",
+            "proof",
+            "--fungi-mcp",
+            "https://hub.test/api/teams/selected/mcp",
+            ...(flag === undefined ? [] : [flag]),
+          ],
+          { cwd: project },
+          {
+            createServiceManager: () => ({
+              ...createPrivateLocalServiceManager({ home }),
+              connect: (selection) => {
+                selected = true;
+                required = selection.requireSandbox;
+                return Promise.reject(stopped);
+              },
+            }),
+          },
+          home,
+        ),
+        (cause) => cause === stopped,
+      );
+      expect(selected).toBe(true);
+      expect(required).toBe(expected);
+    } finally {
+      await rm(root, { recursive: true });
+    }
+  },
+);
+
+test("sandbox CLI rejects conflicting switches, unrelated commands and superseded modes before selection", async () => {
+  const home = await mkdtemp(join(tmpdir(), "fungi-cli-sandbox-grammar-"));
+  try {
+    for (const argv of [
+      ["run", "proof", "--require-sandbox", "--no-require-sandbox"],
+      ["status", "--require-sandbox"],
+      ["--safe"],
+      ["--yolo"],
+      ["--mode", "safe"],
+    ])
+      await assert.rejects(
+        runFungiCli(
+          argv,
+          {},
+          {
+            createServiceManager: () => {
+              throw new Error("must reject before Local selection");
+            },
+          },
+          home,
+        ),
+        /Choose only one|only valid|Unknown option/,
+      );
+  } finally {
+    await rm(home, { recursive: true });
+  }
+});
+
 function capture() {
   let output = "";
   return {
@@ -560,11 +663,15 @@ function capture() {
   };
 }
 
+const packageVersion = z
+  .looseObject({ version: z.string().min(1) })
+  .parse(createRequire(import.meta.url)("../package.json")).version;
+
 test("--version and -V print the package version", async () => {
   for (const flag of ["--version", "-V"]) {
     const sink = capture();
     await runFungiCli([flag], { stdout: sink.stdout });
-    expect(sink.text()).toBe("fungi 0.1.0\n");
+    expect(sink.text()).toBe(`fungi ${packageVersion}\n`);
   }
 });
 
@@ -1121,7 +1228,7 @@ test("resume with no saved conversations says so instead of a connection error",
       createServiceManager: () => ({
         ...createPrivateLocalServiceManager(),
         discover: () =>
-          Promise.resolve({ agentCount: 0, sessions: [], problems: [] }),
+          Promise.resolve({ agents: [], sessions: [], problems: [] }),
       }),
       createRenderer: () =>
         Promise.reject(new Error("renderer must not open without Sessions")),

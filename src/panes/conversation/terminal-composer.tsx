@@ -14,6 +14,7 @@ export type TerminalComposerProps = Readonly<{
   onSubmit: () => void;
   onKeyDown?: (event: KeyEvent) => void;
   focused: boolean;
+  readOnly?: boolean;
   inputHandoff?: TerminalInputHandoff | undefined;
   maxHeight: number;
   colors: TuiPresentation["colors"];
@@ -26,6 +27,7 @@ export function TerminalComposer({
   onSubmit,
   onKeyDown,
   focused,
+  readOnly = false,
   inputHandoff,
   maxHeight,
   colors,
@@ -54,6 +56,10 @@ export function TerminalComposer({
   usePanePaste((event) => {
     const current = editor.current;
     if (!active || current === null) return;
+    if (readOnly) {
+      event.preventDefault();
+      return;
+    }
     if (rendering.isFocused(current)) return;
     // Global paste handlers run before renderable handlers. A transient focus
     // loss must not discard a whole bracketed paste in an idle conversation.
@@ -75,13 +81,26 @@ export function TerminalComposer({
         if (text !== undefined && text !== value) onChange(text);
       }}
       onSubmit={() => {
+        if (readOnly) return;
         // Enter can share an input burst with a bracketed paste. Flush the
         // native editor before the slash controller reads the draft.
         const text = editor.current?.plainText;
         if (text !== undefined && text !== value) onChange(text);
         queueMicrotask(onSubmit);
       }}
-      {...(onKeyDown === undefined ? {} : { onKeyDown })}
+      onKeyDown={(event) => {
+        if (readOnly) {
+          event.preventDefault();
+          return;
+        }
+        // Recall needs the current native buffer. Ordinary typing must not
+        // publish a pre-keystroke value that can overwrite the next character.
+        if (event.name === "up") {
+          const text = editor.current?.plainText;
+          if (text !== undefined && text !== value) onChange(text);
+        }
+        onKeyDown?.(event);
+      }}
       keyBindings={[
         { name: "return", action: "submit" },
         { name: "kpenter", action: "submit" },

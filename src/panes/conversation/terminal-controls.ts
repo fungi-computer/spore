@@ -20,6 +20,8 @@ type CancellationAttempt = {
   request: Promise<void> | undefined;
 };
 
+const stopAllEscapeWindowMs = 600;
+
 function boundedCancellation(
   operation: () => Promise<void>,
   timeoutMs = 5_000,
@@ -55,6 +57,7 @@ export function useTerminalCancellation(
     waitingLabel: string | undefined;
     interaction: "prompt" | "actions" | null;
     cancel: () => Promise<void>;
+    stopAll?: (() => Promise<void>) | undefined;
     cancelWaiting: () => Promise<void>;
     cancelRequestTimeoutMs?: number;
     onCancelFailure: (cause: unknown) => void;
@@ -64,6 +67,8 @@ export function useTerminalCancellation(
   const current = useRef(input);
   current.current = input;
   const armed = useRef(false);
+  const previousEscape = useRef<number | undefined>(undefined);
+  const cascade = useRef<Promise<void> | undefined>(undefined);
   const attempt = useRef<CancellationAttempt | undefined>(undefined);
   const [pending, setPending] = useState(false);
   useEffect(() => {
@@ -150,8 +155,31 @@ export function useTerminalCancellation(
   const keyboard = useCallback(
     (exitWhenIdle: boolean): Promise<void> => {
       const view = current.current;
-      if (view.dismissInteraction()) return Promise.resolve();
+      if (view.dismissInteraction()) {
+        previousEscape.current = undefined;
+        return Promise.resolve();
+      }
       if (!exitWhenIdle) {
+        const now = performance.now();
+        const previous = previousEscape.current;
+        previousEscape.current = now;
+        if (
+          view.stopAll !== undefined &&
+          previous !== undefined &&
+          now - previous <= stopAllEscapeWindowMs
+        ) {
+          previousEscape.current = undefined;
+          if (cascade.current !== undefined) return Promise.resolve();
+          cascade.current = view
+            .stopAll()
+            .catch((cause: unknown) => {
+              current.current.onCancelFailure(cause);
+            })
+            .finally(() => {
+              cascade.current = undefined;
+            });
+          return Promise.resolve();
+        }
         const selected = nextTerminalEscape({
           interaction: view.interaction,
           notice: view.notice ?? false,
@@ -173,6 +201,8 @@ export function useTerminalCancellation(
         );
         return Promise.resolve();
       }
+
+      previousEscape.current = undefined;
 
       if (
         view.status === "idle" ||
@@ -217,6 +247,7 @@ export function useTerminalBindings(
       exit: () => void;
     }>;
     cancellation: ReturnType<typeof useTerminalCancellation>;
+    stopAll?: (() => Promise<void>) | undefined;
     reconnect: () => Promise<ParakeetReconnectOutcome>;
     canCancel: boolean;
     canRetry: boolean;
@@ -235,6 +266,7 @@ export function useTerminalBindings(
     canCancel: view.current.canCancel,
     canRetry: view.current.canRetry,
     canContinue: view.current.canContinue,
+    stopAll: view.current.stopAll,
     cancel: (origin) =>
       origin === "keyboard"
         ? view.current.cancellation.keyboard(false)

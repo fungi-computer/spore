@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { createAppSurfaceCommandHost } from "@fungi.computer/oyster/shell/command-host";
-import { shellCommands } from "@fungi.computer/oyster/shell/commands";
+import { createAppSurfaceCommandHost } from "@fungi.computer/nacre/command-host";
+import { shellCommands } from "@fungi.computer/nacre/commands";
 import {
   leaderKeys,
   leaderKeyMatches,
   parseChord,
-} from "@fungi.computer/oyster/shell/keys";
+} from "@fungi.computer/nacre/keys";
 import {
   createParakeetInteractions,
   parakeetBuiltinCommands,
@@ -132,7 +132,7 @@ test("shared-shell-leader uses the same declarations and focused rows on both ho
       id: "zoom",
       title: "Pane zoom",
       category: "Pane",
-      projections: { bindings: { values: ["<leader> z"] } },
+      projections: { bindings: { values: ["<leader>z"] } },
       handler: run,
     },
   ];

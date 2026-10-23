@@ -90,5 +90,12 @@ export function useModelControls({
     selectedModel === undefined ||
     effectiveModel.data?.credential.kind === "missing" ||
     loginNotice !== undefined;
-  return { loginNotice, selectedModel, refresh, signInRequired };
+  const selectedReasoning = effective?.reasoning;
+  return {
+    loginNotice,
+    selectedModel,
+    selectedReasoning,
+    refresh,
+    signInRequired,
+  };
 }
