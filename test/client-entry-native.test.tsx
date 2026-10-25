@@ -98,6 +98,7 @@ for (const { width, height } of [
                 reason: "Waiting on CI",
                 nextDueAt: Date.parse("2026-10-09T12:00:00Z"),
                 lastError: null,
+                consecutiveFailures: 0,
               }
             : null,
       });

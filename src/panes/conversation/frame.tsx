@@ -52,6 +52,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useId,
   useSyncExternalStore,
 } from "react";
 
@@ -250,6 +251,7 @@ function TuiFrameConversation({
   initialCommandError,
   initialCommandNotice,
 }: TuiFrameContentProps) {
+  const panelInstanceId = useId();
   const kit = usePaneKit();
   const stopAll =
     onStopAll === undefined
@@ -899,6 +901,7 @@ function TuiFrameConversation({
             footerExtras.length === 0 ? null : (
             <TerminalClientRows
               key={entryId}
+              id={`client-panel:${JSON.stringify([panelInstanceId, entryId])}`}
               rows={[...ordinary, ...footerExtras, ...attention]}
               presentation={presentation}
               compactWidth={width - 2 * inset}

@@ -1,5 +1,24 @@
 # @fungi.computer/spore
 
+## 0.2.1
+
+### Patch Changes
+
+- Changes since 0.2.0:
+
+  - fix(spore): stop Bun loading Agent project config into host
+  - fix(spore): order native digests and bound sandbox staging
+  - fix(spore): anchor native payloads to built JS and stage verified bytes
+  - fix(tui): dispose embedded goal proof service
+  - fix(mule): migrate remaining Spore and Demo model consumers
+
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/shiitake-extensions@0.1.1
+  - @fungi.computer/shiitake@0.3.1
+  - @fungi.computer/parakeet@0.2.1
+  - @fungi.computer/corral@0.1.1
+
 ## 0.2.0
 
 ### Minor Changes

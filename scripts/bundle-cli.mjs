@@ -31,6 +31,21 @@ const { version } = JSON.parse(
   await readFile(resolve(root, "package.json"), "utf8"),
 );
 const repository = resolve(root, "../..");
+// Refresh the in-bundle trust anchor after all available platform builds.
+const anchors = spawnSync(
+  process.execPath,
+  [
+    resolve(repository, "runtimes/local/scripts/generate-native-digests.mjs"),
+    "--cross",
+  ],
+  { cwd: repository, stdio: "inherit" },
+);
+if (anchors.error !== undefined) throw anchors.error;
+if (anchors.status !== 0) throw new Error("Native digest generation failed");
+await copyFile(
+  resolve(repository, "runtimes/local/src/private-local-native-digests.js"),
+  resolve(repository, "runtimes/local/dist/private-local-native-digests.js"),
+);
 const output = resolve(repository, ".botanical/fungi-cli-package");
 const metafile = resolve(repository, ".botanical/fungi-cli-metafile.json");
 await rm(output, { recursive: true, force: true });

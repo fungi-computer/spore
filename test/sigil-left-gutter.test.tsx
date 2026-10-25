@@ -49,6 +49,7 @@ for (const width of [80, 160])
         reason: "Waiting",
         nextDueAt: null,
         lastError: null,
+        consecutiveFailures: 0,
       },
     });
     const client = new QueryClient({

@@ -18,10 +18,8 @@ import {
 } from "@fungi.computer/whistle";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { act, createElement } from "react";
-import {
-  fauxAssistantMessage,
-  fauxProvider,
-} from "@earendil-works/pi-ai/providers/faux";
+import { fauxAssistantMessage } from "@earendil-works/pi-ai/providers/faux";
+import { fauxModel } from "@fungi.computer/mule/testing";
 import {
   compatibilityRunDependencies,
   createCompatibilityRuntimeHost,
@@ -304,8 +302,7 @@ test("a queued conversation identifies the actual Session holding the Agent", as
   const runtime = createCompatibilityRuntimeHost();
   const started = Promise.withResolvers<undefined>();
   const release = Promise.withResolvers<undefined>();
-  const faux = fauxProvider();
-  faux.setResponses([
+  const faux = fauxModel([
     async () => {
       started.resolve(undefined);
       await release.promise;
@@ -321,8 +318,8 @@ test("a queued conversation identifies the actual Session holding the Agent", as
       acquire: () =>
         Promise.resolve({
           retryable: () => false,
-          model: faux.getModel(),
-          stream: faux.provider.streamSimple.bind(faux.provider),
+          model: faux.model,
+          stream: faux.stream,
           release: () => Promise.resolve(),
         }),
     },
@@ -446,8 +443,7 @@ test("Esc stops only the current run and the next queued message runs", async ()
   const release = Promise.withResolvers<undefined>();
   const nextStarted = Promise.withResolvers<undefined>();
   const releaseNext = Promise.withResolvers<undefined>();
-  const faux = fauxProvider();
-  faux.setResponses([
+  const faux = fauxModel([
     async () => {
       started.resolve(undefined);
       await release.promise;
@@ -469,8 +465,8 @@ test("Esc stops only the current run and the next queued message runs", async ()
       acquire: () =>
         Promise.resolve({
           retryable: () => false,
-          model: faux.getModel(),
-          stream: faux.provider.streamSimple.bind(faux.provider),
+          model: faux.model,
+          stream: faux.stream,
           release: () => Promise.resolve(),
         }),
     },

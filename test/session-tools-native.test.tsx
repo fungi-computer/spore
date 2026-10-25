@@ -46,6 +46,7 @@ test("renders a checklist and waiting-loop footer at 80 and 120 columns", async 
           reason: "Waiting on CI",
           nextDueAt: 1000,
           lastError: null,
+          consecutiveFailures: 0,
         },
         plan: {
           steps: [

@@ -114,6 +114,22 @@ for (const platform of [
           );
         }
       }
+      const digest = (bytes) =>
+        createHash("sha256").update(bytes).digest("hex");
+      const anchors = join(
+        root,
+        "runtimes/local/src/private-local-native-digests.js",
+      );
+      await mkdir(dirname(anchors), { recursive: true });
+      const expected = { patch: digest("PATCH_FIXTURE") };
+      if (os === "linux") {
+        expected.bwrap = digest("BWRAP_FIXTURE");
+        expected.seccomp = digest("SECCOMP_FILTER_FIXTURE");
+      }
+      await writeFile(
+        anchors,
+        `export const nativeDigests = ${JSON.stringify({ [platform]: expected })};\n`,
+      );
       const result = spawnSync(
         "node",
         [join(root, "apps/tui/scripts/bundle-native.mjs"), platform],
@@ -142,6 +158,8 @@ for (const platform of [
       );
       const readme = await readFile(join(output, "README.md"), "utf8");
       if (os === "linux") {
+        for (const name of ["fungi-bwrap.sha256", "fungi-seccomp.bpf.sha256"])
+          assert.equal(manifest.files.includes(`bin/${name}`), false);
         assert.match(readme, /glibc 2\.35/);
         const bwrap = createRequire(manifestPath).resolve(
           `${manifest.name}/bin/fungi-bwrap`,
@@ -204,6 +222,25 @@ for (const platform of [
         assert.equal(manifest.exports["./bin/fungi-bwrap"], undefined);
         assert(!manifest.files.includes("bin/fungi-bwrap"));
       }
+      await writeFile(anchors, "export const nativeDigests = {};\n");
+      const missing = spawnSync(
+        "node",
+        [join(root, "apps/tui/scripts/bundle-native.mjs"), platform],
+        { encoding: "utf8" },
+      );
+      assert.notEqual(missing.status, 0);
+      assert.match(missing.stderr, /no native digests/);
+      await writeFile(
+        anchors,
+        `export const nativeDigests = ${JSON.stringify({ [platform]: { ...expected, patch: "0".repeat(64) } })};\n`,
+      );
+      const changed = spawnSync(
+        "node",
+        [join(root, "apps/tui/scripts/bundle-native.mjs"), platform],
+        { encoding: "utf8" },
+      );
+      assert.notEqual(changed.status, 0);
+      assert.match(changed.stderr, /digest mismatch/);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

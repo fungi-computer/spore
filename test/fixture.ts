@@ -530,6 +530,7 @@ export function createTuiFixture({
         reason: null,
         nextDueAt: null,
         lastError: null,
+        consecutiveFailures: 0,
       };
       return Promise.resolve({
         loop: encodeLoop(currentLoop),

@@ -182,8 +182,72 @@ const clearDraft = async () => {
     });
   await until("an empty composer", (text) => text.includes("Ask anything"));
 };
-/** The pinned rows under the composer: the status line, then goal rows. */
-const footer = () => frame().split("\n").slice(-6).join("\n");
+/**
+ * Current-row and ended-cell title forms from
+ * packages/shiitake-extensions/src/goal/client.ts. Only live and paused titles
+ * belong in its footer panel.
+ */
+const goalStateTitles = [
+  /Pursuing goal since \d\d:\d\d · /u,
+  /Goal paused \(\/goal resume\) · /u,
+  /Goal achieved · /u,
+  /Goal cleared · /u,
+];
+/** Find the rendered footer panel independent of its current row contents. */
+const renderableIds = (node) => [
+  node.id,
+  ...node.getChildren().flatMap(renderableIds),
+];
+const goalPanelRegion = () => {
+  const suffix = `,${JSON.stringify(String(goalClient.id))}]`;
+  const ids = renderableIds(setup.renderer.root).filter(
+    (id) => id.startsWith("client-panel:[") && id.endsWith(suffix),
+  );
+  assert.ok(ids.length <= 1, `Expected one Goal client panel, found ${ids}`);
+  const id = ids[0];
+  if (id === undefined) return { mounted: false };
+  const panel = setup.renderer.root.findDescendantById(id);
+  assert.ok(panel, `Rendered Goal panel ${id} is not in the renderer tree`);
+  return {
+    mounted: true,
+    text: frame()
+      .split("\n")
+      .slice(panel.screenY, panel.screenY + panel.height)
+      .join("\n"),
+  };
+};
+/** Select positive Goal assertions by titles from the real Goal client. */
+const goalPanel = async () => {
+  const snapshot = await selected.session.read();
+  if (goalClient.contribute === undefined)
+    throw new Error("Goal client is missing its panel contribution");
+  const contribution = goalClient.contribute(
+    snapshot.extensions[String(goalClient.id)],
+  );
+  const titles = contribution.panel.map((row) => row.title);
+  const region = goalPanelRegion();
+  if (titles.length > 0)
+    assert.equal(region.mounted, true, "Current Goal rows must have a panel");
+  const text = region.mounted ? region.text : "";
+  const visible = text
+    .split("\n")
+    .filter((line) => titles.some((title) => line.includes(title)));
+  return { titles, region, visible: visible.join("\n") };
+};
+/** Check every other producer-emitted state title against the rendered panel. */
+const assertNoStaleGoalPanelRows = async () => {
+  const panel = await goalPanel();
+  for (const title of goalStateTitles) {
+    if (panel.titles.some((current) => title.test(current))) continue;
+    if (panel.region.mounted) assert.doesNotMatch(panel.region.text, title);
+  }
+  return panel;
+};
+const assertGoalPanelUnmounted = async () => {
+  const panel = await assertNoStaleGoalPanelRows();
+  assert.equal(panel.titles.length, 0, "Ended goals have no current panel row");
+  assert.equal(panel.region.mounted, false, "Ended goals unmount the panel");
+};
 const lines = (text) =>
   frame()
     .split("\n")
@@ -240,8 +304,10 @@ const close = async () => {
   });
   if (!setup.renderer.isDestroyed) setup.renderer.destroy();
   await selected.close();
-  await service.manager.stop();
-  await Promise.race([service.run, delay(3000)]);
+  // The listener is embedded in this process; signal its maintained shutdown
+  // handler rather than asking the external manager to terminate our PID.
+  process.emit("SIGTERM", "SIGTERM");
+  await service.run;
 };
 let failure;
 try {
@@ -257,6 +323,10 @@ try {
   await shot("01-goal-set-agent-working");
   assert.equal(lines("Pursuing goal since").length, 1);
   assert.doesNotMatch(frame(), /Goal · |Goal active/u);
+  assert.match(
+    (await assertNoStaleGoalPanelRows()).visible,
+    /Pursuing goal since \d\d:\d\d · Tidy the menus/u,
+  );
 
   // R1: Esc pauses the goal.
   await until("the goal work to start", () => first.started());
@@ -266,7 +336,11 @@ try {
     text.includes("Goal paused (/goal resume) · Tidy the menus · Stopped"),
   );
   await shot("02-after-esc-goal-still-active");
-  assert.doesNotMatch(footer(), /Pursuing goal/u);
+  const pausedAfterEscape = await assertNoStaleGoalPanelRows();
+  assert.match(
+    pausedAfterEscape.visible,
+    /Goal paused \(\/goal resume\) · Tidy the menus/u,
+  );
 
   await type("/goal");
   await enter();
@@ -285,7 +359,11 @@ try {
     text.includes("Pizza sounds good."),
   );
   await shot("04-lunch-question-restarted-old-goal", 1500);
-  assert.match(footer(), /Goal paused \(\/goal resume\) · Tidy the menus/u);
+  assert.match(
+    (await assertNoStaleGoalPanelRows()).visible,
+    /Goal paused \(\/goal resume\) · Tidy the menus/u,
+    frame(),
+  );
   assert.doesNotMatch(frame(), /The menus are tidy\./u);
 
   // R3: an achieved goal leaves the footer and posts one chat line.
@@ -296,7 +374,7 @@ try {
   );
   await shot("04b-resumed-goal-achieved", 600);
   assert.equal(lines("Goal achieved").length, 1);
-  assert.doesNotMatch(footer(), /Pursuing goal|Goal paused/u);
+  await assertGoalPanelUnmounted();
   // R5: goal turns never show in the chat; only the status lines do.
   assert.doesNotMatch(frame(), /Goal turn ·/u);
 
@@ -304,13 +382,13 @@ try {
   await type("/goal Write the release notes");
   await enter();
   await until("the blocked goal to pause", (text) =>
-    text.includes("Blocked: No access to the release repo"),
+    text.includes("No access to the release repo"),
   );
   await shot("05-second-goal-blocked", 600);
   assert.doesNotMatch(frame(), /Replace the/u);
   assert.match(
-    footer(),
-    /Goal paused \(\/goal resume\) · Write the release notes · Blocked/u,
+    (await assertNoStaleGoalPanelRows()).visible,
+    /Goal paused \(\/goal resume\) · Write the release notes · No access to the release repo/u,
   );
 
   // R7: a paused (blocked) goal is current, so replacing it asks first.
@@ -324,7 +402,7 @@ try {
   await until("the kept goal", (text) => !text.includes("Replace the paused"));
   await shot("07-after-keep-current-goal", 400);
   assert.match(
-    footer(),
+    (await assertNoStaleGoalPanelRows()).visible,
     /Goal paused \(\/goal resume\) · Write the release notes/u,
   );
 
@@ -337,14 +415,17 @@ try {
   );
   await shot("08-after-goal-clear", 600);
   assert.equal(lines("Goal cleared").length, 1);
-  assert.doesNotMatch(footer(), /Pursuing goal|Goal paused/u);
+  await assertGoalPanelUnmounted();
 
   // A stall pauses with its reason; replacing a paused goal asks first.
   await type("/goal Polish the icons");
   await enter();
   await until("the stalled goal", (text) => text.includes("Stalled"));
   await shot("09-stalled-goal-auto-paused", 600);
-  assert.match(footer(), /Goal paused \(\/goal resume\) · Polish the icons/u);
+  assert.match(
+    (await assertNoStaleGoalPanelRows()).visible,
+    /Goal paused \(\/goal resume\) · Polish the icons/u,
+  );
   await type("/goal Ship the icons");
   await enter();
   await until("the replace prompt", (text) =>
@@ -364,6 +445,11 @@ try {
     /Pursuing goal since \d\d:\d\d · Polish the icons/u.test(text),
   );
   await shot("11-live-goal-before-closing");
+  const liveBeforeRestart = await assertNoStaleGoalPanelRows();
+  assert.match(
+    liveBeforeRestart.visible,
+    /Pursuing goal since \d\d:\d\d · Polish the icons/u,
+  );
   // Process loss: keep the store exactly as committed mid goal turn. A
   // graceful stop waits for the turn, so release it, stop, then restore.
   const store = selected.databasePath;
@@ -391,9 +477,12 @@ try {
   );
   await until("the goal's next turn", () => resumed.started());
   await shot("12-reopened-after-closing-mid-goal", 600);
-  assert.match(footer(), /Pursuing goal since \d\d:\d\d · Polish the icons/u);
+  const reopenedPanel = await assertNoStaleGoalPanelRows();
+  assert.match(
+    reopenedPanel.visible,
+    /Pursuing goal since \d\d:\d\d · Polish the icons/u,
+  );
   assert.doesNotMatch(frame(), /Replace the|Resume paused goal\?/u);
-  assert.doesNotMatch(footer(), /Goal paused/u);
   resumed.release();
   await close();
 } catch (cause) {

@@ -32,7 +32,7 @@ process.env.FUNGI_NODE = join(runtime, "native/bin/node");
 // Existing service/restart callers pass the CLI/launcher before its arguments.
 const args = process.argv.slice(2);
 if (args[0] === cli || args[0] === process.execPath) args.shift();
-const child = spawnSync(join(runtime, "native/bin/bun"), [cli, ...args], {
+const child = spawnSync(join(runtime, "native/bin/bun"), ["--config=/dev/null", "--no-env-file", cli, ...args], {
   stdio: "inherit",
   env: process.env,
 });

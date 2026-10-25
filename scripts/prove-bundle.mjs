@@ -106,6 +106,13 @@ try {
   const nativeBinary = createRequire(join(packageRoot, "package.json")).resolve(
     `@fungi.computer/spore-native-${process.platform}-${process.arch}/bin/fungi-apply-patch`,
   );
+  const packagedDigest = createHash("sha256")
+    .update(await readFile(nativeBinary))
+    .digest("hex");
+  assert.ok(
+    cliBundle.includes(packagedDigest),
+    "Packed CLI must carry the digest of its actual native patch payload",
+  );
   const nativeRoot = dirname(dirname(nativeBinary));
   const nativeManifest = JSON.parse(
     await readFile(join(nativeRoot, "package.json"), "utf8"),

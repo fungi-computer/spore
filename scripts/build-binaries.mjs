@@ -108,6 +108,9 @@ for (const platform of target === "all" ? targets : [target]) {
     run("bun", [
       "build",
       "--compile",
+      // A compiled executable loads cwd configuration before entry.ts runs.
+      "--no-compile-autoload-dotenv",
+      "--no-compile-autoload-bunfig",
       `--target=bun-${platform}`,
       resolve(temporary, "entry.ts"),
       "--outfile",

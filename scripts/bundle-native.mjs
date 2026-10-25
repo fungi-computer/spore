@@ -16,6 +16,23 @@ const buildRoot =
   platform === `${process.platform}-${process.arch}`
     ? resolve(repository, "runtimes/local/native/bin")
     : resolve(repository, `.botanical/native-build/${platform}/bin`);
+const { nativeDigests } =
+  await import("../../../runtimes/local/src/private-local-native-digests.js");
+const expected = nativeDigests[platform];
+if (
+  expected?.patch === undefined ||
+  (platform.startsWith("linux-") &&
+    (expected.bwrap === undefined || expected.seccomp === undefined))
+)
+  throw new Error(`Built CLI has no native digests for ${platform}`);
+const digestOf = async (path) =>
+  createHash("sha256")
+    .update(await readFile(path))
+    .digest("hex");
+const assertDigest = async (path, digest) => {
+  if ((await digestOf(path)) !== digest)
+    throw new Error(`Native package digest mismatch with built CLI: ${path}`);
+};
 const build = JSON.parse(
   await readFile(resolve(buildRoot, "build.json"), "utf8"),
 );
@@ -32,6 +49,7 @@ await copyFile(
   resolve(buildRoot, "fungi-apply-patch"),
   resolve(output, "bin/fungi-apply-patch"),
 );
+await assertDigest(resolve(output, "bin/fungi-apply-patch"), expected.patch);
 await copyFile(
   resolve(repository, "packages/cordyceps/native/apply-patch/LICENSE.codex"),
   resolve(output, "LICENSE.codex"),
@@ -43,9 +61,7 @@ const linuxFiles =
   os === "linux"
     ? [
         "bin/fungi-bwrap",
-        "bin/fungi-bwrap.sha256",
         "bin/fungi-seccomp.bpf",
-        "bin/fungi-seccomp.bpf.sha256",
         "bwrap-build.json",
         "LICENSE.bubblewrap",
         "LICENSE.libcap",
@@ -101,6 +117,11 @@ if (os === "linux") {
       recursive: true,
     });
   }
+  await assertDigest(resolve(output, "bin/fungi-bwrap"), expected.bwrap);
+  await assertDigest(
+    resolve(output, "bin/fungi-seccomp.bpf"),
+    expected.seccomp,
+  );
   nativeBuilds.push(bwrap);
 }
 await writeCliNotices({ repository, output, nativeBuilds });
@@ -145,8 +166,9 @@ Upstream terms are in \`LICENSE.codex\` and \`THIRD_PARTY_NOTICES\`.
 ${
   os === "linux"
     ? `
-Linux also carries the pinned bubblewrap engine and seccomp filter, their SHA-256 sidecars and build
-provenance. Its unmodified upstream source is in \`SOURCE.bubblewrap.tar.xz\`;
+Linux also carries the pinned bubblewrap engine and seccomp filter and build
+provenance. The runtime verifies them against the digests embedded in Fungi's
+built JS, never writable sidecars. Its unmodified upstream source is in \`SOURCE.bubblewrap.tar.xz\`;
 the recipe is in \`bwrap-build-source\`. Terms are in \`LICENSE.bubblewrap\`
 and \`LICENSE.libcap\`; the maintained filter generator's terms are in
 \`LICENSE.sandbox-runtime\`.

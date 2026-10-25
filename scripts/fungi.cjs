@@ -61,16 +61,22 @@ try {
 }
 const cli = resolve(__dirname, "cli.js");
 const buildId = createHash("sha256").update(readFileSync(cli)).digest("hex");
-const child = spawnSync(bun, [cli, ...process.argv.slice(2)], {
-  stdio: "inherit",
-  env: {
-    ...process.env,
-    FUNGI_BUNDLED_CLI: cli,
-    FUNGI_BUNDLED_BUILD_ID: buildId,
-    FUNGI_LAUNCHER: __filename,
-    FUNGI_LAUNCHER_NODE: process.execPath,
+// Bun otherwise loads the project's bunfig.toml preload and .env into this
+// unsandboxed host process before the CLI can establish Agent authority.
+const child = spawnSync(
+  bun,
+  ["--config=/dev/null", "--no-env-file", cli, ...process.argv.slice(2)],
+  {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      FUNGI_BUNDLED_CLI: cli,
+      FUNGI_BUNDLED_BUILD_ID: buildId,
+      FUNGI_LAUNCHER: __filename,
+      FUNGI_LAUNCHER_NODE: process.execPath,
+    },
   },
-});
+);
 if (child.error) throw child.error;
 if (child.signal) process.kill(process.pid, child.signal);
 process.exitCode = child.status ?? 1;
