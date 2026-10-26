@@ -1,5 +1,16 @@
 # @fungi.computer/spore
 
+## 0.3.1
+
+### Patch Changes
+
+- Changes since 0.3.0:
+
+  - fix(spore): keep escape risk visible with safe approval choices
+  - fix(cli): clarify provider-specific sign-in guidance
+  - fix(cli): prioritize BYOK in missing-model guidance
+  - fix(tui): approve MCP escapes once by default
+
 ## 0.3.0
 
 ### Minor Changes

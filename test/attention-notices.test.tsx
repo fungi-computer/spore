@@ -70,7 +70,7 @@ test("the sign-in attention item disappears when account access is restored", as
   );
   try {
     await waitForFrame(setup, (frame) =>
-      frame.includes("Sign in to Fungi with fungi login"),
+      frame.includes("Use your own Claude or ChatGPT subscription"),
     );
     signedIn = true;
     await act(async () => {
@@ -84,10 +84,10 @@ test("the sign-in attention item disappears when account access is restored", as
     ).not.toEqual([]);
     await waitForFrame(
       setup,
-      (frame) => !frame.includes("Sign in to Fungi with fungi login"),
+      (frame) => !frame.includes("Use your own Claude or ChatGPT subscription"),
     );
     expect(setup.captureCharFrame()).not.toContain(
-      "Sign in to Fungi with fungi login",
+      "Use your own Claude or ChatGPT subscription",
     );
   } finally {
     await destroyTestRenderer(setup);

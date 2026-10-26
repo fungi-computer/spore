@@ -1,2 +1,2 @@
 export const fungiModelLoginNotice =
-  "Sign in to Fungi with fungi login --provider fungi (or /login in a Session). Your selected Team pays for models.";
+  "Use your own Claude or ChatGPT subscription: /login in a Session, or fungi login --provider anthropic --auth-type oauth (Claude) or fungi login --provider openai --auth-type oauth (ChatGPT) in the CLI. For hosted Fungi, run fungi login --provider fungi.";

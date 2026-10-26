@@ -18,6 +18,8 @@ export type McpApprovalSource = Readonly<{
     justification: string;
     prefix?: readonly string[];
     warning?: string;
+    alwaysAllowCoverage?: string;
+    alwaysAllowUnavailableReason?: string;
   }>;
   // Session attachment refusals are not synthesized canonical ledger decisions.
   answer: (
@@ -162,32 +164,36 @@ function ActiveApproval({
     else {
       void (async () => {
         try {
-          const alwaysAllow =
-            source.review?.prefix === undefined
-              ? false
-              : await session.interaction.prompt({
-                  type: "confirmation",
-                  message: `Always allow ${source.review.prefix.join(" ")}? ${source.review.warning ?? "Matching direct commands will run as you, outside the sandbox, without asking again."}`,
-                  confirmLabel: `Always allow ${source.review.prefix.join(" ")}`,
-                  cancelLabel: "Review once",
-                });
-          if (!stillCurrent()) return;
-          const approved =
-            alwaysAllow ||
-            (await session.interaction.prompt({
-              type: "confirmation",
-              message: record.description.title,
-              confirmLabel: "Approve",
-              cancelLabel: "Deny",
-            }));
+          const prefix = source.review?.prefix?.join(" ");
+          const options = [
+            { value: "approve", label: "Approve once" },
+            ...(prefix === undefined
+              ? []
+              : [
+                  {
+                    value: "always-allow",
+                    label: `Always allow '${prefix}'`,
+                  },
+                ]),
+            { value: "deny", label: "Deny" },
+          ];
+          const selected = await session.interaction.prompt({
+            type: "choice",
+            message: record.description.title,
+            options,
+          });
+          if (
+            selected !== "approve" &&
+            selected !== "deny" &&
+            selected !== "always-allow"
+          )
+            throw new Error("The approval choice is unavailable.");
+          if (selected === "always-allow" && prefix === undefined)
+            throw new Error("The approval rule is unavailable.");
           if (!stillCurrent()) return;
           const result = await source.answer({
             recordId: record.recordId,
-            decision: alwaysAllow
-              ? "always-allow"
-              : approved
-                ? "approve"
-                : "deny",
+            decision: selected,
             expectedRevision: record.revision,
           });
           if (!stillCurrent()) return;
@@ -234,6 +240,24 @@ function ActiveApproval({
               {`Always allow ${source.review.prefix.join(" ")}: ${source.review.warning ?? "matching direct commands run as you, outside the sandbox, without asking again"}`}
             </text>
           )}
+          {source.review.prefix === undefined &&
+          source.review.warning !== undefined ? (
+            <text
+              fg={colors.foreground}
+            >{`Warning: ${source.review.warning}`}</text>
+          ) : null}
+          {source.review.prefix !== undefined &&
+          source.review.alwaysAllowCoverage !== undefined ? (
+            <text fg={colors.foreground}>
+              {`Always allow scope: ${source.review.alwaysAllowCoverage}`}
+            </text>
+          ) : null}
+          {source.review.prefix === undefined &&
+          source.review.alwaysAllowUnavailableReason !== undefined ? (
+            <text fg={colors.foreground}>
+              {`Details: ${source.review.alwaysAllowUnavailableReason}`}
+            </text>
+          ) : null}
         </>
       )}
       <text

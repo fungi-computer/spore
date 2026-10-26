@@ -143,7 +143,7 @@ test("escape card shows the exact command and cwd before a human answers", async
   }
 });
 
-test("the attached human chooses a narrow Git subcommand after seeing the outside-sandbox warning", async () => {
+test("Enter on the initial escape-card option approves once without choosing a rule", async () => {
   const producer = fakeApprovals();
   const source: McpApprovalSource = {
     ...producer.source,
@@ -167,7 +167,11 @@ test("the attached human chooses a narrow Git subcommand after seeing the outsid
     const frame = await waitForFrame(setup, (value) =>
       value.includes("Always allow git"),
     );
-    expect(frame).toContain("outside the sandbox");
+    const normalized = frame.replace(/\s+/gu, " ");
+    expect(normalized).toContain("outside the sandbox");
+    expect(normalized).toContain("1 ▶ Approve once");
+    expect(normalized).toContain("2 Always allow 'git'");
+    expect(normalized).toContain("3 Deny");
     expect(producer.answers).toHaveLength(0);
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
@@ -175,7 +179,7 @@ test("the attached human chooses a narrow Git subcommand after seeing the outsid
     expect(producer.answers).toEqual([
       {
         recordId: "project-git",
-        decision: "always-allow",
+        decision: "approve",
         expectedRevision: 7,
       },
     ]);
@@ -196,6 +200,7 @@ for (const subcommand of ["commit", "push", "merge", "diff"]) {
         escape: { justification: "Git metadata is read-only" },
       },
       "/project/fungi",
+      { configuredRemotes: new Set() },
     );
     const source: McpApprovalSource = {
       ...producer.source,
@@ -231,7 +236,78 @@ for (const subcommand of ["commit", "push", "merge", "diff"]) {
   });
 }
 
-test("a git push card can choose its project subcommand prefix", async () => {
+test("Git approval without an eligible rule shows hook risk and the once-only reason", async () => {
+  const producer = fakeApprovals();
+  const review = localExecEscapeReview(
+    {
+      executable: "git",
+      args: ["commit", "-m", "approved"],
+      escape: { justification: "Git metadata is read-only" },
+    },
+    "/project/fungi",
+  );
+  expect(review.prefix).toBeUndefined();
+  const setup = await testRender(
+    <View source={{ ...producer.source, review }} />,
+    { width: 100, height: 40 },
+  );
+  try {
+    act(() => {
+      producer.publish(approval("git-once"));
+    });
+    const frame = await waitForFrame(setup, (value) =>
+      value.includes("Project hooks can run code as you"),
+    );
+    expect(frame).toContain("protected project Git repository is unavailable");
+    expect(frame).toContain("1 ▶ Approve once");
+    expect(frame).toContain("2   Deny");
+    expect(frame).not.toContain("Always allow 'git commit'");
+    expect(producer.answers).toEqual([]);
+  } finally {
+    act(() => {
+      setup.renderer.destroy();
+    });
+  }
+});
+
+test("an offered Git commit rule explains its -m/-am scope before the three choices", async () => {
+  const producer = fakeApprovals();
+  const review = localExecEscapeReview(
+    {
+      executable: "git",
+      args: ["commit", "-m", "approved"],
+      escape: { justification: "Git metadata is read-only" },
+    },
+    "/project/fungi",
+    { configuredRemotes: new Set() },
+  );
+  expect(review.prefix).toEqual(["git", "commit"]);
+  const setup = await testRender(
+    <View source={{ ...producer.source, review }} />,
+    { width: 100, height: 44 },
+  );
+  try {
+    act(() => {
+      producer.publish(approval("git-reusable"));
+    });
+    const frame = await waitForFrame(setup, (value) =>
+      value.includes("Project hooks can run code as you"),
+    );
+    expect(frame).toContain("-m VALUE");
+    expect(frame).toContain("-am VALUE");
+    expect(frame).toContain("Workspace Agents");
+    expect(frame).toContain("1 ▶ Approve once");
+    expect(frame).toContain("2   Always allow 'git commit'");
+    expect(frame).toContain("3   Deny");
+    expect(producer.answers).toEqual([]);
+  } finally {
+    act(() => {
+      setup.renderer.destroy();
+    });
+  }
+});
+
+test("always-allow requires explicitly moving to the narrow Git prefix", async () => {
   const producer = fakeApprovals();
   const source: McpApprovalSource = {
     ...producer.source,
@@ -256,6 +332,14 @@ test("a git push card can choose its project subcommand prefix", async () => {
       value.includes("Always allow git push"),
     );
     expect(frame).not.toContain("Always allow git:");
+    const normalized = frame.replace(/\s+/gu, " ");
+    expect(normalized).toContain("1 ▶ Approve once");
+    expect(normalized).toContain("2 Always allow 'git push'");
+    expect(normalized).toContain("3 Deny");
+    expect(producer.answers).toEqual([]);
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressArrow("down");
+    });
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
     });
@@ -273,7 +357,7 @@ test("a git push card can choose its project subcommand prefix", async () => {
   }
 });
 
-test("a git push card offers only a narrow rule or one-time approval", async () => {
+test("an escape card's third option denies the request", async () => {
   const producer = fakeApprovals();
   const source: McpApprovalSource = {
     ...producer.source,
@@ -292,22 +376,26 @@ test("a git push card offers only a narrow rule or one-time approval", async () 
     act(() => {
       producer.publish(approval("narrow-git"));
     });
-    await waitForFrame(setup, (frame) =>
+    const frame = await waitForFrame(setup, (frame) =>
       frame.includes("Always allow git push"),
     );
+    const normalized = frame.replace(/\s+/gu, " ");
+    expect(normalized).toContain("1 ▶ Approve once");
+    expect(normalized).toContain("2 Always allow 'git push'");
+    expect(normalized).toContain("3 Deny");
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressArrow("down");
-      setup.mockInput.pressEnter();
     });
-    await waitForFrame(setup, (frame) => frame.includes("1 ▶ Approve"));
-
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressArrow("down");
+    });
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
     });
     expect(producer.answers).toEqual([
       {
         recordId: "narrow-git",
-        decision: "approve",
+        decision: "deny",
         expectedRevision: 7,
       },
     ]);

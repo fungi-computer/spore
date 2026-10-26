@@ -9,6 +9,7 @@ import { createTestRenderer } from "@opentui/core/testing";
 import { createWhistle } from "@fungi.computer/whistle";
 import { QueryClient } from "@tanstack/query-core";
 import { runFungiCli } from "../src/cli.js";
+import { fungiModelLoginNotice } from "../src/button/login-notice.js";
 import { renderTuiConversation } from "../src/frame-renderer.js";
 import { createTuiFixture } from "./fixture.js";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
@@ -16,7 +17,17 @@ import { waitForFrame } from "./native-readiness.js";
 import { captureFrame } from "./frame-capture.ts";
 
 const noticeText =
-  "Sign in to Fungi with fungi login --provider fungi (or /login in a Session). Your selected Team pays for models.";
+  "Use your own Claude or ChatGPT subscription: /login in a Session";
+assert.ok(
+  fungiModelLoginNotice.includes(
+    "fungi login --provider anthropic --auth-type oauth",
+  ),
+);
+assert.ok(
+  fungiModelLoginNotice.includes(
+    "fungi login --provider openai --auth-type oauth",
+  ),
+);
 
 for (const [providerId, status, preferenceProviderId, expected] of [
   ["openai", "signed in", "openai", undefined],

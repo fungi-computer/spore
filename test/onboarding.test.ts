@@ -167,7 +167,13 @@ test("doctor reports actual failed checks without exposing credentials or blocki
     },
   });
   expect(result).toBe(false);
-  expect(output).toContain("FAIL sign-in: Not signed in.");
+  expect(output).toContain(
+    "FAIL sign-in: Not signed in. Run fungi login --provider fungi",
+  );
+  expect(output).toContain(
+    "FAIL Fungi models: Sign in to Fungi with fungi login --provider fungi",
+  );
+  expect(output).not.toContain("Use your own Claude or ChatGPT subscription");
   expect(output).toContain(`Platform: ${process.platform} ${process.arch}`);
   expect(output).toContain("glibc:");
   expect(output).toContain("FAIL Fungi models");
@@ -207,7 +213,10 @@ test("doctor checks Fungi readiness rather than accepting another provider's log
   expect(checked).toEqual(["fungi"]);
   expect(output).toContain("PASS sign-in: Saved Fungi login · Garden");
   expect(output).toContain("FAIL Fungi models");
-  expect(output).toContain("Sign in to Fungi");
+  expect(output).toContain(
+    "FAIL Fungi models: Sign in to Fungi with fungi login --provider fungi",
+  );
+  expect(output).not.toContain("Use your own Claude or ChatGPT subscription");
 });
 
 test("doctor reports saved Fungi sign-in and a ready model without credential values", async () => {

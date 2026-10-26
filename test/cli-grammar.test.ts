@@ -932,7 +932,15 @@ test("a failed run without any model login points at fungi login", async () => {
   } finally {
     process.stderr.write = original;
   }
-  expect(written.join("")).toContain("Sign in to Fungi with fungi login");
+  expect(written.join("")).toContain(
+    "Use your own Claude or ChatGPT subscription",
+  );
+  expect(written.join("")).toContain(
+    "fungi login --provider anthropic --auth-type oauth",
+  );
+  expect(written.join("")).toContain(
+    "fungi login --provider openai --auth-type oauth",
+  );
 });
 
 test("fungi computers lists Team state and start uses lantern progress without opening a Session", async () => {
@@ -1374,7 +1382,7 @@ test("fungi logout --provider fungi signs out through the shared Fungi account o
   expect(output).toContain("Signed out of Fungi.");
 });
 
-test("the executable reports a missing model in plain text and exits 1 without a stack", async () => {
+test("fungi run --workspace tells an unsigned user how to sign in and exits 1 without a stack", async () => {
   const isolated = await createIsolatedCliEnvironment();
   const executable = [
     process.execPath,
@@ -1382,7 +1390,7 @@ test("the executable reports a missing model in plain text and exits 1 without a
   ];
   const cwd = await mkdtemp(join(tmpdir(), "fungi-cli-run-"));
   try {
-    const child = Bun.spawn([...executable, "run", "hello"], {
+    const child = Bun.spawn([...executable, "run", "--workspace", "hello"], {
       cwd,
       env: isolated.env,
       stdout: "pipe",
@@ -1395,7 +1403,7 @@ test("the executable reports a missing model in plain text and exits 1 without a
     ]);
     expect(await child.exited).toBe(1);
     expect(stderr).toContain(
-      "fungi: No signed-in model provider is available.",
+      "Use your own Claude or ChatGPT subscription: /login in a Session, or fungi login --provider anthropic --auth-type oauth (Claude) or fungi login --provider openai --auth-type oauth (ChatGPT) in the CLI. For hosted Fungi, run fungi login --provider fungi.\nfungi: No signed-in model provider is available.",
     );
     expect(stderr).not.toContain("model:rejected");
     expect(stderr).not.toMatch(/\n\s+at |Error:|terminal outcome/u);

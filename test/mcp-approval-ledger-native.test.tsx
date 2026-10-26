@@ -156,6 +156,10 @@ for (const { decision, revokeMembership } of [
           (value) =>
             value.includes("computer.exec") && value.includes("Approve"),
         );
+        const normalized = frame.replace(/\s+/gu, " ");
+        expect(normalized).toContain("1 ▶ Approve once");
+        expect(normalized).toContain("2 Deny");
+        expect(normalized).not.toContain("Always allow");
         expect(frame).toContain("Research Agent");
         expect(frame).toContain("agent:research");
         expect(frame).toContain("session:research");
