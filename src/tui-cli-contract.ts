@@ -15,8 +15,8 @@ export type TuiCliOptions = Readonly<{
   clients?: readonly ClientEntryV1[] | undefined;
   questionExtensionId?: string | undefined;
   databasePath?: string | undefined;
-  /** Persisted Local sandbox requirement; independent of auto-approval. */
-  requireSandbox?: boolean | undefined;
+  /** A person's selected permission mode for this Local Agent. */
+  mode?: PrivateLocalServiceSelection["mode"];
   fungiMcp?: PrivateLocalServiceSelection["fungiMcp"];
   sessionId?: string | undefined;
   sessionChoice?: PrivateLocalSessionChoice | undefined;

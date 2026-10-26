@@ -2,20 +2,18 @@ import {
   chmod,
   copyFile,
   mkdir,
-  mkdtemp,
   readFile,
-  rm,
   stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, test } from "bun:test";
 import { sleep, spawn } from "bun";
 import { z } from "zod";
+import { createIsolatedCliEnvironment } from "./cli-test-isolation.js";
 import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
 
 const fungiEntry = join(import.meta.dir, "..", "src", "cli.tsx");
@@ -37,7 +35,8 @@ async function exists(path: string) {
 }
 
 test("an uninstalled source CLI cannot replace the installed service; explicit fungi stop still works", async () => {
-  const home = await mkdtemp(join(tmpdir(), "fungi-ensure-cli-"));
+  const isolated = await createIsolatedCliEnvironment();
+  const home = isolated.home;
   const directory = join(home, ".fungi", "service");
   const record = join(directory, "service.json");
   const project = join(home, "project");
@@ -69,8 +68,7 @@ test("an uninstalled source CLI cannot replace the installed service; explicit f
   // Every fungi process here runs as a source build in the throwaway HOME.
   const env = Object.fromEntries(
     Object.entries({
-      ...process.env,
-      HOME: home,
+      ...isolated.env,
       TMPDIR: home,
       XDG_CONFIG_HOME: join(home, "config"),
       XDG_CACHE_HOME: join(home, "cache"),
@@ -130,7 +128,7 @@ test("an uninstalled source CLI cannot replace the installed service; explicit f
     const after = recordSchema.parse(
       JSON.parse(await readFile(record, "utf8")),
     );
-    expect(after).toMatchObject({ protocol: 3, version: "source" });
+    expect(after).toMatchObject({ protocol: 4, version: "source" });
     expect(after.pid).not.toBe(stale.pid);
 
     expect(await fungi("stop")).toEqual({
@@ -143,6 +141,6 @@ test("an uninstalled source CLI cannot replace the installed service; explicit f
     stale.kill("SIGKILL");
     await stale.exited;
     await createPrivateLocalServiceManager({ directory }).stop();
-    await rm(home, { recursive: true, force: true });
+    await isolated.cleanup();
   }
 }, 60_000);

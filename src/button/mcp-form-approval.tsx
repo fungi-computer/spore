@@ -75,7 +75,7 @@ export function useMcpFormApprovalDialog({
         ? view
         : undefined;
     };
-    return {
+    const result: McpApprovalSource = {
       snapshot,
       subscribe: noSubscription,
       answer: async (input) => {
@@ -97,6 +97,9 @@ export function useMcpFormApprovalDialog({
         return result;
       },
     };
+    return selected.review === undefined
+      ? result
+      : { ...result, review: selected.review };
   }, [session, available, presentationKey]);
   useEffect(() => {
     if (available && projection.invalid)

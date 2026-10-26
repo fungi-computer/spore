@@ -84,13 +84,29 @@ for (const platform of [
             join(bin, "fungi-seccomp.bpf.sha256"),
             `${filterSha256}\n`,
           );
+          const workspaceFilter = "WORKSPACE_FILTER_FIXTURE";
+          const workspaceSha256 = createHash("sha256")
+            .update(workspaceFilter)
+            .digest("hex");
+          await writeFile(
+            join(bin, "fungi-seccomp-workspace.bpf"),
+            workspaceFilter,
+          );
+          await writeFile(
+            join(bin, "fungi-seccomp-workspace.bpf.sha256"),
+            `${workspaceSha256}\n`,
+          );
           await writeFile(
             join(bin, "bwrap-build.json"),
             JSON.stringify({
               platform,
               upstream: bwrapPin,
               sha256,
-              seccomp: { generator: seccompPin, sha256: filterSha256 },
+              seccomp: {
+                generator: seccompPin,
+                readOnlySha256: filterSha256,
+                workspaceSha256,
+              },
               packages: [
                 { name: "bubblewrap", texts: ["Fixture bubblewrap terms"] },
                 {
@@ -125,6 +141,7 @@ for (const platform of [
       if (os === "linux") {
         expected.bwrap = digest("BWRAP_FIXTURE");
         expected.seccomp = digest("SECCOMP_FILTER_FIXTURE");
+        expected.seccompWorkspace = digest("WORKSPACE_FILTER_FIXTURE");
       }
       await writeFile(
         anchors,
@@ -158,7 +175,11 @@ for (const platform of [
       );
       const readme = await readFile(join(output, "README.md"), "utf8");
       if (os === "linux") {
-        for (const name of ["fungi-bwrap.sha256", "fungi-seccomp.bpf.sha256"])
+        for (const name of [
+          "fungi-bwrap.sha256",
+          "fungi-seccomp.bpf.sha256",
+          "fungi-seccomp-workspace.bpf.sha256",
+        ])
           assert.equal(manifest.files.includes(`bin/${name}`), false);
         assert.match(readme, /glibc 2\.35/);
         const bwrap = createRequire(manifestPath).resolve(
@@ -168,6 +189,12 @@ for (const platform of [
         const filter = join(dirname(bwrap), "fungi-seccomp.bpf");
         assert(manifest.files.includes("bin/fungi-seccomp.bpf"));
         assert.equal(await readFile(filter, "utf8"), "SECCOMP_FILTER_FIXTURE");
+        const workspace = join(dirname(bwrap), "fungi-seccomp-workspace.bpf");
+        assert(manifest.files.includes("bin/fungi-seccomp-workspace.bpf"));
+        assert.equal(
+          await readFile(workspace, "utf8"),
+          "WORKSPACE_FILTER_FIXTURE",
+        );
         assert.match(
           await readFile(join(output, "THIRD_PARTY_NOTICES"), "utf8"),
           /Fixture bubblewrap terms/,
@@ -176,30 +203,35 @@ for (const platform of [
           await readFile(join(output, "THIRD_PARTY_NOTICES"), "utf8"),
           /Fixture seccomp terms/,
         );
-        for (const bin of [
-          join(root, `.botanical/native-build/${platform}/bin`),
-          join(root, "runtimes/local/native/bin"),
-        ])
-          await writeFile(join(bin, "fungi-seccomp.bpf"), "TAMPERED_FILTER");
-        const tamperedFilter = spawnSync(
-          "node",
-          [join(root, "apps/tui/scripts/bundle-native.mjs"), platform],
-          { encoding: "utf8" },
-        );
-        assert.equal(
-          tamperedFilter.status,
-          1,
-          "A changed filter must refuse packaging",
-        );
-        assert.match(tamperedFilter.stderr, /fungi-seccomp.bpf.*digest/);
-        for (const bin of [
-          join(root, `.botanical/native-build/${platform}/bin`),
-          join(root, "runtimes/local/native/bin"),
-        ])
-          await writeFile(
-            join(bin, "fungi-seccomp.bpf"),
-            "SECCOMP_FILTER_FIXTURE",
+        for (const [name, originalFilter] of [
+          ["fungi-seccomp.bpf", "SECCOMP_FILTER_FIXTURE"],
+          ["fungi-seccomp-workspace.bpf", "WORKSPACE_FILTER_FIXTURE"],
+        ]) {
+          for (const bin of [
+            join(root, `.botanical/native-build/${platform}/bin`),
+            join(root, "runtimes/local/native/bin"),
+          ])
+            await writeFile(join(bin, name), "TAMPERED_FILTER");
+          const tamperedFilter = spawnSync(
+            "node",
+            [join(root, "apps/tui/scripts/bundle-native.mjs"), platform],
+            { encoding: "utf8" },
           );
+          assert.equal(
+            tamperedFilter.status,
+            1,
+            `A changed ${name} must refuse packaging`,
+          );
+          assert.match(
+            tamperedFilter.stderr,
+            new RegExp(`${name.replaceAll(".", "\\.")}.*digest`),
+          );
+          for (const bin of [
+            join(root, `.botanical/native-build/${platform}/bin`),
+            join(root, "runtimes/local/native/bin"),
+          ])
+            await writeFile(join(bin, name), originalFilter);
+        }
         for (const bin of [
           join(root, `.botanical/native-build/${platform}/bin`),
           join(root, "runtimes/local/native/bin"),

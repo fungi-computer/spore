@@ -20,8 +20,8 @@ test("mounted account dispatch does not reconnect or close client resources", as
       events.push("connect");
       return {
         sandboxStatus: async () => ({
-          state: "available",
-          requireSandbox: false,
+          mode: "full-access",
+          available: true,
         }),
         agentId: "agent-fixture",
         sessionId: "session-fixture",

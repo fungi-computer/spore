@@ -61,6 +61,10 @@ function fixture(): Fixture {
     session: {
       withdraw: () => Promise.resolve({ status: "unknown" }),
       address: "fixture://session",
+      readSettlement: () =>
+        Promise.reject(
+          new Error("settlement is unused in this observation proof"),
+        ),
       latestPending: () =>
         Promise.reject(
           new Error("Pending lookup is unused in this observation proof"),

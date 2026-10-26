@@ -35,6 +35,7 @@ import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 import { configuredModelAccess } from "./model-access-fixture.js";
 import { waitForFrame } from "./native-readiness.js";
 import { enterReactActEnvironment } from "./native-renderer-cleanup.js";
+import { createIsolatedCliEnvironment } from "./cli-test-isolation.ts";
 
 async function pressDecodedKey(setup, press) {
   const decoded = Promise.withResolvers();
@@ -74,8 +75,8 @@ const choice = (resume) => ({
 
 const host = {
   sandboxStatus: async () => ({
-    state: "available",
-    requireSandbox: false,
+    mode: "full-access",
+    available: true,
   }),
   agentId: "agent-fixture",
   sessionId: "session-fixture",
@@ -114,12 +115,14 @@ async function withStderrCapture(action) {
 
 // Includes cold native module startup; the retained installed-entrypoint proof uses 30s.
 test("the Bun entrypoint dispatches invalid grammar through a package symlink", async () => {
+  const isolated = await createIsolatedCliEnvironment();
   const directory = await mkdtemp(join(tmpdir(), "fungi-cli-entry-"));
   const entrypoint = join(directory, "cli.tsx");
   try {
     await symlink(source, entrypoint);
     const child = spawn([process.execPath, entrypoint, "bogus"], {
       cwd: process.cwd(),
+      env: isolated.env,
       stderr: "pipe",
       stdout: "pipe",
     });
@@ -132,7 +135,10 @@ test("the Bun entrypoint dispatches invalid grammar through a package symlink", 
     assert.equal(stdout, "");
     assert.match(stderr, /Unknown fungi command: bogus/u);
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    await Promise.all([
+      rm(directory, { recursive: true, force: true }),
+      isolated.cleanup(),
+    ]);
   }
 }, 30_000);
 
@@ -766,8 +772,8 @@ test("runTuiCli does not open a Session after its renderer dies during startup",
           models: async () => [],
           connect: async () => ({
             sandboxStatus: async () => ({
-              state: "available",
-              requireSandbox: false,
+              mode: "full-access",
+              available: true,
             }),
             agentId: "agent-fixture",
             sessionId: "session-fixture",
@@ -1009,8 +1015,8 @@ async function withCli(
               await beforeFrame?.(setup);
               return {
                 sandboxStatus: async () => ({
-                  state: "available",
-                  requireSandbox: false,
+                  mode: "full-access",
+                  available: true,
                 }),
                 ...fixture.identity,
                 databasePath: "/tmp/fixture-session.sqlite",

@@ -76,8 +76,8 @@ async function withGarden(check, { garden = true } = {}) {
             auth: async () => undefined,
             connect: async () => ({
               sandboxStatus: async () => ({
-                state: "available",
-                requireSandbox: false,
+                mode: "full-access",
+                available: true,
               }),
               ...fixture.identity,
               databasePath: "/tmp/garden.sqlite",

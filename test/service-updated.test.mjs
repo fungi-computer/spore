@@ -28,8 +28,8 @@ test("a running window whose service now speaks another protocol shows exactly o
               connects++;
               return {
                 sandboxStatus: async () => ({
-                  state: "available",
-                  requireSandbox: false,
+                  mode: "full-access",
+                  available: true,
                 }),
                 agentId: "agent-fixture",
                 databasePath: "/fixture/agent.sqlite",

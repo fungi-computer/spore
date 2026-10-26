@@ -23,6 +23,7 @@ import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/servic
 import { createTestRenderer } from "@opentui/core/testing";
 import { createWhistle } from "@fungi.computer/whistle";
 import { createWhistleInteractionHost } from "@fungi.computer/whistle/interaction";
+import { createIsolatedCliEnvironment } from "./cli-test-isolation.js";
 import * as Effect from "effect/Effect";
 import { runFungiCli, type TuiAuthCall } from "../src/cli.js";
 import { runTuiCli } from "../src/cli-runtime.js";
@@ -467,10 +468,10 @@ test("terminal opening retains the default service home and deferred extension o
 
 test("a rejected terminal stop restores HOME before the next CLI subprocess", async () => {
   const fixture_ = await fixture();
+  const isolated = await createIsolatedCliEnvironment();
   const previousHome = process.env.HOME;
   const cwd = await realpath(await mkdtemp(join(tmpdir(), "fungi-next-cli-")));
-  const nextHome = join(cwd, "home");
-  await mkdir(nextHome);
+  const nextHome = isolated.home;
   const stopError = new Error("synthetic service stop rejection");
   try {
     process.env.HOME = nextHome;
@@ -488,7 +489,7 @@ test("a rejected terminal stop restores HOME before the next CLI subprocess", as
       ],
       {
         cwd,
-        env: process.env,
+        env: isolated.env,
         stdout: "pipe",
         stderr: "pipe",
         timeout: 10_000,
@@ -525,6 +526,7 @@ test("a rejected terminal stop restores HOME before the next CLI subprocess", as
       await Promise.all([
         rm(fixture_.area, { recursive: true, force: true }),
         rm(cwd, { recursive: true, force: true }),
+        isolated.cleanup(),
       ]);
     }
   }

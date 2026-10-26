@@ -38,7 +38,7 @@ function writeCreatedAgentStore(
 ) {
   const database = new DatabaseSync(path);
   database.exec(
-    "CREATE TABLE private_local_identity (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), agent_id TEXT NOT NULL UNIQUE, name TEXT, created_by TEXT, archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)), folder TEXT NOT NULL DEFAULT '.', require_sandbox INTEGER NOT NULL DEFAULT 0 CHECK (require_sandbox IN (0, 1)))",
+    "CREATE TABLE private_local_identity (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), agent_id TEXT NOT NULL UNIQUE, name TEXT, created_by TEXT, archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)), folder TEXT NOT NULL DEFAULT '.', mode TEXT NOT NULL DEFAULT 'full-access' CHECK (mode IN ('full-access', 'workspace', 'read-only')), writable_folders TEXT NOT NULL DEFAULT '[]')",
   );
   database
     .prepare(

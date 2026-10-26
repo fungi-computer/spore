@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { spawn } from "bun";
 import { test } from "bun:test";
+import { createIsolatedCliEnvironment } from "./cli-test-isolation.ts";
 
 for (const scenario of ["preparation", "attachment"])
   test(`extension ${scenario} failure stays in-frame, redacted in the log and off the raw terminal`, async () => {
-    const home = await mkdtemp(join(tmpdir(), "fungi-tui-diagnostics-"));
+    const isolated = await createIsolatedCliEnvironment();
+    const home = isolated.home;
     const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
     const output = [];
     const drained = Promise.withResolvers();
@@ -22,13 +23,11 @@ for (const scenario of ["preparation", "attachment"])
         [process.execPath, "./test/terminal-diagnostics.fixture.mjs"],
         {
           cwd: packageRoot,
-          env: {
-            ...process.env,
-            HOME: home,
+          env: isolated.environment({
             HERDR_ENV: "0",
             TUI_DIAGNOSTICS_SCENARIO: scenario,
             PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}`,
-          },
+          }),
           terminal: {
             data: (_terminal, bytes) => output.push(Buffer.from(bytes)),
             exit: () => drained.resolve(),
@@ -63,6 +62,6 @@ for (const scenario of ["preparation", "attachment"])
         await child.exited;
       }
       child?.terminal.close();
-      await rm(home, { recursive: true, force: true });
+      await isolated.cleanup();
     }
   }, 10_000);

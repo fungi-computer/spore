@@ -94,7 +94,7 @@ test("the new installed CLI delegates replacement to its public version-checked 
         serviceId: "fixture",
         baseUrl: "http://localhost",
         pid: 123,
-        protocol: 3,
+        protocol: 4,
         version: "fixture-new-launcher",
         diagnostics: { state: "active" },
       });

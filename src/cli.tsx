@@ -9,7 +9,8 @@ import subagentsClient from "@fungi.computer/shiitake-extensions/subagents/clien
 import corralClient from "@fungi.computer/corral";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { lstatSync } from "node:fs";
 import { agentsCommandHelp, runAgentsCommand } from "./agents-command.js";
 import {
   runComputersCommand,
@@ -59,6 +60,7 @@ import {
 import {
   createPrivateLocalServiceManager,
   runPrivateLocalWorkerServer,
+  type PrivateLocalServiceSelection,
 } from "@fungi.computer/truffle/service";
 import { linearAuthInteraction } from "@fungi.computer/truffle/auth";
 import { hasOnboarding, runOnboarding } from "./onboarding.js";
@@ -85,6 +87,21 @@ import {
   localExtensions,
   type LocalExtensions,
 } from "@fungi.computer/truffle/extensions";
+import { manageLocalExecRules } from "@fungi.computer/truffle/rules";
+
+/** A subfolder command manages its ancestor project, never creates sub/.fungi. */
+function permissionsProject(start: string): string {
+  for (let current = resolve(start); ; current = dirname(current)) {
+    if (
+      lstatSync(join(current, ".fungi"), {
+        throwIfNoEntry: false,
+      })?.isDirectory() ||
+      lstatSync(join(current, ".git"), { throwIfNoEntry: false }) !== undefined
+    )
+      return current;
+    if (current === dirname(current)) return resolve(start);
+  }
+}
 import {
   runComputerCommand,
   type ComputerCommandOwners,
@@ -194,6 +211,7 @@ const fungiCommandSchema = z.enum([
   "computers",
   "computer",
   "extension",
+  "permissions",
   "mcp",
   "acp",
   "help",
@@ -269,6 +287,13 @@ const fungiArgumentRules = {
       ]),
     ]),
     error: extensionCommandHelp,
+  },
+  permissions: {
+    schema: z.union([
+      z.tuple([z.literal("list")]),
+      z.tuple([z.literal("remove"), z.string()]),
+    ]),
+    error: "Usage: fungi permissions list | remove '<json-prefix>'",
   },
   mcp: {
     schema: z.union([
@@ -514,8 +539,10 @@ export async function runFungiCli(
       // Hidden: installed-launcher identity for Local service replacement.
       "internal-build-id": { type: "boolean" },
       db: { type: "string" },
-      "require-sandbox": { type: "boolean" },
-      "no-require-sandbox": { type: "boolean" },
+      yolo: { type: "boolean" },
+      "full-access": { type: "boolean" },
+      workspace: { type: "boolean" },
+      "read-only": { type: "boolean" },
       agent: { type: "string" },
       extension: { type: "string", multiple: true },
       "fungi-mcp": { type: "string" },
@@ -575,25 +602,31 @@ export async function runFungiCli(
     stdout.write(helpFor(command));
     return;
   }
+  const fullAccess =
+    arguments_.values.yolo === true ||
+    arguments_.values["full-access"] === true;
   if (
-    arguments_.values["require-sandbox"] &&
-    arguments_.values["no-require-sandbox"]
+    [
+      fullAccess,
+      arguments_.values.workspace,
+      arguments_.values["read-only"],
+    ].filter(Boolean).length > 1
   )
-    throw new Error(
-      "Choose only one of --require-sandbox and --no-require-sandbox",
-    );
-  const requireSandbox = arguments_.values["require-sandbox"]
-    ? true
-    : arguments_.values["no-require-sandbox"]
-      ? false
-      : undefined;
+    throw new Error("Choose only one of --yolo, --workspace and --read-only");
+  const mode: PrivateLocalServiceSelection["mode"] = fullAccess
+    ? "full-access"
+    : arguments_.values.workspace
+      ? "workspace"
+      : arguments_.values["read-only"]
+        ? "read-only"
+        : undefined;
   if (
-    requireSandbox !== undefined &&
+    mode !== undefined &&
     command !== undefined &&
     !["new", "resume", "run"].includes(command)
   )
     throw new Error(
-      "--[no-]require-sandbox is only valid with fungi, new, resume or run",
+      "Permission mode flags are only valid with fungi, new, resume or run",
     );
   if (command === "git-credential") {
     const [action] = positionals;
@@ -1232,6 +1265,28 @@ export async function runFungiCli(
     );
     return;
   }
+  if (command === "permissions") {
+    const [action, value] = positionals;
+    for (const name of Object.keys(arguments_.values))
+      if (name !== "cd")
+        throw new Error(`--${name} is not valid with fungi permissions`);
+    const prefix =
+      action === "remove"
+        ? z
+            .array(z.string().min(1))
+            .min(1)
+            .parse(JSON.parse(value ?? ""))
+        : undefined;
+    const rules = manageLocalExecRules(
+      permissionsProject(
+        resolve(io.cwd ?? process.cwd(), arguments_.values.cd ?? "."),
+      ),
+      action === "remove" ? "remove" : "list",
+      prefix,
+    );
+    for (const rule of rules) stdout.write(`${JSON.stringify(rule)}\n`);
+    return;
+  }
   if (command === "computer") {
     const [action, computer, folder] = positionals;
     if (action !== "attach" && action !== "status" && action !== "detach")
@@ -1444,7 +1499,7 @@ export async function runFungiCli(
     fungiMcp,
     invocationRoot,
     databasePath: arguments_.values.db,
-    requireSandbox,
+    mode,
     providerId: arguments_.values.provider,
     modelId: arguments_.values.model,
     reasoning,
@@ -1598,6 +1653,9 @@ function validateFungiConnectionOptions(
 }
 
 if (import.meta.main) {
+  // Source launches and internal-service starts have the same release source
+  // as the npm launcher; Local must never read the TUI source manifest.
+  process.env.FUNGI_SPORE_VERSION = fungiVersion;
   try {
     if (process.argv[2] === "--internal-service-restart") {
       const { createPrivateLocalServiceManager } =

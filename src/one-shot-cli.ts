@@ -3,6 +3,7 @@ import {
   createPrivateLocalServiceManager,
   type PrivateLocalServiceConnection,
   type PrivateLocalServiceManager,
+  type PrivateLocalServiceSelection,
 } from "@fungi.computer/truffle/service";
 import type { TuiCliDependencies } from "./cli-runtime.js";
 import { runOneShot, type OneShotRunOptions } from "./one-shot-run.js";
@@ -11,7 +12,7 @@ import { asCliFailure, combinedCliFailure } from "./cli-failure.js";
 export type OneShotCliOptions = Readonly<{
   invocationRoot: string;
   databasePath?: string | undefined;
-  requireSandbox?: boolean | undefined;
+  mode?: PrivateLocalServiceSelection["mode"];
   /** Agent id from `--agent`; resolved to its saved store through discovery. */
   agentId?: string | undefined;
   fungiMcp?: Parameters<PrivateLocalServiceManager["connect"]>[0]["fungiMcp"];
@@ -88,13 +89,13 @@ export async function runOneShotCli(
           databasePath === undefined
             ? {
                 invocationRoot: options.invocationRoot,
-                requireSandbox: options.requireSandbox,
+                mode: options.mode,
                 fungiMcp: options.fungiMcp,
               }
             : {
                 invocationRoot: options.invocationRoot,
                 databasePath,
-                requireSandbox: options.requireSandbox,
+                mode: options.mode,
                 fungiMcp: options.fungiMcp,
               };
         host = await manager.connect(selection, {

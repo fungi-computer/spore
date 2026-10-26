@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { URL, fileURLToPath } from "node:url";
 import console from "node:console";
 import { execFileSync } from "node:child_process";
 import process from "node:process";
+import { createIsolatedCliEnvironment } from "./cli-test-isolation.ts";
 
-const home = await mkdtemp(join(tmpdir(), "fungi-terminal-sanitize-"));
+const isolated = await createIsolatedCliEnvironment();
+const home = isolated.home;
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
 const installed = process.argv[2];
 const fixture = fileURLToPath(
@@ -22,9 +23,7 @@ try {
   const transcript = join(home, "terminal.log");
   execFileSync("script", ["-q", "-e", "-c", command, transcript], {
     env: {
-      ...process.env,
-      HOME: home,
-      USERPROFILE: home,
+      ...isolated.env,
       TERM: "xterm-256color",
       COLUMNS: "160",
       LINES: "48",
@@ -74,5 +73,5 @@ try {
     `Terminal sanitizer real-PTY PASS (${installed ?? "source public CLI"}; isolated HOME; no model/login)`,
   );
 } finally {
-  await rm(home, { recursive: true, force: true });
+  await isolated.cleanup();
 }

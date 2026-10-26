@@ -1,8 +1,11 @@
 import { expect, test } from "bun:test";
 import { z } from "zod";
 
-import { idleActivity } from "@fungi.computer/parakeet-testing";
-import type { SessionSnapshot } from "@fungi.computer/shiitake/client";
+import { idleActivity, queuedActivity } from "@fungi.computer/parakeet-testing";
+import type {
+  SessionFrame,
+  SessionSnapshot,
+} from "@fungi.computer/shiitake/client";
 import {
   inspectionRows,
   inspectionStateCauses,
@@ -288,6 +291,52 @@ test("show reads through the Local service manager and closes its client", async
     },
   });
   expect(output).toContain('"sessionId":"session_fixture"');
+  expect(closed).toBe(true);
+});
+
+test("watch applies an activity frame without treating it as a history update", async () => {
+  const output: string[] = [];
+  const activity = queuedActivity("queued-inspection");
+  const frame: SessionFrame = { kind: "activity", activity };
+  let closed = false;
+  async function* changes(): AsyncGenerator<SessionFrame> {
+    yield await Promise.resolve(frame);
+  }
+  await runSessionInspection({
+    inspect: () =>
+      Promise.resolve({
+        snapshot,
+        session: {
+          watch: () =>
+            Promise.resolve({
+              changes: changes(),
+              close: () => {
+                closed = true;
+                return Promise.resolve();
+              },
+            }),
+        },
+        close: () => Promise.resolve(),
+      }),
+    selection: {
+      invocationRoot: "/tmp/project",
+      databasePath: "/tmp/project/.fungi/agents/a/agent.sqlite",
+      sessionId: "session_fixture",
+    },
+    watch: true,
+    errorsOnly: false,
+    json: true,
+    signals: {
+      on: () => undefined,
+      off: () => undefined,
+    },
+    write(value) {
+      output.push(value);
+    },
+  });
+  expect(JSON.parse(output.at(-1) ?? "null")).toMatchObject({
+    activity,
+  });
   expect(closed).toBe(true);
 });
 

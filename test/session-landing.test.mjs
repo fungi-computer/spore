@@ -6,8 +6,8 @@ import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 
 const host = {
   sandboxStatus: async () => ({
-    state: "available",
-    requireSandbox: false,
+    mode: "full-access",
+    available: true,
   }),
   agentId: "agent-landing",
   sessionId: "session-landing",

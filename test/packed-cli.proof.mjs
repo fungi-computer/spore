@@ -53,8 +53,8 @@ const run = runFungiCli(
     createServiceManager: () => ({
       connect: async () => ({
         sandboxStatus: async () => ({
-          state: "available",
-          requireSandbox: false,
+          mode: "full-access",
+          available: true,
         }),
         session,
         close: async () => {

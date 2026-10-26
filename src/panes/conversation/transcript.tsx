@@ -1002,6 +1002,11 @@ function TimelineRowView({
           ) : null}
         </box>
       ) : null}
+      {item.isError && item.providerError !== undefined ? (
+        <box marginLeft={sigilGutterTotalWidth} flexDirection="column">
+          <text fg={colors.error}>{terminalText(item.providerError)}</text>
+        </box>
+      ) : null}
     </box>
   );
 }

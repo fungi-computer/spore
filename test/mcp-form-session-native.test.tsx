@@ -29,7 +29,7 @@ type Respond = (input: Answer) => Promise<McpFormAnswerResult>;
 
 function form(
   id: string,
-  title = "Allow files.write (write)?",
+  title = "Allow computer.exec (external)?",
   revision = 7,
 ): Pending[number] {
   return {
@@ -44,9 +44,9 @@ function form(
           sessionId: "session-1",
           displayName: "Research Agent",
         },
-        module: "files",
-        operation: "write",
-        access: "write",
+        module: "computer",
+        operation: "exec",
+        access: "external",
         description: {
           title,
           inputBytes: 4321,
@@ -173,7 +173,7 @@ test("a watched canonical approval displays ledger facts and answers with its re
     await waitForFrame(
       setup,
       (frame) =>
-        frame.includes("Allow files.write (write)?") &&
+        frame.includes("Allow computer.exec (external)?") &&
         frame.includes("Approve") &&
         frame.includes("Deny"),
     );
@@ -212,7 +212,7 @@ for (const action of ["deny", "escape"]) {
         producer.publish([form("host-minted-2")]);
       });
       await waitForFrame(setup, (frame) =>
-        frame.includes("Allow files.write (write)?"),
+        frame.includes("Allow computer.exec (external)?"),
       );
       if (action === "deny")
         await pressDecodedKey(setup, () => {
@@ -255,7 +255,7 @@ for (const reason of ["not-attached", "not-pending"] as const) {
         producer.publish([form("refused-form")]);
       });
       await waitForFrame(setup, (frame) =>
-        frame.includes("Allow files.write (write)?"),
+        frame.includes("Allow computer.exec (external)?"),
       );
       await pressDecodedKey(setup, () => {
         setup.mockInput.pressEnter();
@@ -283,7 +283,7 @@ test("a withdrawn form closes without a redundant or stale answer command", asyn
       producer.publish([form("withdrawn")]);
     });
     await waitForFrame(setup, (frame) =>
-      frame.includes("Allow files.write (write)?"),
+      frame.includes("Allow computer.exec (external)?"),
     );
     act(() => {
       producer.publish([]);
@@ -292,7 +292,7 @@ test("a withdrawn form closes without a redundant or stale answer command", asyn
       setup,
       (frame) =>
         frame.includes("Ask anything") &&
-        !frame.includes("Allow files.write (write)?"),
+        !frame.includes("Allow computer.exec (external)?"),
     );
     expect(producer.calls).toEqual([]);
   } finally {
@@ -376,7 +376,7 @@ test("losing an answer response is an unconfirmed outcome, never success or auto
       producer.publish([form("unconfirmed")]);
     });
     await waitForFrame(setup, (frame) =>
-      frame.includes("Allow files.write (write)?"),
+      frame.includes("Allow computer.exec (external)?"),
     );
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
@@ -400,7 +400,7 @@ test("closing the client releases its watch without answering through a dead att
       producer.publish([form("closing")]);
     });
     await waitForFrame(setup, (frame) =>
-      frame.includes("Allow files.write (write)?"),
+      frame.includes("Allow computer.exec (external)?"),
     );
     await close();
     expect(producer.calls).toEqual([]);
@@ -469,7 +469,7 @@ test("a submitted-only result is unconfirmed, never a completed approval", async
       producer.publish([form("unconfirmed-submit")]);
     });
     await waitForFrame(setup, (frame) =>
-      frame.includes("Allow files.write (write)?"),
+      frame.includes("Allow computer.exec (external)?"),
     );
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();

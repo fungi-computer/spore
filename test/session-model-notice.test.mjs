@@ -75,8 +75,8 @@ for (const [providerId, status, preferenceProviderId, expected] of [
       },
       effectiveModel: async () => effective,
       sandboxStatus: async () => ({
-        state: "available",
-        requireSandbox: false,
+        mode: "full-access",
+        available: true,
       }),
       close: async () => undefined,
     };

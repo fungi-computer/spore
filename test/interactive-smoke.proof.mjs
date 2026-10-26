@@ -124,8 +124,11 @@ function startFixtureHub(appDirectoryResponseSchema) {
 
 async function prepareVariant(root, variant, hubOrigin) {
   const home = join(root, "home");
+  const runtime = join(root, "runtime");
   const project = join(root, "synthetic");
   await mkdir(join(home, ".fungi"), { recursive: true, mode: 0o700 });
+  await mkdir(runtime, { mode: 0o700 });
+  await chmod(runtime, 0o700);
   await mkdir(project, { mode: 0o700 });
   await writeFile(join(project, "README.md"), "Synthetic smoke project.\n");
   // Observe the real shell without depending on removed pane status chrome.
@@ -170,8 +173,10 @@ async function prepareVariant(root, variant, hubOrigin) {
     HOME: home,
     USERPROFILE: home,
     XDG_CONFIG_HOME: join(home, ".config"),
+    XDG_CACHE_HOME: join(home, ".cache"),
     XDG_DATA_HOME: join(home, ".local/share"),
     XDG_STATE_HOME: join(home, ".local/state"),
+    XDG_RUNTIME_DIR: runtime,
     TERM: "xterm-256color",
     SHELL: "/bin/sh",
     LANG: "C.UTF-8",

@@ -11,10 +11,12 @@ import { createInterface } from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { createIsolatedCliEnvironment } from "./cli-test-isolation.js";
 
 test("CLI internal-service branch persists its real version and SIGTERM lifecycle in private files under umask 022 (not packed-release proof)", async () => {
   const root = await mkdtemp(join(tmpdir(), "sp-log-"));
-  const home = join(root, "home");
+  const isolated = await createIsolatedCliEnvironment();
+  const home = isolated.home;
   const directory = join(home, ".fungi", "service");
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await mkdir(join(home, "tmp"), { recursive: true, mode: 0o700 });
@@ -33,12 +35,9 @@ test("CLI internal-service branch persists its real version and SIGTERM lifecycl
       {
         cwd: root,
         env: {
+          ...isolated.env,
           PATH: process.env.PATH,
-          HOME: home,
           TMPDIR: join(home, "tmp"),
-          XDG_CONFIG_HOME: join(home, "config"),
-          XDG_DATA_HOME: join(home, "data"),
-          XDG_CACHE_HOME: join(home, "cache"),
         },
         stdio: "ignore",
       },
@@ -100,6 +99,9 @@ test("CLI internal-service branch persists its real version and SIGTERM lifecycl
       child.kill("SIGTERM");
       await exited;
     }
-    await rm(root, { recursive: true, force: true });
+    await Promise.all([
+      rm(root, { recursive: true, force: true }),
+      isolated.cleanup(),
+    ]);
   }
 }, 20_000);

@@ -1,5 +1,54 @@
 # @fungi.computer/spore
 
+## 0.3.0
+
+### Minor Changes
+
+- Changes since 0.2.1:
+
+  - fix(local): receive Spore release version from CLI owner
+  - fix(local): explain native package startup refusal
+  - fix(local): fall back when no session bus address exists
+  - feat(local): keep Oyster MCP keys in OS keychain
+  - fix(local): render host Git hook warning without duplicated grant label
+  - fix(local): disclose diff hook risk without repeating card label
+  - fix(local): fence grants to protected Git remote names
+  - fix(local): disclose Git hook execution on grant cards
+  - fix(local): refuse read-only Files edits without approval
+  - fix(local): fence Git grants to protected repositories and safe argv
+  - fix(local): verify and stage native payload once per owner
+  - fix(tui): stabilize cold-build cache input
+  - fix(local): ship both Linux permission filters in native CLI
+  - fix(local): narrow project rules and audit matched commands
+  - fix(live-updates): consume activity frames across clients
+  - fix(shiitake): await exact command settlement without session watches
+  - fix(local): tighten permission approval edge cases
+  - fix(spore): show bounded Files approvals and explicit git grant risk
+  - feat(local): remember human-approved exec prefixes
+  - fix: isolate provider prose to recorded failed turns
+  - fix: retain provider error text on failed turns
+  - feat(local): dispatch approved sandbox escapes once through ledger handoff
+  - feat(local): make workspace Git metadata read-only
+  - fix: admit Local permission modes before persisting Agents
+  - feat: enforce local agent permission modes across service and tests
+  - feat: introduce local agent permission modes
+  - fix(spore): stop Bun loading Agent project config into host
+  - fix(shiitake): merge integration permission callers into settlement waits
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/approvals@0.1.0
+  - @fungi.computer/parakeet@0.3.0
+  - @fungi.computer/shiitake-extensions@0.2.0
+  - @fungi.computer/shiitake@0.4.0
+  - @fungi.computer/agar@0.3.1
+  - @fungi.computer/corral@0.1.2
+  - @fungi.computer/nacre@0.0.2
+
 ## 0.2.1
 
 ### Patch Changes

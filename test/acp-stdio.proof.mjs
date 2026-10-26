@@ -27,6 +27,7 @@ import {
 import { openPrivateLocalRuntimeHost } from "@fungi.computer/truffle";
 import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
 import { runPrivateLocalService } from "@fungi.computer/truffle/service-process";
+import { createIsolatedCliEnvironment } from "./cli-test-isolation.ts";
 
 // The actual CLI bundle talks to a real persistent Local owner. Only inference
 // is deterministic here; the separate Zed witness uses the real Luna model.
@@ -41,11 +42,12 @@ process.env.FUNGI_BUNDLED_BUILD_ID = JSON.parse(
   execFileSync("node", [launcher, "--internal-build-id"], { encoding: "utf8" }),
 );
 const root = await mkdtemp(join(tmpdir(), "fungi-acp-bundle-"));
+const isolated = await createIsolatedCliEnvironment();
 const evidenceDirectory =
   process.env.SPORE_PACKED_PROOF_RECEIPT_DIR ??
   (await mkdtemp(join(tmpdir(), "fungi-acp-evidence-")));
 await mkdir(evidenceDirectory, { recursive: true, mode: 0o700 });
-const home = join(root, "home");
+const home = isolated.home;
 const project = join(root, "project");
 const directory = join(home, ".fungi/service");
 await mkdir(directory, { recursive: true });
@@ -145,7 +147,10 @@ try {
   );
   child = spawn("node", [launcher, "acp", "-C", project], {
     cwd: project,
-    env: { ...process.env, HOME: home },
+    env: {
+      ...isolated.env,
+      FUNGI_BUNDLED_BUILD_ID: process.env.FUNGI_BUNDLED_BUILD_ID,
+    },
     stdio: ["pipe", "pipe", "pipe"],
   });
   child.stderr.on("data", (bytes) => {
@@ -318,7 +323,10 @@ try {
           });
         console.error(`ACP proof evidence retained at ${evidenceDirectory}`);
       } finally {
-        await rm(root, { recursive: true, force: true });
+        await Promise.all([
+          rm(root, { recursive: true, force: true }),
+          isolated.cleanup(),
+        ]);
       }
     }
   }

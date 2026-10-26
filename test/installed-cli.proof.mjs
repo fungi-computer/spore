@@ -16,6 +16,7 @@ import { fileURLToPath, URL } from "node:url";
 import { spawn } from "bun";
 import { mock } from "bun:test";
 import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
+import { createIsolatedCliEnvironment } from "./cli-test-isolation.ts";
 
 const { capturePrivateLocalExecPath } = await import(
   new URL(
@@ -29,20 +30,18 @@ const clientPath = capturePrivateLocalExecPath(
 );
 
 const cli = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
+const isolated = await createIsolatedCliEnvironment();
 const root = await mkdtemp(join(tmpdir(), "fungi-installed-cli-"));
-const serviceDirectory = join(root, ".fungi", "service");
+const serviceDirectory = join(isolated.home, ".fungi", "service");
 const measurements = [];
 async function invoke(args, extraEnv = {}) {
   const started = globalThis.performance.now();
   const child = spawn([process.execPath, cli, ...args], {
     cwd: root,
-    env: {
-      ...process.env,
+    env: isolated.environment({
       PATH: clientPath,
-      HOME: root,
-      USERPROFILE: root,
       ...extraEnv,
-    },
+    }),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -421,6 +420,7 @@ for (const close of [
 // Preserve disposable data if shutdown could not be collected.
 if (cleanupFailures.length === 0)
   await rm(root, { recursive: true, force: true });
+await isolated.cleanup();
 if (failure !== undefined || cleanupFailures.length > 0)
   throw new AggregateError(
     failure === undefined ? cleanupFailures : [failure, ...cleanupFailures],

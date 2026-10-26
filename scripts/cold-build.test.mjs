@@ -35,6 +35,9 @@ test("TUI builds and checks in a clean checkout after Parakeet cache restoration
         cwd,
         env: {
           ...process.env,
+          // Keep this proof independent from warmed machine-wide task entries;
+          // its first TUI build must be a real cold miss.
+          TURBO_CACHE_DIR: join(work, "turbo-cache"),
           CARGO_BUILD_JOBS: "1",
           RAYON_NUM_THREADS: "1",
           GOMAXPROCS: "1",
@@ -57,7 +60,7 @@ test("TUI builds and checks in a clean checkout after Parakeet cache restoration
       "run",
       ...tasks,
       `--filter=${filter}`,
-      "--concurrency=3",
+      "--concurrency=4",
       `--cache=${cacheMode}`,
       "--output-logs=new-only",
     ]);
@@ -103,6 +106,10 @@ test("TUI builds and checks in a clean checkout after Parakeet cache restoration
     assert.equal(existsSync(join(checkout, "apps/tui/dist")), false);
 
     turbo("restored-tui", ["build", "lint", "typecheck"], tuiPackage);
+    assert.match(
+      readFileSync(join(work, "restored-tui.log"), "utf8"),
+      /@fungi\.computer\/spore:build: cache miss/u,
+    );
     assert.match(
       readFileSync(join(work, "restored-tui.log"), "utf8"),
       /@fungi\.computer\/parakeet:build: cache hit/,

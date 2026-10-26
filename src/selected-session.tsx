@@ -22,7 +22,6 @@ import * as Scope from "effect/Scope";
 
 import { asCliFailure, combinedCliFailure } from "./cli-failure.js";
 import { reportFailure } from "./button/log-event.js";
-import { createSandboxNoticeClaims } from "./button/local-sandbox.js";
 import type { PaneOpenPlacement } from "./shell/registry.js";
 import {
   bindTuiUpdateRestart,
@@ -144,7 +143,6 @@ export async function runSessionApplication(
   const extensionFailures: string[] = [];
   let current: Selection | undefined;
   const selections = new Set<Selection>();
-  const claimSandboxNotice = createSandboxNoticeClaims();
   let selectedOnce = false;
   const extensions = await runTuiEffect(
     dependencies
@@ -491,8 +489,6 @@ export async function runSessionApplication(
       sandboxSource: {
         identity: JSON.stringify([host.agentId, host.sessionId]),
         read: (signal) => host.sandboxStatus({ signal }),
-        takeUnavailableNotice: () =>
-          claimSandboxNotice(host.agentId, host.sessionId),
       },
       reloadSources: localReload,
       onResume: async (paneId) => {

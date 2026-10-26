@@ -2,7 +2,7 @@
 // and the real sessions-resume entry in a PTY. No service/SDK overrides.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { URL } from "node:url";
 import console from "node:console";
@@ -29,6 +29,7 @@ const nextPrefix = resolve(nextPrefixArgument);
 const nextArchives = resolve(nextArchivesArgument);
 const work = await mkdtemp(join(resolve(workArgument), "case-"));
 const home = join(work, "home");
+const runtime = join(work, "runtime");
 const project = join(work, "project");
 for (const path of [
   join(home, ".fungi"),
@@ -37,8 +38,10 @@ for (const path of [
   join(work, "config"),
   join(work, "cache"),
   join(work, "data"),
+  runtime,
 ])
   await mkdir(path, { recursive: true, mode: 0o700 });
+await chmod(runtime, 0o700);
 await writeFile(
   join(home, ".fungi/onboarding.json"),
   JSON.stringify({ version: 1, door: "later" }),
@@ -53,6 +56,8 @@ const environment = {
   XDG_CONFIG_HOME: join(work, "config"),
   XDG_CACHE_HOME: join(work, "cache"),
   XDG_DATA_HOME: join(work, "data"),
+  XDG_STATE_HOME: join(work, "state"),
+  XDG_RUNTIME_DIR: runtime,
   NPM_CONFIG_USERCONFIG: "/dev/null",
   PATH: [
     join(oldPrefix, "node_modules/.bin"),

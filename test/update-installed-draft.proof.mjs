@@ -23,11 +23,13 @@ import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/servic
 import { openLocalTerminal } from "../src/button/local-terminal.js";
 import { runFungiReleaseUpdate } from "../src/update.js";
 import { hasLiveReplacementDraft } from "./fixtures/update-installed-observation.mjs";
+import { createIsolatedCliEnvironment } from "./cli-test-isolation.ts";
 
 const require = createRequire(import.meta.url);
 const repository = resolve(import.meta.dir, "../../..");
 const work = await mkdtemp(join(repository, ".botanical/update-installed-"));
-const home = join(work, "home");
+const isolated = await createIsolatedCliEnvironment();
+const home = isolated.home;
 const project = join(work, "project");
 const prefix = join(work, "prefix");
 const installed = join(prefix, "lib/node_modules/@fungi.computer/spore");
@@ -83,7 +85,7 @@ async function capture(label, rendered = frame()) {
   await writeFile(path, rendered);
   receipts.push({ label, at: new Date().toISOString(), path });
 }
-async function invoke(args, env = process.env) {
+async function invoke(args, env = isolated.env) {
   const child = spawn(args, {
     cwd: project,
     env,
@@ -221,6 +223,7 @@ try {
       ],
       cwd: project,
       env: {
+        ...isolated.env,
         BUN_OPTIONS: process.env.BUN_OPTIONS,
         FUNGI_UPDATE_PROOF_TRACE: trace,
         FUNGI_UPDATE_PROOF_CLI: cli,
@@ -252,7 +255,7 @@ try {
       }
       assert.equal(command[0], node);
       assert.equal(command[1], launcher);
-      const result = await invoke(command, { ...process.env, ...env });
+      const result = await invoke(command, isolated.environment(env));
       return {
         code: result.code,
         stdout: result.stdout,
@@ -358,5 +361,6 @@ try {
     for (const key of Object.keys(process.env))
       if (!(key in savedEnvironment)) Reflect.deleteProperty(process.env, key);
     Object.assign(process.env, savedEnvironment);
+    await isolated.cleanup();
   }
 }

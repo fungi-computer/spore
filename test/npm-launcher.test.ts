@@ -27,7 +27,10 @@ async function launch(
   try {
     const dist = join(root, "dist");
     await mkdir(dist);
-    await writeFile(join(root, "package.json"), '{"name":"launcher-fixture"}');
+    await writeFile(
+      join(root, "package.json"),
+      '{"name":"@fungi.computer/spore","version":"0.4.0"}',
+    );
     await copyFile(
       new URL("../scripts/fungi.cjs", import.meta.url),
       join(dist, "fungi.cjs"),
@@ -60,7 +63,7 @@ require("node:os").cpus = () => ${JSON.stringify(cpuModel === null ? [] : [{ mod
       const bun = join(bunBin, "bun");
       await writeFile(
         bun,
-        '#!/usr/bin/env node\nconsole.log("RUNTIME_STARTED");\n',
+        '#!/usr/bin/env node\nconsole.log(process.argv.includes("--test-spore-version") ? process.env.FUNGI_SPORE_VERSION : "RUNTIME_STARTED");\n',
       );
       await chmod(bun, 0o755);
     }
@@ -116,18 +119,26 @@ test("doctor explains an unsupported host without loading account or native code
   expect(child.stderr).toBe(requirement);
 });
 
-test("a supported host missing optional packages retains the resolution failure", async () => {
-  const child = await launch("linux", "x64", "2.35");
+test("a supported host missing its native package reports the exact reinstall command", async () => {
+  const child = await launch("linux", "x64", "2.35", ["--yolo"]);
   expect(child.status).toBe(1);
   expect(child.stdout).toBe("");
-  expect(child.stderr).toContain(
-    "Fungi CLI could not load its native dependencies. Reinstall with npm install -g @fungi.computer/spore --include=optional.",
+  expect(child.stderr).toBe(
+    "Fungi's native package for linux-x64 is missing or doesn't match this version. Reinstall: npm i -g @fungi.computer/spore@0.4.0\n",
   );
-  expect(child.stderr).toContain("[cause]: Error: Cannot find module");
-  expect(child.stderr).toContain("MODULE_NOT_FOUND");
-  expect(child.stderr).toContain(
-    "@fungi.computer/spore-native-linux-x64/bin/fungi-apply-patch",
+});
+
+test("npm launcher passes its installed Spore version to the Bun CLI", async () => {
+  const child = await launch(
+    "linux",
+    "x64",
+    "2.35",
+    ["--test-spore-version"],
+    true,
   );
+  expect(child.status).toBe(0);
+  expect(child.stdout).toBe("0.4.0\n");
+  expect(child.stderr).toBe("");
 });
 
 for (const arch of ["arm64", "x64"]) {
@@ -139,16 +150,12 @@ for (const arch of ["arm64", "x64"]) {
     expect(child.stderr).toBe("");
   });
 
-  test(`macOS ${arch} missing optional packages reports their resolution failure`, async () => {
+  test(`macOS ${arch} missing native package reports the exact reinstall command`, async () => {
     const child = await launch("darwin", arch, undefined);
     expect(child.status).toBe(1);
     expect(child.stdout).toBe("");
-    expect(child.stderr).toContain(
-      "Fungi CLI could not load its native dependencies.",
-    );
-    expect(child.stderr).toContain("MODULE_NOT_FOUND");
-    expect(child.stderr).toContain(
-      `@fungi.computer/spore-native-darwin-${arch}/bin/fungi-apply-patch`,
+    expect(child.stderr).toBe(
+      `Fungi's native package for darwin-${arch} is missing or doesn't match this version. Reinstall: npm i -g @fungi.computer/spore@0.4.0\n`,
     );
   });
 }

@@ -27,7 +27,6 @@ import type { ToastInput } from "./toast-store.js";
 export type { StopAllResult };
 export { tuiDraftStorage } from "./draft-storage.js";
 export {
-  createSandboxNoticeClaims,
   type TuiSandboxSource,
   type TuiSandboxStatus,
 } from "./local-sandbox.js";

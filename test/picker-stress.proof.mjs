@@ -6,7 +6,7 @@
 //   launcher: a packaged `dist/fungi.cjs`, or a `cli.js` run by this Bun.
 // Signed out, temp HOME, its own Local service; nothing reads the real ~/.fungi.
 import { Terminal as Emulator } from "@xterm/headless";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import console from "node:console";
@@ -29,8 +29,11 @@ const keys = { leader: "\x0b", escape: "\x1b", down: "\x1b[B" };
 
 const root = await mkdtemp(join(tmpdir(), "fungi-picker-stress-"));
 const home = join(root, "home");
+const runtime = join(root, "runtime");
 const project = join(root, "synthetic");
 await mkdir(join(home, ".fungi"), { recursive: true, mode: 0o700 });
+await mkdir(runtime, { mode: 0o700 });
+await chmod(runtime, 0o700);
 await mkdir(project, { mode: 0o700 });
 await writeFile(
   join(home, ".fungi/onboarding.json"),
@@ -62,9 +65,12 @@ const child = spawn(command, {
   env: {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     HOME: home,
+    USERPROFILE: home,
     XDG_CONFIG_HOME: join(home, ".config"),
+    XDG_CACHE_HOME: join(home, ".cache"),
     XDG_DATA_HOME: join(home, ".local/share"),
     XDG_STATE_HOME: join(home, ".local/state"),
+    XDG_RUNTIME_DIR: runtime,
     TERM: "xterm-256color",
     LANG: "C.UTF-8",
   },

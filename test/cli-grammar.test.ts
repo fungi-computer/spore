@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { Readable } from "node:stream";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
@@ -9,7 +9,109 @@ import { z } from "zod";
 import { createPrivateModels } from "@fungi.computer/truffle";
 import type { LocalAuthCliOptions } from "@fungi.computer/truffle/auth";
 import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
+import { manageLocalExecRules } from "@fungi.computer/truffle/rules";
+import { createIsolatedCliEnvironment } from "./cli-test-isolation.js";
 import { runFungiCli } from "../src/cli.js";
+
+test("CLI proof environment isolates HOME, XDG runtime, and provider credentials", async () => {
+  const isolated = await createIsolatedCliEnvironment();
+  try {
+    expect(isolated.env.HOME).toBe(isolated.home);
+    expect(isolated.env.HOME).not.toBe(process.env.HOME);
+    for (const [key, path] of [
+      ["XDG_CONFIG_HOME", join(isolated.home, ".config")],
+      ["XDG_CACHE_HOME", join(isolated.home, ".cache")],
+      ["XDG_DATA_HOME", join(isolated.home, ".local", "share")],
+      ["XDG_STATE_HOME", join(isolated.home, ".local", "state")],
+    ] as const)
+      expect(isolated.env[key]).toBe(path);
+    expect(isolated.env.XDG_RUNTIME_DIR).toBe(isolated.runtime);
+    expect((await stat(isolated.runtime)).mode & 0o777).toBe(0o700);
+    expect(
+      isolated.environment({ OPENAI_API_KEY: "isolation-test" }),
+    ).not.toHaveProperty("OPENAI_API_KEY");
+  } finally {
+    await isolated.cleanup();
+  }
+});
+
+test("permissions list uses project grammar without mounting the Agent UI", async () => {
+  const project = await mkdtemp(join(tmpdir(), "fungi-permissions-cli-"));
+  try {
+    let output = "";
+    await runFungiCli(
+      ["permissions", "list", "-C", project],
+      {
+        stdout: {
+          write: (chunk) => {
+            output += String(chunk);
+            return true;
+          },
+        },
+      },
+      {
+        createRenderer: () => Promise.reject(new Error("unexpected renderer")),
+      },
+    );
+    expect(output).toBe("");
+    await assert.rejects(
+      runFungiCli(["permissions", "unknown", "-C", project]),
+      /Usage: fungi permissions/u,
+    );
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("permissions list needs no Agent even when a project has multiple Agents", async () => {
+  const project = await mkdtemp(join(tmpdir(), "fungi-permissions-cli-"));
+  try {
+    for (const name of ["alpha", "beta"])
+      await mkdir(join(project, ".fungi", "agents", name), {
+        recursive: true,
+      });
+    await runFungiCli(["permissions", "list", "-C", project]);
+    await assert.rejects(
+      runFungiCli(["permissions", "list", "alpha", "-C", project]),
+      /Usage: fungi permissions/u,
+    );
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("permissions from an Agent subfolder list and remove the project rule without creating a local store", async () => {
+  const project = await mkdtemp(join(tmpdir(), "fungi-permissions-subfolder-"));
+  const subfolder = join(project, "agent");
+  try {
+    await mkdir(subfolder);
+    manageLocalExecRules(project, "list");
+    // A human approval has already stored the rule at the project root.
+    const { localExecRules } = await import("@fungi.computer/truffle/rules");
+    localExecRules(project).add(["pnpm", "install"]);
+    let output = "";
+    await runFungiCli(["permissions", "list", "-C", subfolder], {
+      stdout: { write: (text) => ((output += String(text)), true) },
+    });
+    expect(output).toContain('["pnpm","install"]');
+    await runFungiCli([
+      "permissions",
+      "remove",
+      '["pnpm","install"]',
+      "-C",
+      subfolder,
+    ]);
+    expect(manageLocalExecRules(project, "list")).toEqual([]);
+    await assert.rejects(
+      import("node:fs/promises").then(({ stat }) =>
+        stat(join(subfolder, ".fungi")),
+      ),
+      { code: "ENOENT" },
+    );
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
 
 test("--yes is accepted for the bare CLI and never mounts an unattended agent UI", async () => {
   let output = "";
@@ -576,10 +678,12 @@ test("one-shot CLI sends the endpoint to Local", async () => {
 
 test.each([
   { flag: undefined, expected: undefined },
-  { flag: "--require-sandbox", expected: true },
-  { flag: "--no-require-sandbox", expected: false },
+  { flag: "--yolo", expected: "full-access" },
+  { flag: "--full-access", expected: "full-access" },
+  { flag: "--workspace", expected: "workspace" },
+  { flag: "--read-only", expected: "read-only" },
 ])(
-  "one-shot forwards the person's sandbox requirement ($flag)",
+  "one-shot forwards the person's mode ($flag)",
   async ({ flag, expected }) => {
     const root = await mkdtemp(join(tmpdir(), "fungi-cli-sandbox-"));
     const home = join(root, "home");
@@ -588,7 +692,7 @@ test.each([
     await mkdir(project);
     const stopped = new Error("selection observed before any work");
     let selected = false;
-    let required: boolean | undefined;
+    let selectedMode: string | undefined;
     try {
       await assert.rejects(
         runFungiCli(
@@ -605,7 +709,7 @@ test.each([
               ...createPrivateLocalServiceManager({ home }),
               connect: (selection) => {
                 selected = true;
-                required = selection.requireSandbox;
+                selectedMode = selection.mode;
                 return Promise.reject(stopped);
               },
             }),
@@ -615,21 +719,22 @@ test.each([
         (cause) => cause === stopped,
       );
       expect(selected).toBe(true);
-      expect(required).toBe(expected);
+      expect(selectedMode).toBe(expected);
     } finally {
       await rm(root, { recursive: true });
     }
   },
 );
 
-test("sandbox CLI rejects conflicting switches, unrelated commands and superseded modes before selection", async () => {
+test("mode CLI rejects conflicting switches, unrelated commands and superseded modes before selection", async () => {
   const home = await mkdtemp(join(tmpdir(), "fungi-cli-sandbox-grammar-"));
   try {
     for (const argv of [
-      ["run", "proof", "--require-sandbox", "--no-require-sandbox"],
-      ["status", "--require-sandbox"],
+      ["run", "proof", "--yolo", "--workspace"],
+      ["run", "proof", "--read-only", "--full-access"],
+      ["status", "--yolo"],
       ["--safe"],
-      ["--yolo"],
+      ["--require-sandbox"],
       ["--mode", "safe"],
     ])
       await assert.rejects(
@@ -1270,6 +1375,7 @@ test("fungi logout --provider fungi signs out through the shared Fungi account o
 });
 
 test("the executable reports a missing model in plain text and exits 1 without a stack", async () => {
+  const isolated = await createIsolatedCliEnvironment();
   const executable = [
     process.execPath,
     new URL("../src/cli.tsx", import.meta.url).pathname,
@@ -1278,7 +1384,7 @@ test("the executable reports a missing model in plain text and exits 1 without a
   try {
     const child = Bun.spawn([...executable, "run", "hello"], {
       cwd,
-      env: process.env,
+      env: isolated.env,
       stdout: "pipe",
       stderr: "pipe",
       timeout: 10000,
@@ -1296,12 +1402,18 @@ test("the executable reports a missing model in plain text and exits 1 without a
   } finally {
     const stop = Bun.spawn([...executable, "stop"], {
       cwd,
-      env: process.env,
+      env: isolated.env,
       stdout: "ignore",
       stderr: "ignore",
       timeout: 5000,
     });
-    await stop.exited;
-    await rm(cwd, { recursive: true, force: true });
+    try {
+      await stop.exited;
+    } finally {
+      await Promise.all([
+        rm(cwd, { recursive: true, force: true }),
+        isolated.cleanup(),
+      ]);
+    }
   }
 }, 20000);

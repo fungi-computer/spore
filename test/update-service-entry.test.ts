@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { createIsolatedCliEnvironment } from "./cli-test-isolation.js";
 
 for (const refuse of [false, true]) {
   test(`the actual internal restart entry creates one fresh public ensure owner (${refuse ? "refusal" : "success"})`, async () => {
-    const temporary = join(process.cwd(), ".botanical");
-    await mkdir(temporary, { recursive: true });
-    const home = await mkdtemp(join(temporary, "update-entry-"));
+    const isolated = await createIsolatedCliEnvironment();
+    const home = isolated.home;
     const trace = join(home, "manager.log");
     try {
       const child = Bun.spawn(
@@ -20,8 +20,7 @@ for (const refuse of [false, true]) {
         {
           cwd: home,
           env: {
-            ...process.env,
-            HOME: home,
+            ...isolated.env,
             FUNGI_TEST_UPDATE_TRACE: trace,
             FUNGI_TEST_UPDATE_REFUSE: refuse ? "1" : "0",
           },
@@ -45,7 +44,7 @@ for (const refuse of [false, true]) {
         "new manager\npublic ensure\n",
       );
     } finally {
-      await rm(home, { recursive: true, force: true });
+      await isolated.cleanup();
     }
   });
 }

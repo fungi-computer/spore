@@ -77,8 +77,8 @@ test("slash model saves update one mounted frame without duplicate commands", as
               agentId: "agent-fixture",
               sessionId: "session-fixture",
               sandboxStatus: async () => ({
-                state: "available",
-                requireSandbox: false,
+                mode: "full-access",
+                available: true,
               }),
               databasePath: "/tmp/fixture.sqlite",
               effectiveModel: async () => ({

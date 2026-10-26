@@ -12,9 +12,18 @@ import { approvals } from "@fungi.computer/agar/approvals";
 export type McpApprovalSource = Readonly<{
   snapshot: () => ApprovalView | undefined;
   subscribe: (listener: () => void) => () => void;
+  review?: Readonly<{
+    command: string;
+    cwd: string;
+    justification: string;
+    prefix?: readonly string[];
+    warning?: string;
+  }>;
   // Session attachment refusals are not synthesized canonical ledger decisions.
   answer: (
-    input: Parameters<Approvals["answer"]>[0],
+    input: Omit<Parameters<Approvals["answer"]>[0], "decision"> & {
+      decision: "approve" | "deny" | "always-allow";
+    },
   ) => Promise<Exclude<McpFormAnswerResult, { kind: "submitted" }>>;
 }>;
 
@@ -35,7 +44,10 @@ export async function loadMcpApprovalSource(
   return {
     snapshot: () => view,
     subscribe: noSubscription,
-    answer: (input) => client.answer(input),
+    answer: (input) =>
+      input.decision === "always-allow"
+        ? Promise.resolve({ kind: "refused", reason: "not-eligible" })
+        : client.answer({ ...input, decision: input.decision }),
   };
 }
 
@@ -126,7 +138,7 @@ function ActiveApproval({
   onClose: () => void;
 }>) {
   const [host] = useState(() =>
-    createWhistleInteractionHost({ title: "MCP approval" }),
+    createWhistleInteractionHost({ title: "Approval" }),
   );
   useEffect(() => {
     const session = host.begin();
@@ -150,16 +162,32 @@ function ActiveApproval({
     else {
       void (async () => {
         try {
-          const approved = await session.interaction.prompt({
-            type: "confirmation",
-            message: record.description.title,
-            confirmLabel: "Approve",
-            cancelLabel: "Deny",
-          });
+          const alwaysAllow =
+            source.review?.prefix === undefined
+              ? false
+              : await session.interaction.prompt({
+                  type: "confirmation",
+                  message: `Always allow ${source.review.prefix.join(" ")}? ${source.review.warning ?? "Matching direct commands will run as you, outside the sandbox, without asking again."}`,
+                  confirmLabel: `Always allow ${source.review.prefix.join(" ")}`,
+                  cancelLabel: "Review once",
+                });
+          if (!stillCurrent()) return;
+          const approved =
+            alwaysAllow ||
+            (await session.interaction.prompt({
+              type: "confirmation",
+              message: record.description.title,
+              confirmLabel: "Approve",
+              cancelLabel: "Deny",
+            }));
           if (!stillCurrent()) return;
           const result = await source.answer({
             recordId: record.recordId,
-            decision: approved ? "approve" : "deny",
+            decision: alwaysAllow
+              ? "always-allow"
+              : approved
+                ? "approve"
+                : "deny",
             expectedRevision: record.revision,
           });
           if (!stillCurrent()) return;
@@ -190,6 +218,24 @@ function ActiveApproval({
   return (
     <box flexDirection="column">
       <text fg={colors.foreground}>{record.description.title}</text>
+      {source.review === undefined ? null : (
+        <>
+          <text
+            fg={colors.foreground}
+          >{`Command: ${source.review.command}`}</text>
+          <text
+            fg={colors.foreground}
+          >{`Working directory: ${source.review.cwd}`}</text>
+          <text
+            fg={colors.foreground}
+          >{`Justification: ${source.review.justification}`}</text>
+          {source.review.prefix === undefined ? null : (
+            <text fg={colors.foreground}>
+              {`Always allow ${source.review.prefix.join(" ")}: ${source.review.warning ?? "matching direct commands run as you, outside the sandbox, without asking again"}`}
+            </text>
+          )}
+        </>
+      )}
       <text
         fg={colors.foreground}
       >{`Requester: ${record.requester.displayName}`}</text>

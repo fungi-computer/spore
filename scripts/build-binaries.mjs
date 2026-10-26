@@ -48,6 +48,13 @@ for (const platform of target === "all" ? targets : [target]) {
   await access(
     resolve(source, `node_modules/@opentui/core-${platform}/${native}`),
   );
+  const keyringTarget = `${platform}${os === "linux" ? "-gnu" : ""}`;
+  await access(
+    resolve(
+      source,
+      `node_modules/@napi-rs/keyring-${keyringTarget}/keyring.${keyringTarget}.node`,
+    ),
+  );
   await access(
     resolve(
       source,

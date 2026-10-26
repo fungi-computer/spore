@@ -215,7 +215,7 @@ test("doctor reports saved Fungi sign-in and a ready model without credential va
   const passed = await runDoctor({
     localServiceStatus: () =>
       Promise.resolve({
-        protocol: 3,
+        protocol: 4,
         version: "source",
         serviceId: "owned-onboarding-fixture",
         pid: 1,

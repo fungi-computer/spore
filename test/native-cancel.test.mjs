@@ -123,8 +123,8 @@ for (const deferredNotifications of [false, true]) {
               createServiceManager: () => ({
                 connect: async () => ({
                   sandboxStatus: async () => ({
-                    state: "available",
-                    requireSandbox: false,
+                    mode: "full-access",
+                    available: true,
                   }),
                   agentId: "agent-fixture",
                   databasePath: "/fixture/agent.sqlite",

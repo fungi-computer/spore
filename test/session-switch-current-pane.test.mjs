@@ -117,8 +117,8 @@ for (const command of ["resume", "fork"]) {
           label: "Shiitake · Fixture model · Fixture key",
         }),
         sandboxStatus: async () => ({
-          state: "available",
-          requireSandbox: false,
+          mode: "full-access",
+          available: true,
         }),
         close: async () => {
           closed.push(name);

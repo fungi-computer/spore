@@ -294,6 +294,10 @@ function serviceManager(
   const session: ShiitakeSession = {
     withdraw: () => Promise.resolve({ status: "unknown" }),
     address: "fixture://main",
+    readSettlement: () =>
+      Promise.reject(
+        new Error("settlement is unused in this one-shot fixture"),
+      ),
     latestPending: () =>
       Promise.reject(
         new Error("pending lookup is unused in this one-shot fixture"),
@@ -333,7 +337,7 @@ function serviceManager(
     databasePath: "/tmp/one-shot.sqlite",
     sessionId: "main",
     service: {
-      protocol: 3,
+      protocol: 4,
       diagnostics: { state: "active" },
       version: "source",
       serviceId: "fixture",
@@ -437,6 +441,35 @@ test("fungi reload prints the service result and sends the selected project with
     output.join(""),
     /Configuration reloaded; applies from the next turn/u,
   );
+});
+
+test("fungi run consumes a queued activity frame without throwing", async () => {
+  const fake = fakeSession();
+  const output: string[] = [];
+  const run = runFungiCli(
+    ["run", "prompt from stdin"],
+    {
+      cwd: "/tmp",
+      stdout: outputSink(output),
+    },
+    {
+      createServiceManager: () => serviceManager(fake.session),
+    },
+  );
+  await fake.submitted;
+  fake.emit({
+    kind: "activity",
+    activity: queuedActivity(fake.requestId),
+  });
+  fake.emit(
+    idleFrame([
+      user(1, fake.requestId),
+      assistant(2, "queued result", "stop", fake.requestId),
+    ]),
+  );
+  await run;
+  assert.deepEqual(output, ["queued result\n"]);
+  assert.equal(fake.watchClosed, 1);
 });
 
 test("dispatcher follows the owner command ID and closes its Session watch", async () => {
@@ -787,6 +820,10 @@ test("two one-shot clients correlate their own results while a TUI watch stays a
     extensions: {},
     attention: [],
   };
+  const activityFrame: SessionFrame = {
+    kind: "activity",
+    activity: queuedActivity("queued-command"),
+  };
   const secondFrame: SessionFrame = {
     pending: { total: 0, prompts: [], hasMore: false },
     kind: "update",
@@ -824,7 +861,7 @@ test("two one-shot clients correlate their own results while a TUI watch stays a
     extensions: {},
     attention: [],
   };
-  for (const frame of [firstFrame, secondFrame, thirdFrame]) {
+  for (const frame of [activityFrame, firstFrame, secondFrame, thirdFrame]) {
     for (const watcher of watchers) {
       const resolve = watcher.waiters.shift();
       if (resolve !== undefined) resolve({ done: false, value: frame });
@@ -836,8 +873,11 @@ test("two one-shot clients correlate their own results while a TUI watch stays a
   assert.deepEqual(secondOutput, ["second result\n"]);
   const uiFrame = await uiChanges.next();
   if (uiFrame.done) throw new Error("Missing TUI frame");
-  assert.equal(uiFrame.value.kind, "update");
-  assert.equal(uiFrame.value.messages[0]?.commandId, "first-request");
+  assert.equal(uiFrame.value.kind, "activity");
+  const uiUpdate = await uiChanges.next();
+  if (uiUpdate.done) throw new Error("Missing TUI update frame");
+  assert.equal(uiUpdate.value.kind, "update");
+  assert.equal(uiUpdate.value.messages[0]?.commandId, "first-request");
   await uiWatch.close();
 });
 

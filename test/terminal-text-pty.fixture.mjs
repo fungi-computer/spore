@@ -121,8 +121,8 @@ try {
                 label: "Shiitake · Fixture · Fixture key",
               }),
               sandboxStatus: async () => ({
-                state: "available",
-                requireSandbox: false,
+                mode: "full-access",
+                available: true,
               }),
               databasePath,
               close: () => Promise.resolve(),

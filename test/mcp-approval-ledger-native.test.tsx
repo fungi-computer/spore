@@ -66,12 +66,12 @@ function manualLedger(database: DatabaseSync, home: "team" | "oyster") {
   };
   if (home === "oyster") {
     // Oyster defaults to auto-approve; exercise an owner-selected manual
-    // write family so the rendered approval can outlive membership.
+    // external family so the rendered approval can outlive membership.
     expect(
       ledger.setAutoApprove(
         {
           scope: { agentId: null },
-          family: { module: null, access: "write" },
+          family: { module: null, access: "external" },
           enabled: false,
         },
         member,
@@ -119,9 +119,9 @@ for (const { decision, revokeMembership } of [
             sessionId: "session:research",
             displayName: "Research Agent",
           },
-          module: "files",
-          operation: "write",
-          access: "write",
+          module: "computer",
+          operation: "exec",
+          access: "external",
           reversibility: "reversible",
           authorityFence: "grant:renderer",
           idempotencyKey: "turn:renderer/tool:one",
@@ -153,7 +153,8 @@ for (const { decision, revokeMembership } of [
       try {
         await act(async () => setup.renderOnce());
         const frame = await setup.waitForFrame(
-          (value) => value.includes("files.write") && value.includes("Approve"),
+          (value) =>
+            value.includes("computer.exec") && value.includes("Approve"),
         );
         expect(frame).toContain("Research Agent");
         expect(frame).toContain("agent:research");

@@ -98,7 +98,7 @@ export async function selectTuiSession(input: {
     return options.sessionChoice.resume({
       signal,
       fungiMcp: options.fungiMcp,
-      requireSandbox: options.requireSandbox,
+      mode: options.mode,
     });
   if (
     (options.entry === "landing" || options.entry === "new") &&
@@ -126,7 +126,7 @@ export async function selectTuiSession(input: {
         return serviceManager.connect(
           {
             invocationRoot: options.invocationRoot,
-            requireSandbox: options.requireSandbox,
+            mode: options.mode,
             fungiMcp: options.fungiMcp,
           },
           { signal },
@@ -137,7 +137,7 @@ export async function selectTuiSession(input: {
           invocationRoot: options.invocationRoot,
           databasePath,
           requestId: sessionCreateRequests.request.generate(),
-          requireSandbox: options.requireSandbox,
+          mode: options.mode,
           fungiMcp: options.fungiMcp,
         },
         { signal },
@@ -226,7 +226,7 @@ export async function selectTuiSession(input: {
       return picked.resume({
         signal,
         fungiMcp: options.fungiMcp,
-        requireSandbox: options.requireSandbox,
+        mode: options.mode,
       });
     }
   }
@@ -257,7 +257,7 @@ export async function selectTuiSession(input: {
       return selected.resume({
         signal,
         fungiMcp: options.fungiMcp,
-        requireSandbox: options.requireSandbox,
+        mode: options.mode,
       });
     if (destroyed()) return undefined;
     const picked = await new Promise<PrivateLocalSessionChoice | undefined>(
@@ -291,7 +291,7 @@ export async function selectTuiSession(input: {
     return picked.resume({
       signal,
       fungiMcp: options.fungiMcp,
-      requireSandbox: options.requireSandbox,
+      mode: options.mode,
     });
   }
   if (options.connect !== undefined)
@@ -309,14 +309,14 @@ export async function selectTuiSession(input: {
           invocationRoot: options.invocationRoot,
           fungiMcp: options.fungiMcp,
           sessionId: options.sessionId,
-          requireSandbox: options.requireSandbox,
+          mode: options.mode,
         }
       : {
           invocationRoot: options.invocationRoot,
           fungiMcp: options.fungiMcp,
           databasePath: options.databasePath,
           sessionId: options.sessionId,
-          requireSandbox: options.requireSandbox,
+          mode: options.mode,
         };
   return serviceManager.connect(selection, { signal });
 }

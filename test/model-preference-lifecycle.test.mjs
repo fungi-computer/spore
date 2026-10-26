@@ -140,8 +140,8 @@ test("held /new creates once, pins the mounted store, and adopts its connection"
   let renderCount = 0;
   const connection = (sessionId) => ({
     sandboxStatus: async () => ({
-      state: "available",
-      requireSandbox: false,
+      mode: "full-access",
+      available: true,
     }),
     agentId: "agent-fixture",
     service: { serviceId: "fixture", baseUrl: "http://fixture" },

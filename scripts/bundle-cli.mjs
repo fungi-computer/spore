@@ -69,6 +69,7 @@ const build = spawnSync(
     resolve(output, "dist/cli.js"),
     "--external=miniflare",
     "--external=@opentui/core",
+    "--external=@napi-rs/keyring",
     `--metafile=${metafile}`,
   ],
   { cwd: repository, stdio: "inherit" },
@@ -151,6 +152,7 @@ await writeFile(
       dependencies: {
         miniflare: "5.20260828.0-alpha",
         "@opentui/core": "0.5.10",
+        "@napi-rs/keyring": "2.1.2",
         "@opencode-ai/pty": "0.3.0",
       },
       optionalDependencies: {

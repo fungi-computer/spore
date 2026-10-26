@@ -7,7 +7,7 @@ import { runDoctor } from "../src/doctor.js";
 test("doctor prints the current FAILED code/since without starting a service", async () => {
   const since = new Date().toISOString();
   const status: PrivateLocalServiceStatus = {
-    protocol: 3,
+    protocol: 4,
     serviceId: "fixture-service",
     pid: process.pid,
     version: "source",

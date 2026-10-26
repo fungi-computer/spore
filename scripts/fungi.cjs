@@ -49,16 +49,22 @@ if (!supported) {
   process.exit(1);
 }
 const nativePackage = `@fungi.computer/spore-native-${platform}`;
-let bun;
-try {
-  require.resolve(`${nativePackage}/bin/fungi-apply-patch`);
-  bun = require.resolve(runtimes[platform]);
-} catch (cause) {
-  throw new Error(
-    "Fungi CLI could not load its native dependencies. Reinstall with npm install -g @fungi.computer/spore --include=optional.",
-    { cause },
-  );
+const sporeVersion = require("../package.json").version;
+function nativeResolution() {
+  try {
+    require.resolve(`${nativePackage}/bin/fungi-apply-patch`);
+    return { kind: "ready" };
+  } catch {
+    return { kind: "missing" };
+  }
 }
+if (nativeResolution().kind === "missing") {
+  console.error(
+    `Fungi's native package for ${platform} is missing or doesn't match this version. Reinstall: npm i -g @fungi.computer/spore@${sporeVersion}`,
+  );
+  process.exit(1);
+}
+const bun = require.resolve(runtimes[platform]);
 const cli = resolve(__dirname, "cli.js");
 const buildId = createHash("sha256").update(readFileSync(cli)).digest("hex");
 // Bun otherwise loads the project's bunfig.toml preload and .env into this
@@ -72,6 +78,7 @@ const child = spawnSync(
       ...process.env,
       FUNGI_BUNDLED_CLI: cli,
       FUNGI_BUNDLED_BUILD_ID: buildId,
+      FUNGI_SPORE_VERSION: sporeVersion,
       FUNGI_LAUNCHER: __filename,
       FUNGI_LAUNCHER_NODE: process.execPath,
     },

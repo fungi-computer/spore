@@ -104,8 +104,8 @@ async function withCli(
             },
             createSession: async () => ({
               sandboxStatus: async () => ({
-                state: "available",
-                requireSandbox: false,
+                mode: "full-access",
+                available: true,
               }),
               ...fixture.identity,
               databasePath: "/fixture/main.sqlite",
@@ -116,8 +116,8 @@ async function withCli(
             }),
             connect: async () => ({
               sandboxStatus: async () => ({
-                state: "available",
-                requireSandbox: false,
+                mode: "full-access",
+                available: true,
               }),
               ...fixture.identity,
               databasePath: "/fixture/main.sqlite",

@@ -35,6 +35,7 @@ Team Computers:
 
 Fungi itself:
   fungi extension <action>       Add, list, remove, enable or disable extensions
+  fungi permissions <action>     List or remove Always-allow command rules
   fungi stop                     Stop the local background service
   fungi reload                   Reload configuration for the next turn
   fungi update                   Update fungi to the latest release
@@ -47,16 +48,22 @@ Options:
       --extension <entry>        Enable an installed client extension
                                  (repeatable)
       --yes                      Skip setup prompts; continue local-only
-      --require-sandbox          Require the Local sandbox for this Agent
-      --no-require-sandbox       Allow fallback if its sandbox is unavailable
+      --yolo, --full-access      Run this Agent's commands without a sandbox
+      --workspace                Run commands in the project sandbox
+                                 (Git writes ask first)
+      --read-only                Run commands in the read-only sandbox
+
+If the Agent runs git init in the folder, you run git there afterwards only
+after reviewing its hooks and config.
 
 Choose models and thinking levels inside fungi with /model and /thinking.
 Saved conversations remain after fungi stop.
 `;
 
 const sessionOptions = `  -C, --cd <path>                Project directory (default: current folder)
-      --require-sandbox          Refuse work if the Local sandbox is unavailable
-      --no-require-sandbox       Restore automatic attempt with fallback
+      --yolo, --full-access      Run without a sandbox
+      --workspace                Require the project sandbox
+      --read-only                Require the read-only sandbox
       --fungi-mcp <url>          Select and remember a hosted Team Computer
       --extension <entry>
                                  Enable an installed client extension
@@ -83,8 +90,9 @@ and uses the ordinary Fungi login flow.
 Start a new conversation in this folder, skipping the conversation list.
 
   -C, --cd <path>                Project directory (default: current folder)
-      --require-sandbox          Refuse work if the Local sandbox is unavailable
-      --no-require-sandbox       Restore automatic attempt with fallback
+      --yolo, --full-access      Run without a sandbox
+      --workspace                Require the project sandbox
+      --read-only                Require the read-only sandbox
       --extension <entry>        Enable an installed client extension
                                  (repeatable)
 `,
@@ -114,8 +122,9 @@ Run one prompt in a local Session and print the answer. Reads the prompt from
 stdin when it is omitted.
 
   -C, --cd <path>                Project directory (default: current folder)
-      --require-sandbox          Refuse work if the Local sandbox is unavailable
-      --no-require-sandbox       Restore automatic attempt with fallback
+      --yolo, --full-access      Run without a sandbox
+      --workspace                Require the project sandbox
+      --read-only                Require the read-only sandbox
       --agent <id>               Agent to run in when the folder has several
       --fungi-mcp <url>          Give the Agent tools on a Team Computer
 `,
@@ -196,6 +205,12 @@ keeps its existing connection until fungi stop.
 `,
     computer: computerCommandHelp,
     extension: extensionCommandHelp,
+    permissions: `Usage: fungi permissions list [-C <project>]
+       fungi permissions remove '["git","push"]' [-C <project>]
+
+List or remove direct-argv Always-allow prefixes. All rules belong to the project and apply to every Agent in it. Removing a rule restores the card.
+Only a human answer on an approval card can create a rule.
+`,
     computers: computersCommandHelp,
     agents: agentsCommandHelp,
     account: fungiAccountCommandHelp,

@@ -223,9 +223,9 @@ try {
       encoding: "utf8",
     });
     assert.notEqual(missing.status, 0);
-    assert.match(
+    assert.equal(
       missing.stderr,
-      /Fungi CLI could not load its native dependencies/,
+      `Fungi's native package for ${platform} is missing or doesn't match this version. Reinstall: npm i -g @fungi.computer/spore@${version}\n`,
     );
   } finally {
     await rename(hiddenNative, nativeRoot);

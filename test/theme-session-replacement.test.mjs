@@ -21,8 +21,8 @@ test("confirmed theme survives Session replacement in one terminal", async () =>
     const fixture = createTuiFixture();
     return {
       sandboxStatus: async () => ({
-        state: "available",
-        requireSandbox: false,
+        mode: "full-access",
+        available: true,
       }),
       agentId: "agent-fixture",
       sessionId: `session-theme-${generation + 1}`,

@@ -14,6 +14,7 @@ import {
 import type { ApprovalView, Approvals } from "@fungi.computer/approvals";
 import { useTerminalTheme } from "../src/button/terminal-theme.js";
 import { pressDecodedKey, waitForFrame } from "./native-readiness.js";
+import { localExecEscapeReview } from "../../../runtimes/local/src/private-local-exec-review.js";
 
 function approval(recordId = "approval-1", revision = 7): ApprovalView {
   return {
@@ -26,11 +27,11 @@ function approval(recordId = "approval-1", revision = 7): ApprovalView {
         sessionId: "session-1",
         displayName: "Research Agent",
       },
-      module: "files",
-      operation: "write",
-      access: "write",
+      module: "computer",
+      operation: "exec",
+      access: "external",
       description: {
-        title: "Allow files.write (write)?",
+        title: "Allow computer.exec (external)?",
         inputBytes: 4321,
         inputSha256: "0123456789abcdef".repeat(4),
       },
@@ -51,7 +52,7 @@ function approval(recordId = "approval-1", revision = 7): ApprovalView {
 function fakeApprovals(respond?: Approvals["answer"]) {
   let pending: ApprovalView | undefined;
   const listeners = new Set<() => void>();
-  const answers: Parameters<Approvals["answer"]>[0][] = [];
+  const answers: Parameters<McpApprovalSource["answer"]>[0][] = [];
   const source: McpApprovalSource = {
     snapshot: () => pending,
     subscribe: (listener) => {
@@ -60,7 +61,11 @@ function fakeApprovals(respond?: Approvals["answer"]) {
     },
     answer: async (input) => {
       answers.push(input);
-      if (respond !== undefined) return respond(input);
+      if (
+        respond !== undefined &&
+        (input.decision === "approve" || input.decision === "deny")
+      )
+        return respond({ ...input, decision: input.decision });
       const view = pending;
       if (view?.record.recordId === input.recordId) {
         pending = undefined;
@@ -72,7 +77,7 @@ function fakeApprovals(respond?: Approvals["answer"]) {
             canAnswer: false,
             record: {
               ...view.record,
-              state: input.decision === "approve" ? "approved" : "denied",
+              state: input.decision === "deny" ? "denied" : "approved",
               revision: view.record.revision + 1,
               by: { kind: "human", memberId: "fixture-member" },
             },
@@ -103,6 +108,216 @@ function View({ source }: Readonly<{ source: McpApprovalSource }>) {
   ) : null;
 }
 
+test("escape card shows the exact command and cwd before a human answers", async () => {
+  const producer = fakeApprovals();
+  const source: McpApprovalSource = {
+    ...producer.source,
+    review: {
+      command: 'git commit -m "approved"',
+      cwd: "/project/fungi",
+      justification: "Git metadata is read-only",
+    },
+  };
+  const setup = await testRender(<View source={source} />, {
+    width: 100,
+    height: 30,
+  });
+  try {
+    act(() => {
+      producer.publish(approval("escaped-command"));
+    });
+    const frame = await waitForFrame(
+      setup,
+      (value) =>
+        value.includes("git commit") &&
+        value.includes("Approve") &&
+        value.includes("Deny"),
+    );
+    expect(frame).toContain("/project/fungi");
+    expect(frame).toContain("Git metadata is read-only");
+    expect(producer.answers).toHaveLength(0);
+  } finally {
+    act(() => {
+      setup.renderer.destroy();
+    });
+  }
+});
+
+test("the attached human chooses a narrow Git subcommand after seeing the outside-sandbox warning", async () => {
+  const producer = fakeApprovals();
+  const source: McpApprovalSource = {
+    ...producer.source,
+    review: {
+      command: '["git","push","-u","origin","b"]',
+      cwd: "/project/fungi",
+      justification: "Git metadata is read-only",
+      prefix: ["git"],
+      warning:
+        "Any git command in this project runs as you, outside the sandbox.",
+    },
+  };
+  const setup = await testRender(<View source={source} />, {
+    width: 100,
+    height: 30,
+  });
+  try {
+    act(() => {
+      producer.publish(approval("project-git"));
+    });
+    const frame = await waitForFrame(setup, (value) =>
+      value.includes("Always allow git"),
+    );
+    expect(frame).toContain("outside the sandbox");
+    expect(producer.answers).toHaveLength(0);
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressEnter();
+    });
+    expect(producer.answers).toEqual([
+      {
+        recordId: "project-git",
+        decision: "always-allow",
+        expectedRevision: 7,
+      },
+    ]);
+  } finally {
+    act(() => {
+      setup.renderer.destroy();
+    });
+  }
+});
+
+for (const subcommand of ["commit", "push", "merge", "diff"]) {
+  test(`the git ${subcommand} card shows the hook-execution warning before an answer`, async () => {
+    const producer = fakeApprovals();
+    const review = localExecEscapeReview(
+      {
+        executable: "git",
+        args: [subcommand],
+        escape: { justification: "Git metadata is read-only" },
+      },
+      "/project/fungi",
+    );
+    const source: McpApprovalSource = {
+      ...producer.source,
+      review,
+    };
+    const setup = await testRender(<View source={source} />, {
+      width: 88,
+      height: 36,
+    });
+    try {
+      act(() => {
+        producer.publish(approval(`project-${subcommand}`));
+      });
+      const frame = await waitForFrame(setup, (value) =>
+        value.includes("run code as you"),
+      );
+      expect(frame).toContain(`Always allow git ${subcommand}:`);
+      expect(frame).toContain("create missing hook files");
+      expect(frame.replace(/\s+/gu, " ")).toContain(
+        "Only the hooksPath setting must pre-exist",
+      );
+      expect(frame).not.toContain(
+        `Always allow git ${subcommand}: Always allow git ${subcommand}`,
+      );
+      if (subcommand === "push")
+        expect(frame).toContain("delete remote branches");
+      expect(producer.answers).toEqual([]);
+    } finally {
+      act(() => {
+        setup.renderer.destroy();
+      });
+    }
+  });
+}
+
+test("a git push card can choose its project subcommand prefix", async () => {
+  const producer = fakeApprovals();
+  const source: McpApprovalSource = {
+    ...producer.source,
+    review: {
+      command: '["git","push","-u","origin","b"]',
+      cwd: "/project/fungi",
+      justification: "Git metadata is read-only",
+      prefix: ["git", "push"],
+      warning:
+        "Any git push command in this project runs as you, outside the sandbox.",
+    },
+  };
+  const setup = await testRender(<View source={source} />, {
+    width: 100,
+    height: 30,
+  });
+  try {
+    act(() => {
+      producer.publish(approval("project-push"));
+    });
+    const frame = await waitForFrame(setup, (value) =>
+      value.includes("Always allow git push"),
+    );
+    expect(frame).not.toContain("Always allow git:");
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressEnter();
+    });
+    expect(producer.answers).toEqual([
+      {
+        recordId: "project-push",
+        decision: "always-allow",
+        expectedRevision: 7,
+      },
+    ]);
+  } finally {
+    act(() => {
+      setup.renderer.destroy();
+    });
+  }
+});
+
+test("a git push card offers only a narrow rule or one-time approval", async () => {
+  const producer = fakeApprovals();
+  const source: McpApprovalSource = {
+    ...producer.source,
+    review: {
+      command: '["git","push","-u","origin","b"]',
+      cwd: "/project/fungi",
+      justification: "Git metadata is read-only",
+      prefix: ["git", "push"],
+    },
+  };
+  const setup = await testRender(<View source={source} />, {
+    width: 100,
+    height: 30,
+  });
+  try {
+    act(() => {
+      producer.publish(approval("narrow-git"));
+    });
+    await waitForFrame(setup, (frame) =>
+      frame.includes("Always allow git push"),
+    );
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressArrow("down");
+      setup.mockInput.pressEnter();
+    });
+    await waitForFrame(setup, (frame) => frame.includes("1 ▶ Approve"));
+
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressEnter();
+    });
+    expect(producer.answers).toEqual([
+      {
+        recordId: "narrow-git",
+        decision: "approve",
+        expectedRevision: 7,
+      },
+    ]);
+  } finally {
+    act(() => {
+      setup.renderer.destroy();
+    });
+  }
+});
+
 test("a replacement approval cannot answer the preceding request", async () => {
   const producer = fakeApprovals();
   const setup = await testRender(<View source={producer.source} />, {
@@ -113,7 +328,7 @@ test("a replacement approval cannot answer the preceding request", async () => {
     act(() => {
       producer.publish(approval("old"));
     });
-    await waitForFrame(setup, (frame) => frame.includes("Allow files.write"));
+    await waitForFrame(setup, (frame) => frame.includes("Allow computer.exec"));
     act(() => {
       const next = approval("new");
       producer.publish({
@@ -158,7 +373,7 @@ for (const decision of ["approve", "deny"] as const) {
         setup,
         (frame) =>
           frame.includes("Waiting for approval") &&
-          frame.includes("Allow files.write (write)?") &&
+          frame.includes("Allow computer.exec (external)?") &&
           frame.includes("Approve") &&
           frame.includes("Deny"),
       );
@@ -166,7 +381,7 @@ for (const decision of ["approve", "deny"] as const) {
       expect(metadata).toContain("principal-1");
       expect(metadata).toContain("agent-1");
       expect(metadata).toContain("session-1");
-      expect(metadata).toContain("files.write");
+      expect(metadata).toContain("computer.exec");
       expect(metadata).toContain("irreversible-external");
       expect(metadata).toContain("4321 bytes");
       expect(metadata.replace(/\s/gu, "")).toContain(
@@ -311,7 +526,7 @@ for (const decision of ["approve", "dismiss"] as const) {
         setup,
         (frame) =>
           frame.includes("Waiting for approval") &&
-          frame.includes("Allow files.write (write)?"),
+          frame.includes("Allow computer.exec (external)?"),
       );
       expect(producer.answers).toEqual([]);
       await pressDecodedKey(setup, () => {

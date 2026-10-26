@@ -291,7 +291,6 @@ function TuiFrameConversation({
     sandboxRead?.identity === sandboxSource?.identity
       ? sandboxRead?.status
       : undefined;
-  const [sandboxNoticeFor, setSandboxNoticeFor] = useState<string>();
   useEffect(() => {
     if (sandboxSource === undefined) return;
     const controller = new AbortController();
@@ -299,8 +298,6 @@ function TuiFrameConversation({
       (status) => {
         if (controller.signal.aborted) return;
         setSandboxRead({ identity: sandboxSource.identity, status });
-        if (status.state === "available" || status.requireSandbox)
-          setSandboxNoticeFor(undefined);
       },
       (cause: unknown) => {
         if (!controller.signal.aborted)
@@ -311,17 +308,6 @@ function TuiFrameConversation({
       controller.abort();
     };
   }, [sandboxSource, sessionStatus.status, sessionStatus.commandId]);
-  useEffect(() => {
-    if (
-      focused &&
-      !dialogOpen &&
-      sandboxSource !== undefined &&
-      sandboxStatus?.state === "unavailable" &&
-      !sandboxStatus.requireSandbox &&
-      sandboxSource.takeUnavailableNotice()
-    )
-      setSandboxNoticeFor(sandboxSource.identity);
-  }, [focused, dialogOpen, sandboxSource, sandboxStatus]);
   const contributions = useClientContributions();
   const timeline = useTimeline();
   const placed = useMemo(
@@ -709,14 +695,12 @@ function TuiFrameConversation({
               slot: "chips",
               order: 0,
               text:
-                sandboxStatus.state === "available"
-                  ? sandboxStatus.requireSandbox
-                    ? "sandbox required"
-                    : "sandbox on"
-                  : sandboxStatus.requireSandbox
-                    ? "sandbox required · unavailable"
-                    : "UNSANDBOXED",
-              tone: sandboxStatus.state === "available" ? "muted" : "warning",
+                sandboxStatus.mode === "full-access"
+                  ? "full access"
+                  : sandboxStatus.mode === "workspace"
+                    ? "workspace · sandboxed"
+                    : "read-only · sandboxed",
+              tone: sandboxStatus.available ? "muted" : "warning",
             } satisfies PaneStatusItem,
           ]),
     ],
@@ -972,17 +956,6 @@ function TuiFrameConversation({
         {modelControls.loginNotice !== undefined && !dialog.isOpen ? (
           <FooterNotice color={colors.info} inset={inset}>
             {modelControls.loginNotice}
-          </FooterNotice>
-        ) : null}
-        {sandboxSource !== undefined &&
-        sandboxNoticeFor === sandboxSource.identity &&
-        sandboxStatus?.state === "unavailable" &&
-        !sandboxStatus.requireSandbox &&
-        !dialog.isOpen ? (
-          <FooterNotice color={colors.warning} inset={inset}>
-            {terminalText(
-              `Sandbox unavailable; running unsandboxed. ${sandboxStatus.reason.message}\nSandboxing, when available:\nLimits what the agent's commands can change to your project folder and blocks their network access. They can still read other files on this computer, and this is not a security boundary against a hostile program.`,
-            )}
           </FooterNotice>
         ) : null}
       </box>

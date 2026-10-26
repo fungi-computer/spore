@@ -24,8 +24,8 @@ const sessions = [
     updatedAt: 2,
     resume: async () => ({
       sandboxStatus: async () => ({
-        state: "available",
-        requireSandbox: false,
+        mode: "full-access",
+        available: true,
       }),
       agentId: "agent-fixture",
       sessionId: "session-fixture",
@@ -136,8 +136,8 @@ test("--last opens the newest discovered store without a picker", async () => {
   let resumed = false;
   const resumedHost = {
     sandboxStatus: async () => ({
-      state: "available",
-      requireSandbox: false,
+      mode: "full-access",
+      available: true,
     }),
     agentId: "agent-fixture",
     sessionId: "session-fixture",
@@ -176,8 +176,8 @@ test("picker selection reopens its hidden existing database target", async () =>
   let resumed = false;
   const host = {
     sandboxStatus: async () => ({
-      state: "available",
-      requireSandbox: false,
+      mode: "full-access",
+      available: true,
     }),
     agentId: "agent-fixture",
     sessionId: "session-fixture",

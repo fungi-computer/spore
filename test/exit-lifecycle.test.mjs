@@ -28,8 +28,8 @@ test("external renderer destruction closes the client without destroying twice",
       createServiceManager: () => ({
         connect: async () => ({
           sandboxStatus: async () => ({
-            state: "available",
-            requireSandbox: false,
+            mode: "full-access",
+            available: true,
           }),
           agentId: "agent-fixture",
           sessionId: "session-fixture",
@@ -78,8 +78,8 @@ for (const signal of ["SIGHUP", "SIGTERM"]) {
         createServiceManager: () => ({
           connect: async () => ({
             sandboxStatus: async () => ({
-              state: "available",
-              requireSandbox: false,
+              mode: "full-access",
+              available: true,
             }),
             agentId: "agent-fixture",
             sessionId: "session-fixture",
@@ -186,8 +186,8 @@ test("rejected theme preference reaches the mounted frame as a visible error", a
       createServiceManager: () => ({
         connect: async () => ({
           sandboxStatus: async () => ({
-            state: "available",
-            requireSandbox: false,
+            mode: "full-access",
+            available: true,
           }),
           agentId: "agent-fixture",
           sessionId: "session-fixture",
@@ -298,8 +298,8 @@ function applicationFixture(
 function selectedClient(closed, id) {
   return {
     sandboxStatus: async () => ({
-      state: "available",
-      requireSandbox: false,
+      mode: "full-access",
+      available: true,
     }),
     agentId: "agent-fixture",
     sessionId: id,
@@ -360,7 +360,7 @@ test("an unavailable stream on the same protocol keeps ordinary reconnect availa
   let reconnectHandled;
   // Decode eagerly so reconnect's error boundary cannot swallow a stale shape.
   const serviceStatus = liveServiceStatusSchema.parse({
-    protocol: 3,
+    protocol: 4,
     version: "b".repeat(64),
     serviceId: localServiceIds.service.generate(),
     pid: 1,

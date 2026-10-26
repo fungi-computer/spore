@@ -1,5 +1,17 @@
 [
   {
+    "packages": ["@nodable/entities@3.0.0"],
+    "sourceRevision": "d2070d76a8ba07e6c7fa142caeb51ffd756e47eb",
+    "revisionEvidence": "upstream v3.0.0 release tag",
+    "notices": [
+      {
+        "file": "nodable-val-parsers-v3.0.0-LICENSE",
+        "source": "https://raw.githubusercontent.com/nodable/val-parsers/d2070d76a8ba07e6c7fa142caeb51ffd756e47eb/LICENSE",
+        "sha256": "750cb3fb6362804957ef52caaf9b5c824015be44d494637330d7cd8834d31d40"
+      }
+    ]
+  },
+  {
     "packages": ["@openai/codex@0.162.1"],
     "sourceRevision": "rust-v0.162.1",
     "revisionEvidence": "upstream release tag; commit 7a078f6bb4",

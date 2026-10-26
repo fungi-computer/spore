@@ -110,12 +110,22 @@ function assistantText(message: SessionMessage["value"]): string {
 }
 
 function frameMessages(frame: SessionFrame): readonly SessionMessage[] {
-  if (frame.kind === "progress" || frame.kind === "tool_output") return [];
+  if (
+    frame.kind === "activity" ||
+    frame.kind === "progress" ||
+    frame.kind === "tool_output"
+  )
+    return [];
   return frame.kind === "reset" ? frame.baseline.messages : frame.messages;
 }
 
 function frameTerminals(frame: SessionFrame): readonly SessionTerminal[] {
-  if (frame.kind === "progress" || frame.kind === "tool_output") return [];
+  if (
+    frame.kind === "activity" ||
+    frame.kind === "progress" ||
+    frame.kind === "tool_output"
+  )
+    return [];
   return frame.kind === "reset" ? frame.baseline.terminals : frame.terminals;
 }
 

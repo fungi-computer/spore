@@ -114,8 +114,8 @@ await assert.rejects(
       createServiceManager: () => ({
         connect: async () => ({
           sandboxStatus: async () => ({
-            state: "available",
-            requireSandbox: false,
+            mode: "full-access",
+            available: true,
           }),
           agentId: "agent-fixture",
           sessionId: "session-fixture",
@@ -357,8 +357,8 @@ for (const exitGesture of ["ctrl+c", "/exit"]) {
         auth: async () => undefined,
         createSession: async () => ({
           sandboxStatus: async () => ({
-            state: "available",
-            requireSandbox: false,
+            mode: "full-access",
+            available: true,
           }),
           agentId: "agent-fixture",
           databasePath: "/fixture/main.sqlite",
@@ -370,8 +370,8 @@ for (const exitGesture of ["ctrl+c", "/exit"]) {
         }),
         connect: async () => ({
           sandboxStatus: async () => ({
-            state: "available",
-            requireSandbox: false,
+            mode: "full-access",
+            available: true,
           }),
           agentId: "agent-fixture",
           databasePath: "/fixture/main.sqlite",

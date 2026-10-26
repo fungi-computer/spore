@@ -238,6 +238,8 @@ function applyFrame(
       activity: frame.activity,
       progress: frame.progress,
     };
+  if (frame.kind === "activity")
+    return { ...snapshot, activity: frame.activity };
   return {
     ...snapshot,
     cursor: frame.cursor,

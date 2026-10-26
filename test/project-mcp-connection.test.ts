@@ -29,8 +29,11 @@ test("CLI reads an Oyster key from stdin and saves only its authentication selec
   const root = await mkdtemp(join(tmpdir(), "fungi-oyster-mcp-cli-"));
   const home = join(root, "home");
   const key = "oyk_disposable-cli-test-key";
+  const originalBusAddress = process.env.DBUS_SESSION_BUS_ADDRESS;
   let output = "";
   try {
+    // HOME alone does not isolate Secret Service: it follows the session bus.
+    process.env.DBUS_SESSION_BUS_ADDRESS = `unix:path=${join(root, "absent-bus")}`;
     await runFungiCli(
       ["mcp", "use", "https://oyster.test/mcp", "--from-file", "-"],
       {
@@ -64,6 +67,10 @@ test("CLI reads an Oyster key from stdin and saves only its authentication selec
       { type: "api_key", key },
     );
     assert.equal((await stat(credentialPath)).mode & 0o777, 0o600);
+    assert.deepEqual(await readProjectMcpConnection(root), {
+      endpoint: "https://oyster.test/mcp",
+      authentication: "oyster-key",
+    });
     const stop = new Error("Oyster selection observed");
     let connected = false;
     await assert.rejects(
@@ -89,6 +96,9 @@ test("CLI reads an Oyster key from stdin and saves only its authentication selec
     );
     assert.equal(connected, true);
   } finally {
+    if (originalBusAddress === undefined)
+      delete process.env.DBUS_SESSION_BUS_ADDRESS;
+    else process.env.DBUS_SESSION_BUS_ADDRESS = originalBusAddress;
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -191,8 +201,8 @@ test("a successful explicit one-shot selection becomes the next default", async 
               {
                 sandboxStatus: () =>
                   Promise.resolve({
-                    state: "available",
-                    requireSandbox: false,
+                    available: true,
+                    mode: "full-access",
                   }),
                 session: {},
                 close: () => Promise.resolve(),

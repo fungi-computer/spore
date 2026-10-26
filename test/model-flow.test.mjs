@@ -155,8 +155,8 @@ async function withModels(
                   databasePath: "/fixture/main.sqlite",
                   sessionId: "main",
                   sandboxStatus: async () => ({
-                    state: "available",
-                    requireSandbox: false,
+                    mode: "full-access",
+                    available: true,
                   }),
                   effectiveModel: async () => {
                     const selected = preference?.modelId ?? "sol";

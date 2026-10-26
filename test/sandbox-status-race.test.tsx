@@ -3,16 +3,15 @@ import { act, useState } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "@fungi.computer/agar/query";
 import { createWhistle } from "@fungi.computer/whistle";
-import {
-  createSandboxNoticeClaims,
-  type TuiSandboxSource,
-  type TuiSandboxStatus,
+import type {
+  TuiSandboxSource,
+  TuiSandboxStatus,
 } from "../src/button/local-sandbox.js";
 import { TuiFrameContent } from "../src/panes/conversation/frame.js";
 import { createTuiFixture } from "./fixture.js";
 import { testPaneRender } from "./pane-render.js";
 
-test("late sandbox status from the previous Session cannot replace the current indicator", async () => {
+test("late status from a previous Session cannot replace the current mode", async () => {
   const fixture = createTuiFixture({ messages: [] });
   const query = createQueryClient();
   const commands = createWhistle();
@@ -21,31 +20,24 @@ test("late sandbox status from the previous Session cannot replace the current i
     namespace: "sandbox-status-race",
     commands: [],
   });
-  const claim = createSandboxNoticeClaims();
   const oldReply = Promise.withResolvers<TuiSandboxStatus>();
   const currentReply = Promise.resolve<TuiSandboxStatus>({
-    state: "available",
-    requireSandbox: false,
+    mode: "workspace",
+    available: true,
   });
   const oldReadStarted = Promise.withResolvers<undefined>();
   const oldSignals: AbortSignal[] = [];
-  let oldNoticeClaims = 0;
   const previous: TuiSandboxSource = {
-    identity: JSON.stringify(["agent", "previous-session"]),
+    identity: "agent/previous-session",
     read: (signal) => {
       oldSignals.push(signal);
       oldReadStarted.resolve(undefined);
       return oldReply.promise;
     },
-    takeUnavailableNotice: () => {
-      oldNoticeClaims += 1;
-      return claim("agent", "previous-session");
-    },
   };
   const current: TuiSandboxSource = {
-    identity: JSON.stringify(["agent", "current-session"]),
+    identity: "agent/current-session",
     read: () => currentReply,
-    takeUnavailableNotice: () => claim("agent", "current-session"),
   };
   let selectSource: (source: TuiSandboxSource) => void = () => {
     throw new Error("Sandbox source harness has not mounted");
@@ -79,30 +71,22 @@ test("late sandbox status from the previous Session cannot replace the current i
       await currentReply;
     });
     await act(async () =>
-      setup.waitForFrame((text) => text.includes("sandbox on")),
+      setup.waitForFrame((text) => text.includes("workspace · sandboxed")),
     );
     expect(oldSignals.length).toBeGreaterThan(0);
     expect(oldSignals.every((signal) => signal.aborted)).toBe(true);
-
-    // A response may already be queued when cancellation reaches its producer.
     await act(async () => {
       oldReply.resolve({
-        state: "unavailable",
-        requireSandbox: false,
-        reason: {
-          kind: "missing",
-          message: "Previous Session backend missing",
-        },
+        mode: "full-access",
+        available: false,
+        reason: { kind: "install", message: "Previous backend missing" },
       });
       await oldReply.promise;
     });
     await act(async () => setup.renderOnce());
     const text = setup.captureCharFrame();
-    expect(text).toContain("sandbox on");
-    expect(text).not.toContain("UNSANDBOXED");
-    expect(text).not.toContain("Sandbox unavailable; running unsandboxed.");
-    expect(oldNoticeClaims).toBe(0);
-    expect(claim("agent", "previous-session")).toBe(true);
+    expect(text).toContain("workspace · sandboxed");
+    expect(text).not.toContain("full access");
   } finally {
     act(() => {
       setup.renderer.destroy();

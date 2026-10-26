@@ -19,7 +19,7 @@ test("an updated idle client closes the old terminal and Session before resuming
   const serviceStatus = liveServiceStatusSchema.parse({
     serviceId: localServiceIds.service.generate(),
     baseUrl: "http://127.0.0.1:1234",
-    protocol: 3,
+    protocol: 4,
     version: "b".repeat(64),
     pid: 1,
     startedAt: "fixture-process-start",
@@ -54,8 +54,8 @@ test("an updated idle client closes the old terminal and Session before resuming
       createServiceManager: () => ({
         connect: async () => ({
           sandboxStatus: async () => ({
-            state: "available",
-            requireSandbox: false,
+            mode: "full-access",
+            available: true,
           }),
           agentId: "agent-fixture",
           sessionId: "session-original",

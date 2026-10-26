@@ -92,8 +92,8 @@ async function runSession() {
           createServiceManager: () => ({
             connect: async () => ({
               sandboxStatus: async () => ({
-                state: "available",
-                requireSandbox: false,
+                mode: "full-access",
+                available: true,
               }),
               agentId: "agent-fixture",
               sessionId: "session-fixture",

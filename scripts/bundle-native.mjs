@@ -22,7 +22,9 @@ const expected = nativeDigests[platform];
 if (
   expected?.patch === undefined ||
   (platform.startsWith("linux-") &&
-    (expected.bwrap === undefined || expected.seccomp === undefined))
+    (expected.bwrap === undefined ||
+      expected.seccomp === undefined ||
+      expected.seccompWorkspace === undefined))
 )
   throw new Error(`Built CLI has no native digests for ${platform}`);
 const digestOf = async (path) =>
@@ -62,6 +64,7 @@ const linuxFiles =
     ? [
         "bin/fungi-bwrap",
         "bin/fungi-seccomp.bpf",
+        "bin/fungi-seccomp-workspace.bpf",
         "bwrap-build.json",
         "LICENSE.bubblewrap",
         "LICENSE.libcap",
@@ -98,17 +101,23 @@ if (os === "linux") {
     )
   )
     throw new Error("Seccomp filter does not match the current generator pin");
-  const filterDigest = createHash("sha256")
-    .update(await readFile(resolve(buildRoot, "fungi-seccomp.bpf")))
-    .digest("hex");
-  const recordedFilterDigest = (
-    await readFile(resolve(buildRoot, "fungi-seccomp.bpf.sha256"), "utf8")
-  ).trim();
-  if (
-    bwrap.seccomp.sha256 !== filterDigest ||
-    recordedFilterDigest !== filterDigest
-  )
-    throw new Error("fungi-seccomp.bpf provenance does not match its digest");
+  for (const [name, recorded, embedded] of [
+    ["fungi-seccomp.bpf", bwrap.seccomp.readOnlySha256, expected.seccomp],
+    [
+      "fungi-seccomp-workspace.bpf",
+      bwrap.seccomp.workspaceSha256,
+      expected.seccompWorkspace,
+    ],
+  ]) {
+    const filterDigest = await digestOf(resolve(buildRoot, name));
+    const sidecar = (
+      await readFile(resolve(buildRoot, `${name}.sha256`), "utf8")
+    ).trim();
+    if (recorded !== filterDigest || sidecar !== filterDigest)
+      throw new Error(`${name} provenance does not match its digest`);
+    if (embedded !== filterDigest)
+      throw new Error(`Native package digest mismatch with built CLI: ${name}`);
+  }
   // Missing payload/source/license is a packaging failure, never a patch-only
   // Linux release or a fallback to a host's PATH.
   for (const file of linuxFiles) {
@@ -121,6 +130,10 @@ if (os === "linux") {
   await assertDigest(
     resolve(output, "bin/fungi-seccomp.bpf"),
     expected.seccomp,
+  );
+  await assertDigest(
+    resolve(output, "bin/fungi-seccomp-workspace.bpf"),
+    expected.seccompWorkspace,
   );
   nativeBuilds.push(bwrap);
 }
@@ -166,15 +179,14 @@ Upstream terms are in \`LICENSE.codex\` and \`THIRD_PARTY_NOTICES\`.
 ${
   os === "linux"
     ? `
-Linux also carries the pinned bubblewrap engine and seccomp filter and build
+Linux also carries the pinned bubblewrap engine, both permission-mode seccomp filters and build
 provenance. The runtime verifies them against the digests embedded in Fungi's
 built JS, never writable sidecars. Its unmodified upstream source is in \`SOURCE.bubblewrap.tar.xz\`;
 the recipe is in \`bwrap-build-source\`. Terms are in \`LICENSE.bubblewrap\`
 and \`LICENSE.libcap\`; the maintained filter generator's terms are in
 \`LICENSE.sandbox-runtime\`.
 
-Limits what the agent's commands can change to your project folder and blocks their network access. They can still read other files on this computer, and this is not a security boundary against a hostile program.
-Pathname Unix sockets and datagram socketpair remain known v1 limits.
+Workspace permits host networking and bounded writable package caches; Read-only blocks direct command networking and restricts writes to Agent temp. Commands can still read other files on this computer, and this is not a security boundary against a hostile program.
 `
     : ""
 }

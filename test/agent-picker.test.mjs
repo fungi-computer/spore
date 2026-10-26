@@ -66,8 +66,8 @@ async function launch({
   let shown;
   const host = {
     sandboxStatus: async () => ({
-      state: "available",
-      requireSandbox: false,
+      mode: "full-access",
+      available: true,
     }),
     agentId: "agent",
     sessionId: "session",
