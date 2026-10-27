@@ -104,10 +104,16 @@ export function useTerminalCancellation(
     ): Promise<void> => {
       if (target === "queued" || target === "waiting") {
         setPending(true);
-        return boundedCancellation(
-          view.cancelWaiting,
-          view.cancelRequestTimeoutMs,
-        ).finally(() => {
+        // A waiting row's cancel command may ask the user to confirm, so only
+        // the queued path (a plain service request) carries the deadline.
+        const request =
+          target === "waiting"
+            ? Promise.resolve().then(view.cancelWaiting)
+            : boundedCancellation(
+                view.cancelWaiting,
+                view.cancelRequestTimeoutMs,
+              );
+        return request.finally(() => {
           if (attempt.current === undefined) setPending(false);
         });
       }

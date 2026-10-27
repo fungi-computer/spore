@@ -76,7 +76,7 @@ export async function runExtensionCommand(
       stdout.write(
         `Skills (${String(count)}): ${installed.skills.join(", ")}.\n`,
       );
-      const question = `Add its ${String(count)} ${count === 1 ? "skill" : "skills"}? (Y/n)`;
+      const question = `Add its ${String(count)} ${count === 1 ? "skill" : "skills"}?`;
       const accepted =
         input.skills ??
         (input.confirm === undefined

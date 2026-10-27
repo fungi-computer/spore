@@ -2,7 +2,7 @@
 // one worded footer line, Esc/closing pause the goal, finished goals become
 // chat lines, and the replace prompt appears only for a live or paused goal.
 import assert from "node:assert/strict";
-import { runTuiCli } from "../dist/cli-runtime.js";
+import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 import { executeAlias } from "./command-selection.js";
 import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { Database } from "bun:sqlite";
@@ -346,8 +346,14 @@ try {
   await enter();
   await until("the paused goal menu", (text) => text.includes("Resume goal"));
   await shot("03-goal-menu-after-esc");
-  assert.match(frame(), /Goal paused: Tidy the menus \(Stopped\)/u);
-  assert.doesNotMatch(frame(), /Pause goal/u);
+  // The menu titles itself from the goal and explains the pause by its cause.
+  assert.match(frame(), /Goal paused: Tidy the menus/u);
+  assert.match(frame(), /You stopped the goal's turn\./u);
+  assert.match(frame(), /Started\s+\d\d:\d\d today/u);
+  assert.match(frame(), /▶ Resume goal/u);
+  assert.match(frame(), /Replace goal…/u);
+  assert.match(frame(), /Clear goal…/u);
+  assert.doesNotMatch(frame(), /Pause goal|\(Stopped\)/u);
   await escape();
   await until("the menu to close", (text) => !text.includes("Resume goal"));
   await clearDraft();

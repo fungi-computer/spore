@@ -11,6 +11,8 @@ export function Field({
   placeholder,
   secret = false,
   maxLength,
+  initialValue = "",
+  onInput,
   onSubmit,
   onKeyDown,
   colors,
@@ -18,13 +20,16 @@ export function Field({
   placeholder?: string | undefined;
   secret?: boolean | undefined;
   maxLength: number;
+  /** Text the input starts with, e.g. a draft kept across a remount. */
+  initialValue?: string | undefined;
+  onInput?: ((value: string) => void) | undefined;
   onSubmit: (value: string) => void;
   /** Keys the input does not consume itself, e.g. Esc. */
   onKeyDown?: ((event: KeyEvent) => void) | undefined;
   colors: TuiPresentation["colors"];
 }>) {
   const input = useRef<InputRenderable>(null);
-  const [length, setLength] = useState(0);
+  const [length, setLength] = useState(initialValue.length);
   return (
     <box flexDirection="row" backgroundColor={colors.selection} paddingX={1}>
       {secret ? (
@@ -40,12 +45,14 @@ export function Field({
           ref={input}
           width="100%"
           maxLength={maxLength}
+          value={initialValue}
           placeholder={terminalText(placeholder ?? "")}
           showCursor={!secret}
           selectable={!secret}
           focused
           onInput={(value) => {
             setLength(value.length);
+            onInput?.(value);
           }}
           onSubmit={() => {
             onSubmit(input.current?.value ?? "");

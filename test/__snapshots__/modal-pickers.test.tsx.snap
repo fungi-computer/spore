@@ -1,0 +1,423 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`model-provider picker at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+        Choose a provider
+        Or follow the Agent's own model.
+
+        1   Use agent model
+        2   Fungi
+        3 ▶ ● OpenAI
+        4   Anthropic
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`model-model picker at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+        Choose a model
+        Models from OpenAI.
+
+        1 ▶ ● GPT-6.1 Sol
+        2   GPT-6.1 Luna
+        3   GPT-6.1 Astra
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`model-thinking picker at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+        Thinking level for GPT-6.1 Sol
+        How long the model thinks before it answers.
+
+        1   Model default
+        2   low
+        3 ▶ ● medium
+        4   high
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`login-provider picker at 80 columns 1`] = `
+"
+
+
+
+
+
+
+        Sign in to a model provider
+        Use a subscription or an API key. You can add more later.
+
+        SIGNED IN
+        1 ▶ OpenAI                                          Subscription
+
+        POPULAR
+        2   Anthropic                            Subscription or API key
+        3   Google                                               API key
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`login-signed-in picker at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+        Already signed in to OpenAI
+        Switch to another account, or sign out of this one.
+
+        1 ▶ Switch account
+        2   Sign out…
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`login-sign-out picker at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+        Sign out of OpenAI?
+        Conversations on this device stop using this account.
+
+        1 ▶ Keep signed in
+        2   Sign out
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`fork picker at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+        Fork from which message?
+        Start a new conversation from your message.
+
+        1 ▶ Add a picker for the model and keep it marked          14:02
+        2   Why does the resume list drop today's sessions?    Yesterday
+        3   Fix the long label that wraps in the fork picker  2026-10-24
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`home picker at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+        Choose a Home Computer
+        The Agent reads and edits files here by default.
+
+        1 ▶ ● laptop
+        2   box
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`login-manual-code picker at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+        Paste the code from your browser
+        Connecting over SSH? Paste the URL here instead of opening a
+        browser.
+
+
+
+        Enter submit · Esc close"
+`;
+
+exports[`model-provider picker at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Choose a provider
+                            Or follow the Agent's own model.
+
+                            1   Use agent model
+                            2   Fungi
+                            3 ▶ ● OpenAI
+                            4   Anthropic
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`model-model picker at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Choose a model
+                            Models from OpenAI.
+
+                            1 ▶ ● GPT-6.1 Sol
+                            2   GPT-6.1 Luna
+                            3   GPT-6.1 Astra
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`model-thinking picker at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Thinking level for GPT-6.1 Sol
+                            How long the model thinks before it answers.
+
+                            1   Model default
+                            2   low
+                            3 ▶ ● medium
+                            4   high
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`login-provider picker at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Sign in to a model provider
+                            Use a subscription or an API key. You can add more later.
+
+                            SIGNED IN
+                            1 ▶ OpenAI                                          Subscription
+
+                            POPULAR
+                            2   Anthropic                            Subscription or API key
+                            3   Google                                               API key
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`login-signed-in picker at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Already signed in to OpenAI
+                            Switch to another account, or sign out of this one.
+
+                            1 ▶ Switch account
+                            2   Sign out…
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`login-sign-out picker at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Sign out of OpenAI?
+                            Conversations on this device stop using this account.
+
+                            1 ▶ Keep signed in
+                            2   Sign out
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`fork picker at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Fork from which message?
+                            Start a new conversation from your message.
+
+                            1 ▶ Add a picker for the model and keep it marked          14:02
+                            2   Why does the resume list drop today's sessions?    Yesterday
+                            3   Fix the long label that wraps in the fork picker  2026-10-24
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`home picker at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Choose a Home Computer
+                            The Agent reads and edits files here by default.
+
+                            1 ▶ ● laptop
+                            2   box
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`login-manual-code picker at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Paste the code from your browser
+                            Connecting over SSH? Paste the URL here instead of opening a
+                            browser.
+
+
+
+                            Enter submit · Esc close"
+`;

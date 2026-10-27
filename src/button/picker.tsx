@@ -23,6 +23,8 @@ export type PickerProps = Readonly<{
   onCancel: () => void;
   onSelect: (index: number) => void;
   currentIndex?: number | undefined;
+  /** Where the highlight starts when it is not the current (●) choice. */
+  initialIndex?: number | undefined;
   searchable?: boolean;
   showDescription?: boolean;
   collapsedGroups?: readonly string[] | undefined;
@@ -38,7 +40,7 @@ export type PickerProps = Readonly<{
   disabled?: boolean | undefined;
   /** A key the Picker does not own; return true to consume it. */
   onKey?: ((event: KeyEvent) => boolean) | undefined;
-  /** Dialog key hints; defaults to choose · select · cancel. */
+  /** Dialog key hints; defaults to choose · select · close. */
   hints?: readonly KeyHint[] | undefined;
   colors: TuiPresentation["colors"];
 }>;
@@ -46,7 +48,7 @@ export type PickerProps = Readonly<{
 const defaultHints: readonly KeyHint[] = [
   { keys: "↑↓", label: "choose", priority: 1 },
   { keys: "Enter", label: "select", priority: 0 },
-  { keys: "Esc", label: "cancel", priority: 2 },
+  { keys: "Esc", label: "close", priority: 2 },
 ];
 
 type SelectableRow = Extract<PickerRow, { kind: "choice" | "expand" }>;
@@ -87,6 +89,7 @@ export function Picker({
   onCancel,
   onSelect,
   currentIndex,
+  initialIndex,
   collapsedGroups: rawCollapsedGroups,
   collapsedLabel: rawCollapsedLabel,
   visibleLimit,
@@ -140,7 +143,7 @@ export function Picker({
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [selected, setSelected] = useState(
-    `choice-${String(currentIndex ?? 0)}`,
+    `choice-${String(initialIndex ?? currentIndex ?? 0)}`,
   );
   const selection = useRef(selected);
   const selectKey = (key: string) => {
@@ -469,7 +472,13 @@ export function Picker({
                 minWidth={0}
               >
                 <text
-                  fg={active ? colors.selectionForeground : colors.foreground}
+                  fg={
+                    row.kind === "choice" && row.choice.tone === "destructive"
+                      ? colors.error
+                      : active
+                        ? colors.selectionForeground
+                        : colors.foreground
+                  }
                   flexShrink={fixedDescription ? 1 : 0}
                   flexGrow={fixedDescription ? 1 : 0}
                   minWidth={0}

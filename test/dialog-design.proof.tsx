@@ -206,7 +206,7 @@ async function until(setup: Setup, text: string) {
 async function login(setup: Setup, provider?: string, subscription = false) {
   await type(setup, "/login");
   await press(setup, "enter");
-  await until(setup, "Choose a model provider");
+  await until(setup, "Sign in to a model provider");
   if (provider === undefined) return;
   await type(setup, provider);
   await press(setup, "enter");

@@ -2,7 +2,8 @@ import { HostColorsContext, useHostColors } from "./button/dialog-surface.js";
 import type { createRoot } from "@opentui/react";
 import type { QueryClient } from "@tanstack/query-core";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { useEffect, useSyncExternalStore } from "react";
+import { useTerminalDimensions } from "@opentui/react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { DialogHost, useDialog } from "./button/dialog.js";
 import {
   TuiWorkspace,
@@ -15,6 +16,12 @@ import {
   SessionPickerContent,
   type SessionPickerProps,
 } from "./session-picker.js";
+import { HintRow } from "./button/hint-row.js";
+import {
+  ModalDetails,
+  ModalHeader,
+  modalContentWidth,
+} from "./button/modal.js";
 import { Picker } from "./button/picker.js";
 import { useTerminalTheme } from "./button/terminal-theme.js";
 import { CopySurface } from "./button/copy-surface.js";
@@ -164,16 +171,22 @@ function MountedFrameContent({ store }: Readonly<{ store: FrameStore }>) {
 }
 
 /** The one thing a running window says once a newer client replaced its service. */
-function ServiceUpdated({
+export function ServiceUpdated({
   message,
   exit,
 }: Readonly<{ message: string; exit: () => void }>) {
   const colors = useHostColors();
+  const dimensions = useTerminalDimensions();
+  const compact = dimensions.height < 14;
   return (
-    <box flexDirection="column" flexGrow={1}>
-      <text fg={colors.warning}>{message}</text>
+    <box flexDirection="column" flexGrow={1} rowGap={compact ? 0 : 1}>
+      <ModalHeader
+        content={{ title: "Fungi was updated", summary: message }}
+        width={modalContentWidth(dimensions.width)}
+        compact={compact}
+        colors={colors}
+      />
       <Picker
-        title="Fungi was updated"
         colors={colors}
         choices={[{ name: "Exit this window" }]}
         onSelect={exit}
@@ -192,26 +205,81 @@ export function renderTuiServiceUpdated(
   store.update({ ...store.read(), serviceUpdated: { message, exit } });
 }
 
-function ConnectionRecovery({
+export function ConnectionRecovery({
   message,
   retry,
   exit,
 }: Readonly<{ message: string; retry: () => void; exit: () => void }>) {
   const colors = useHostColors();
+  const dimensions = useTerminalDimensions();
+  const [showDetails, setShowDetails] = useState(false);
+  const compact = dimensions.height < 14;
+  const width = modalContentWidth(dimensions.width);
+  const content = {
+    title: "Connection unavailable",
+    summary: "Your saved conversations are unchanged.",
+    details: [{ label: "Error", value: message }],
+  };
+  if (showDetails)
+    return (
+      <box
+        flexDirection="column"
+        flexGrow={1}
+        rowGap={compact ? 0 : 1}
+        focusable
+        focused
+        onKeyDown={(event) => {
+          if (event.name === "d" || event.name === "escape") {
+            event.preventDefault();
+            setShowDetails(false);
+          }
+        }}
+      >
+        <ModalDetails
+          content={content}
+          width={width}
+          maxRows={dimensions.height - 8}
+          colors={colors}
+        />
+        <HintRow
+          hints={[
+            { keys: "d", label: "back", priority: 0 },
+            { keys: "Esc", label: "back", priority: 1 },
+          ]}
+          width={width}
+          colors={colors}
+        />
+      </box>
+    );
   return (
-    <box flexDirection="column" flexGrow={1}>
-      <text fg={colors.error}>{message}</text>
+    <box flexDirection="column" flexGrow={1} rowGap={compact ? 0 : 1}>
+      <ModalHeader
+        content={content}
+        width={width}
+        compact={compact}
+        colors={colors}
+      />
       <Picker
-        title="Connection unavailable"
         colors={colors}
         choices={[{ name: "Retry connection" }, { name: "Exit" }]}
+        hints={[
+          { keys: "↑↓", label: "choose", priority: 1 },
+          { keys: "Enter", label: "select", priority: 0 },
+          { keys: "d", label: "details", priority: 2 },
+          { keys: "Ctrl+C", label: "exit", priority: 2 },
+        ]}
+        onKey={(event) => {
+          if (event.name !== "d" || event.ctrl || event.meta || event.option)
+            return false;
+          setShowDetails(true);
+          return true;
+        }}
         onSelect={(index) => {
           if (index === 0) retry();
           else if (index === 1) exit();
         }}
         onCancel={() => undefined}
       />
-      <text>Ctrl+C exits. Your saved conversations are unchanged.</text>
     </box>
   );
 }

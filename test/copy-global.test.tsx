@@ -41,7 +41,7 @@ test("login handoff offers a copy action and copies its whole URL through OSC 52
       interaction.notify({ type: "handoff", url: link, code: "ABCD-1234" });
     });
     await act(async () =>
-      setup.waitForFrame((frame) => frame.includes("c = copy link")),
+      setup.waitForFrame((frame) => frame.includes("c copy link")),
     );
     expect(setup.captureCharFrame()).toContain("ABCD-1234");
     await act(async () => setup.mockInput.typeText("c"));
@@ -76,7 +76,7 @@ test("login dialog mouse selection copies without a session frame", async () => 
       interaction.notify({ type: "handoff", url: link });
     });
     await act(async () =>
-      setup.waitForFrame((frame) => frame.includes("c = copy link")),
+      setup.waitForFrame((frame) => frame.includes("c copy link")),
     );
     const lines = setup.captureCharFrame().split("\n");
     const y = lines.findIndex((line) =>
@@ -122,7 +122,7 @@ test("Alt+C copies the handoff URL while the paste-code input keeps its own typi
       }),
     }));
     await act(async () =>
-      setup.waitForFrame((frame) => frame.includes("Alt+C while typing")),
+      setup.waitForFrame((frame) => frame.includes("Alt+C copy link")),
     );
     act(() => {
       setup.mockInput.pressKey("c", { meta: true });

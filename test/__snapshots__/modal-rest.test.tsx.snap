@@ -1,0 +1,1133 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`goal-menu at 80 columns 1`] = `
+"
+
+
+
+
+
+        Working on: Check the build and fix what broke
+        Fungi keeps working until it is done or you pause it.
+
+        Started  09:00 today
+        Goal     Check the build and fix what broke. If the same test
+                 fails twice, stop and tell me which one it was and what
+                 you tried, then wait for my answer before… d shows all
+
+        1 ▶ Pause goal
+        2   Replace goal…
+        3   Clear goal…
+
+        ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`goal-paused at 80 columns 1`] = `
+"
+
+
+
+
+
+        Goal paused: Check the build and fix what broke
+        You paused this goal.
+
+        Started  09:00 today
+        Goal     Check the build and fix what broke. If the same test
+                 fails twice, stop and tell me which one it was and what
+                 you tried, then wait for my answer before… d shows all
+
+        1 ▶ Resume goal
+        2   Replace goal…
+        3   Clear goal…
+
+        ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`goal-clear-confirm at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+        Clear this goal?
+        It moves to history and can't be resumed.
+
+        1 ▶ Keep goal
+        2   Clear goal
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`goal-replace at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+        What should this Session work toward?
+
+         Describe the finished result
+
+        Enter submit · Esc close"
+`;
+
+exports[`goal-replace-confirm at 80 columns 1`] = `
+"
+
+
+
+
+
+
+        Replace the live goal?
+        The current goal moves to history and can't be resumed.
+
+        Current  Check the build and fix what broke
+        New      Plant moss
+
+        1 ▶ Keep current goal
+        2   Replace and start
+
+        ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`loop-menu at 80 columns 1`] = `
+"
+
+
+
+
+
+        Loop running: Check the build and fix what broke
+        The Agent decides when to run it again.
+
+        Mode     Self-paced
+        Started  By you
+        Prompt   Check the build and fix what broke. If the same test
+                 fails twice, stop and tell me which one it was and what
+                 you tried, then wait for my answer before… d shows all
+
+        1 ▶ Pause loop
+        2   Stop loop…
+
+        ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`loop-stop-confirm at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+        Stop this loop?
+        It won't run again. You can start a new one.
+
+        1 ▶ Keep loop
+        2   Stop loop
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`skills-list at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+        Skills (2)
+        2 skills were not loaded. Details shows why.
+
+        1 ▶ botanical-retention                    Retain Botanical code
+        2   herdr                                       Coordinate teams
+
+        ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`question-short at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+        Which store should hold the notes?
+
+        1 ▶ SQLite                                             One file.
+        2   PostgreSQL                                         A server.
+        3   Write an answer
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`question-long at 80 columns 1`] = `
+"
+
+
+
+
+
+
+        The Agent has a question
+
+        Question  Which of these storage engines should hold the notes,
+                  given that they must survive a restart, be searchable,
+                  and stay small enough to sync over a slow… d shows all
+
+        1 ▶ SQLite                                             One file.
+        2   PostgreSQL                                         A server.
+        3   Write an answer
+
+        ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`question-multiple at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+        Which deliverables should ship?
+        Separate your picks with commas, or leave blank to write your
+        own.
+
+        Options  Docs · Examples · Tests
+
+
+
+        Enter submit · Alt+D details · Esc close"
+`;
+
+exports[`Archive and Remove extension, as the real commands ask, at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+        Archive which Agent?
+        Its conversations and files stay.
+
+        1 ▶ broody-seeker                               12 conversations
+        2   fixer                                         1 conversation
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`Archive and Remove extension, as the real commands ask, at 80 columns 2`] = `
+"
+
+
+
+
+
+
+        ● Management
+
+        Archive broody-seeker?
+        Its conversations and files stay. You can restore it later.
+
+        Chats  12
+
+        1 ▶ Keep Agent
+        2   Archive
+
+        ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`Archive and Remove extension, as the real commands ask, at 80 columns 3`] = `
+"
+
+
+
+
+
+
+        Manage extensions
+        Extensions add tools, programs and skills to your Agents.
+
+        1 ▶ List installed extensions
+        2   Add an extension
+                      Install trusted code from Git, npm or a local path
+        3   Remove an extension
+        4   Enable an extension or its skills
+        5   Disable an extension or its skills
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`Archive and Remove extension, as the real commands ask, at 80 columns 4`] = `
+"
+
+
+
+
+
+
+
+        ● Management
+
+        Add an extension
+        Extensions run inside Fungi with access to every Agent.
+
+         Git URL, npm package or folder path
+
+        Enter submit · Esc close"
+`;
+
+exports[`Archive and Remove extension, as the real commands ask, at 80 columns 5`] = `
+"
+
+
+
+
+
+
+
+        ● Management
+
+        Turn it off where?
+
+        1 ▶ This folder's client and programs
+        2   This folder's Agent tools
+        3   This folder's Agent skills
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`Archive and Remove extension, as the real commands ask, at 80 columns 6`] = `
+"
+
+
+
+
+
+
+
+        ● Management
+
+        Remove acme-tools?
+        It stops working in every folder where it was turned on.
+
+        1 ▶ Keep extension
+        2   Remove
+
+        ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`Service updated, Connection unavailable and the termination confirm at 80 columns 1`] = `
+"Fungi was updated
+The Fungi service was updated. Restart this window.
+
+1 ▶ Exit this window
+
+↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`Service updated, Connection unavailable and the termination confirm at 80 columns 2`] = `
+"Connection unavailable
+Your saved conversations are unchanged.
+
+1 ▶ Retry connection
+2   Exit
+
+↑↓ choose · Enter select · d details · Ctrl+C exit · 1–9 pick"
+`;
+
+exports[`Service updated, Connection unavailable and the termination confirm at 80 columns 3`] = `
+"
+
+
+
+
+
+
+
+
+        Quit and terminate running shell jobs?
+        Jobs still running in the shell stop when it closes.
+
+        1 ▶ Keep shells running
+        2   Quit and terminate
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`Service updated, Connection unavailable and the termination confirm at 80 columns 4`] = `
+"Details
+
+Error  connect ECONNREFUSED 127.0.0.1:4317
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+d back · Esc back"
+`;
+
+exports[`Service recovery overlay at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+        Restarting the service
+        Your conversation will resume."
+`;
+
+exports[`Service recovery overlay at 80 columns 2`] = `
+"
+
+
+
+
+
+
+
+
+
+        The service is not answering
+        Run \`fungi resume\` in another terminal. This conversation keeps
+        trying and keeps your draft.
+
+        Error  connect ECONNREFUSED 127.0.0.1:4317"
+`;
+
+exports[`Service recovery overlay at 80 columns 3`] = `
+"
+
+
+
+
+
+
+
+
+
+
+        Can't use the service
+        The Fungi service was updated. Restart this window."
+`;
+
+exports[`goal-menu at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Working on: Check the build and fix what broke
+                            Fungi keeps working until it is done or you pause it.
+
+                            Started  09:00 today
+                            Goal     Check the build and fix what broke. If the same test
+                                     fails twice, stop and tell me which one it was and what
+                                     you tried, then wait for my answer before… d shows all
+
+                            1 ▶ Pause goal
+                            2   Replace goal…
+                            3   Clear goal…
+
+                            ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`goal-paused at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Goal paused: Check the build and fix what broke
+                            You paused this goal.
+
+                            Started  09:00 today
+                            Goal     Check the build and fix what broke. If the same test
+                                     fails twice, stop and tell me which one it was and what
+                                     you tried, then wait for my answer before… d shows all
+
+                            1 ▶ Resume goal
+                            2   Replace goal…
+                            3   Clear goal…
+
+                            ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`goal-clear-confirm at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Clear this goal?
+                            It moves to history and can't be resumed.
+
+                            1 ▶ Keep goal
+                            2   Clear goal
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`goal-replace at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            What should this Session work toward?
+
+                             Describe the finished result
+
+                            Enter submit · Esc close"
+`;
+
+exports[`goal-replace-confirm at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Replace the live goal?
+                            The current goal moves to history and can't be resumed.
+
+                            Current  Check the build and fix what broke
+                            New      Plant moss
+
+                            1 ▶ Keep current goal
+                            2   Replace and start
+
+                            ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`loop-menu at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Loop running: Check the build and fix what broke
+                            The Agent decides when to run it again.
+
+                            Mode     Self-paced
+                            Started  By you
+                            Prompt   Check the build and fix what broke. If the same test
+                                     fails twice, stop and tell me which one it was and what
+                                     you tried, then wait for my answer before… d shows all
+
+                            1 ▶ Pause loop
+                            2   Stop loop…
+
+                            ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`loop-stop-confirm at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Stop this loop?
+                            It won't run again. You can start a new one.
+
+                            1 ▶ Keep loop
+                            2   Stop loop
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`skills-list at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Skills (2)
+                            2 skills were not loaded. Details shows why.
+
+                            1 ▶ botanical-retention                    Retain Botanical code
+                            2   herdr                                       Coordinate teams
+
+                            ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`question-short at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Which store should hold the notes?
+
+                            1 ▶ SQLite                                             One file.
+                            2   PostgreSQL                                         A server.
+                            3   Write an answer
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`question-long at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            The Agent has a question
+
+                            Question  Which of these storage engines should hold the notes,
+                                      given that they must survive a restart, be searchable,
+                                      and stay small enough to sync over a slow… d shows all
+
+                            1 ▶ SQLite                                             One file.
+                            2   PostgreSQL                                         A server.
+                            3   Write an answer
+
+                            ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`question-multiple at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Which deliverables should ship?
+                            Separate your picks with commas, or leave blank to write your
+                            own.
+
+                            Options  Docs · Examples · Tests
+
+
+
+                            Enter submit · Alt+D details · Esc close"
+`;
+
+exports[`Archive and Remove extension, as the real commands ask, at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Archive which Agent?
+                            Its conversations and files stay.
+
+                            1 ▶ broody-seeker                               12 conversations
+                            2   fixer                                         1 conversation
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`Archive and Remove extension, as the real commands ask, at 120 columns 2`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            ● Management
+
+                            Archive broody-seeker?
+                            Its conversations and files stay. You can restore it later.
+
+                            Chats  12
+
+                            1 ▶ Keep Agent
+                            2   Archive
+
+                            ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`Archive and Remove extension, as the real commands ask, at 120 columns 3`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Manage extensions
+                            Extensions add tools, programs and skills to your Agents.
+
+                            1 ▶ List installed extensions
+                            2   Add an extension
+                                          Install trusted code from Git, npm or a local path
+                            3   Remove an extension
+                            4   Enable an extension or its skills
+                            5   Disable an extension or its skills
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`Archive and Remove extension, as the real commands ask, at 120 columns 4`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            ● Management
+
+                            Add an extension
+                            Extensions run inside Fungi with access to every Agent.
+
+                             Git URL, npm package or folder path
+
+                            Enter submit · Esc close"
+`;
+
+exports[`Archive and Remove extension, as the real commands ask, at 120 columns 5`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            ● Management
+
+                            Turn it off where?
+
+                            1 ▶ This folder's client and programs
+                            2   This folder's Agent tools
+                            3   This folder's Agent skills
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`Archive and Remove extension, as the real commands ask, at 120 columns 6`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            ● Management
+
+                            Remove acme-tools?
+                            It stops working in every folder where it was turned on.
+
+                            1 ▶ Keep extension
+                            2   Remove
+
+                            ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`Service updated, Connection unavailable and the termination confirm at 120 columns 1`] = `
+"Fungi was updated
+The Fungi service was updated. Restart this window.
+
+1 ▶ Exit this window
+
+↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`Service updated, Connection unavailable and the termination confirm at 120 columns 2`] = `
+"Connection unavailable
+Your saved conversations are unchanged.
+
+1 ▶ Retry connection
+2   Exit
+
+↑↓ choose · Enter select · d details · Ctrl+C exit · 1–9 pick"
+`;
+
+exports[`Service updated, Connection unavailable and the termination confirm at 120 columns 3`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Quit and terminate running shell jobs?
+                            Jobs still running in the shell stop when it closes.
+
+                            1 ▶ Keep shells running
+                            2   Quit and terminate
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`Service updated, Connection unavailable and the termination confirm at 120 columns 4`] = `
+"Details
+
+Error  connect ECONNREFUSED 127.0.0.1:4317
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+d back · Esc back"
+`;
+
+exports[`Service recovery overlay at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Restarting the service
+                            Your conversation will resume."
+`;
+
+exports[`Service recovery overlay at 120 columns 2`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            The service is not answering
+                            Run \`fungi resume\` in another terminal. This conversation keeps
+                            trying and keeps your draft.
+
+                            Error  connect ECONNREFUSED 127.0.0.1:4317"
+`;
+
+exports[`Service recovery overlay at 120 columns 3`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Can't use the service
+                            The Fungi service was updated. Restart this window."
+`;
+
+exports[`loop-start at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+        What should the loop repeat?
+        Start with 5m or 1h for a fixed interval.
+
+         Check the build and fix what broke
+
+        Enter submit · Esc close"
+`;
+
+exports[`loop-start at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            What should the loop repeat?
+                            Start with 5m or 1h for a fixed interval.
+
+                             Check the build and fix what broke
+
+                            Enter submit · Esc close"
+`;

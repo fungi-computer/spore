@@ -194,7 +194,9 @@ for (const command of ["resume", "fork"]) {
         await setup.mockInput.typeText(`/${command}`);
       });
       await picker(
-        command === "resume" ? "Saved conversation" : "Fork from message",
+        command === "resume"
+          ? "Saved conversation"
+          : "Fork from which message?",
         enter,
       );
       assert.deepEqual(opened, ["original"]);

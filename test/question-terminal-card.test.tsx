@@ -181,7 +181,9 @@ test("terminal questions leave no passive, row-answer or slash-answer card", asy
         }
         await act(async () => setup.renderOnce());
         await act(async () =>
-          setup.waitForFrame((value) => value.includes("Esc cancel")),
+          setup.waitForFrame((value) =>
+            value.includes("↑↓ choose · Enter select · Esc close"),
+          ),
         );
         expect(calls).toBe(1);
       }

@@ -16,7 +16,6 @@ import type { SessionExtensionSlots } from "@fungi.computer/shiitake/client";
 import { TuiFrame } from "../src/frame.js";
 import { createTuiFixture } from "./fixture.js";
 
-const project = "/work/.agents/skills";
 const personal = "/home/fixture/.agents/skills";
 
 // The wire reply of the skills extension's `/skills` command.
@@ -24,17 +23,17 @@ const listing = {
   type: "prompt",
   prompt: {
     type: "choice",
-    message: "2 skills discovered",
+    message: "Skills (2)",
     options: [
       {
         value: "botanical-retention",
         label: "botanical-retention",
-        description: `${project}/botanical-retention/SKILL.md`,
+        description: "Retain Botanical code",
       },
       {
         value: "herdr",
         label: "herdr",
-        description: `${personal}/herdr/SKILL.md`,
+        description: "Coordinate teams",
       },
     ],
   },
@@ -48,7 +47,7 @@ const details = {
   },
 } satisfies WhistleCatalogStepV1 & Json;
 
-test("/skills lists each discovered skill beside the file it came from", async () => {
+test("/skills lists each discovered skill beside what it does", async () => {
   notifyManager.setScheduler(queueMicrotask);
   const fixture = createTuiFixture();
   const calls: [string, unknown][] = [];
@@ -107,17 +106,18 @@ test("/skills lists each discovered skill beside the file it came from", async (
     await frame("Ask anything");
     await act(async () => setup.mockInput.typeText("/skills"));
     await key("RETURN");
-    await frame("2 skills discovered");
+    await frame("Skills (2)");
     const shown = setup.captureCharFrame();
-    // Each skill's name is followed by its SKILL.md, which names its folder.
+    // Each skill's name is followed by its one-line description, never a path.
     const order = [
       "botanical-retention",
-      `${project}/botanical-retention/SKILL.md`,
+      "Retain Botanical code",
       "herdr",
-      `${personal}/herdr/SKILL.md`,
+      "Coordinate teams",
     ].map((text) => shown.indexOf(text));
     expect(order.every((at) => at >= 0)).toBe(true);
     expect(order).toEqual([...order].sort((left, right) => left - right));
+    expect(shown).not.toContain("SKILL.md");
     await key("ARROW_DOWN");
     await key("RETURN");
     await frame("Coordinate teams");

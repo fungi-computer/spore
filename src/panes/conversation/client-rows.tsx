@@ -205,10 +205,9 @@ export function useClientRowCommands(
               const selected = await interaction.prompt({
                 type: "choice",
                 message: "Choose a row",
-                options: rows.map(({ entryId, row }, index) => ({
+                options: rows.map(({ row }, index) => ({
                   value: String(index),
                   label: row.title,
-                  description: entryId,
                 })),
               });
               const row = rows.find(

@@ -25,7 +25,7 @@ test("fungi logout uses the shared offline account owner without a Local lifecyc
     // Generated with jose SignJWT and a synthetic HS256 key; routing claims
     // only, never an authorization token for a real account.
     access:
-      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhY2NvdW50LWNsaS1sb2dvdXQiLCJodHRwczovL2Z1bmdpLmNvbXB1dGVyL29hdXRoL2xvZ2luIjoibG9naW4tY2xpLWxvZ291dCJ9.7OJZ-dzs_ObiBksDQqihd5nfgt6iyRnI3mjWycLZgPQ",
+      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhY2NvdW50LWNsaS1sb2dvdXQiLCJodHRwczovL2Z1bmdpLmNvbXB1dGVyL29hdXRoL2xvZ2luIjoibG9naW4tY2xpLWxvZ291dCJ9.7OJZ-dzs_ObiBksDQqihd5nfgt6iyRnI3mjWycLZgPQ", //gitleaks:allow
     refresh: "fixture-cli-logout-refresh",
     expires: Date.now() + 60_000,
     issuer: issuer.url.origin,

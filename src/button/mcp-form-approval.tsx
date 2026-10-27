@@ -85,12 +85,20 @@ export function useMcpFormApprovalDialog({
           input.expectedRevision !== view.record.revision
         )
           return { kind: "refused", reason: "not-pending" };
+        const request = {
+          id: selected.id,
+          decision: input.decision,
+          expectedRevision: input.expectedRevision,
+        };
         const result = decodeAnswerResult(
-          await session.extension(mcpFormApprovalContract.id).call("answer", {
-            id: selected.id,
-            decision: input.decision,
-            expectedRevision: input.expectedRevision,
-          }),
+          await session
+            .extension(mcpFormApprovalContract.id)
+            .call(
+              "answer",
+              input.denialNote === undefined
+                ? request
+                : { ...request, denialNote: input.denialNote },
+            ),
         );
         if (result.kind === "submitted")
           throw new Error("The host has not confirmed the approval decision.");

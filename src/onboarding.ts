@@ -50,7 +50,7 @@ export async function runOnboarding(
 ): Promise<boolean> {
   if (!options.interactive || options.yes) {
     options.write(
-      "Welcome to fungi. Sign in to Fungi to use models.\nNext: fungi login · fungi doctor · fungi\n",
+      "Welcome to fungi. Use your Claude or ChatGPT subscription (recommended), or sign in to Fungi to use models.\nNext: fungi login · fungi doctor · fungi\n",
     );
     // A pipe must not silently accept or persist setup choices.
     if (!options.yes) return false;

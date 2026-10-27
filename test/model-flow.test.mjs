@@ -322,7 +322,9 @@ for (const [alias, title] of [
             await waitForFrame(setup, (frame) =>
               frame.includes("conversations and files stay"),
             );
-            await press(setup, "enter");
+            // Enter keeps the Agent; only the second choice archives it.
+            await act(async () => setup.mockInput.typeText("2"));
+            await act(async () => setup.renderOnce());
             await waitForFrame(setup, () => archived.length === 1);
             assert.deepEqual(archived, [
               {
@@ -411,7 +413,7 @@ test("provider Enter keeps that provider instead of resetting to the agent model
     await press(setup, "enter");
     await capture(setup, "05-provider-default");
     try {
-      assert.match(setup.captureCharFrame(), /▶ OpenAI · Sol \(current\)/u);
+      assert.match(setup.captureCharFrame(), /1 ▶ ● Sol/u);
       await press(setup, "enter");
       assert.match(setup.captureCharFrame(), /Thinking level for Sol/u);
       await press(setup, "enter");
@@ -428,12 +430,12 @@ test("native model flow applies one supported pair only after the thinking choic
   await withModels(async ({ setups, commandOwners, opened }) => {
     const setup = setups[0];
     const choosing = await begin(setup, commandOwners[0], "model");
-    assert.match(setup.captureCharFrame(), /Model/u);
+    assert.match(setup.captureCharFrame(), /Choose a provider/u);
     assertOptions(setup, ["Use agent model", "Fungi", "OpenAI"]);
     await press(setup, "down");
     await press(setup, "down");
     await press(setup, "enter");
-    assertOptions(setup, ["OpenAI · Sol (current)", "OpenAI · Luna"]);
+    assertOptions(setup, ["Sol", "Luna"]);
     await press(setup, "down");
     await press(setup, "enter");
     assert.match(setup.captureCharFrame(), /Thinking level for Luna/u);
@@ -479,7 +481,7 @@ test("native model flow applies one supported pair only after the thinking choic
     assert.doesNotMatch(setup.captureCharFrame(), /openai\/gpt-6-astra/u);
     assert.doesNotMatch(setup.captureCharFrame(), /Shiitake|OpenAI login/u);
     const thinking = await begin(setup, commandOwners[0], "thinking");
-    assertOptions(setup, ["Model default", "low (current)", "medium"]);
+    assertOptions(setup, ["Model default", "low", "medium"]);
     await press(setup, "escape");
     await act(async () => thinking.settled());
     assert.equal(opened.length, 1);
@@ -557,7 +559,7 @@ test("unsigned model selection signs in before saving and keeps the same session
       assert.match(setup.captureCharFrame(), /Fixture API key/u);
       await act(async () => setup.mockInput.typeText("fixture-credential"));
       await press(setup, "enter");
-      assertOptions(setup, ["OpenAI · Sol (current)", "OpenAI · Luna"]);
+      assertOptions(setup, ["Sol", "Luna"]);
       await press(setup, "down");
       await press(setup, "enter");
       await press(setup, "enter");

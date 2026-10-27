@@ -170,8 +170,10 @@ test("a loss that outlasts the delay shows the overlay, and a successful rebind 
     await settle(999);
     expect(setup.captureCharFrame()).not.toContain("Restarting");
     await settle(1);
-    expect(setup.captureCharFrame()).toContain("Restarting the service...");
-    expect(setup.captureCharFrame()).toContain("your session will resume");
+    expect(setup.captureCharFrame()).toContain("Restarting the service");
+    expect(setup.captureCharFrame()).toContain(
+      "Your conversation will resume.",
+    );
     serviceBack = true;
     await settle(200);
     await heal();
@@ -197,7 +199,7 @@ test("a service that stays away is named plainly with the command to run", async
     const frame = setup.captureCharFrame();
     expect(frame).toContain("The service is not answering");
     expect(frame).toContain("fungi resume");
-    expect(frame).not.toContain("Restarting the service...");
+    expect(frame).not.toContain("Restarting the service");
     await record("4-service-down-30s.txt", frame);
   } finally {
     act(() => {
@@ -412,7 +414,7 @@ test("real controller opening retains outage recovery until a fresh snapshot", a
     expect(setup.captureCharFrame()).toContain("connecting");
     await timer.advance(750);
     await flush();
-    expect(setup.captureCharFrame()).toContain("Restarting the service...");
+    expect(setup.captureCharFrame()).toContain("Restarting the service");
     expect(signals[0]?.aborted).toBe(false);
     await timer.advance(29_000);
     await flush();

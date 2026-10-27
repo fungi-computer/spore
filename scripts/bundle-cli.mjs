@@ -12,6 +12,7 @@ import { fileURLToPath, URL } from "node:url";
 import console from "node:console";
 import { transform } from "esbuild";
 import { writeCliNotices } from "./package-notices.mjs";
+import { assertWhatsNewArtifact } from "../../../tooling/release/whats-new.mjs";
 
 async function transformFile(source, destination) {
   const { code } = await transform(await readFile(source, "utf8"), {
@@ -119,6 +120,22 @@ await copyFile(
   resolve(root, "dist/tool-sigil-images.json"),
   resolve(output, "dist/tool-sigil-images.json"),
 );
+const fungiRelease = JSON.parse(
+  await readFile(
+    resolve(repository, "tooling/release/fungi-version.json"),
+    "utf8",
+  ),
+).version;
+const whatsNew = resolve(root, "dist/whats-new.json");
+await assertWhatsNewArtifact(
+  await readFile(
+    resolve(repository, "apps/docs/src/content/docs/changelog.mdx"),
+    "utf8",
+  ),
+  fungiRelease,
+  whatsNew,
+);
+await copyFile(whatsNew, resolve(output, "dist/whats-new.json"));
 await writeCliNotices({ repository, output, metafile });
 await writeFile(
   resolve(output, "package.json"),
@@ -135,6 +152,7 @@ await writeFile(
         "dist/cli.js",
         "dist/seatbelt/safe-base.sbpl",
         "dist/tool-sigil-images.json",
+        "dist/whats-new.json",
         "dist/fungi.cjs",
         "dist/internal/private-workerd-sandbox-worker.mjs",
         "dist/internal/local-image-fit-worker.mjs",

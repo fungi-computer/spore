@@ -99,7 +99,7 @@ async function login() {
   // passes are not time, so wait for that round trip.
   await bounded(statusFinished.promise, "account status");
   await setup.waitForFrame((frame) =>
-    frame.includes("Choose a model provider"),
+    frame.includes("Sign in to a model provider"),
   );
   await act(async () => setup.mockInput.typeText("OpenAI"));
   await act(async () => setup.mockInput.pressEnter());

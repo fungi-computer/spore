@@ -207,14 +207,14 @@ for (const stop of ["graceful", "SIGKILL"]) {
           // Exact timing belongs to the injected-clock tests, not this
           // process-level proof, whose stop can take longer under load.
           await until("the restart overlay", () =>
-            frame().includes("Restarting the service..."),
+            frame().includes("Restarting the service"),
           );
-          expect(frame()).toContain("your session will resume");
+          expect(frame()).toContain("Your conversation will resume.");
           await record("2-overlay.txt");
 
           // Still down a while later: still the overlay, still the draft.
           await settle(1_500);
-          expect(frame()).toContain("Restarting the service...");
+          expect(frame()).toContain("Restarting the service");
           const second = await act(async () => manager.start());
           assert.notEqual(second.baseUrl, firstBaseUrl);
           await until(

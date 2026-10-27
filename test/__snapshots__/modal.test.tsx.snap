@@ -1,0 +1,269 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`Goal paused (failed) at 80 columns 1`] = `
+"
+
+
+
+
+
+        Goal paused: Finish the TUI modal redesign
+        The last turn failed. Resume to try again.
+
+        Started  14:02 today
+        Goal     Read the approval card review, audit every modal in
+                 apps/tui and write the plan with mock-ups for each one
+                 of them, then build the shared anatomy and… d shows all
+
+        1 ▶ Resume goal
+        2   Replace goal…
+        3   Clear goal…
+
+        ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`Goal paused (blocked, quoted reason) at 80 columns 1`] = `
+"
+
+
+
+
+        Goal paused: Finish the TUI modal redesign
+        The Agent is stuck and needs you.
+
+        Started  14:02 today
+        Why      “No access to the release repo”
+        Goal     Read the approval card review, audit every modal in
+                 apps/tui and write the plan with mock-ups for each one
+                 of them, then build the shared anatomy and… d shows all
+
+        1 ▶ Resume goal
+        2   Replace goal…
+        3   Clear goal…
+
+        ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`Goal paused (stalled) at 80 columns 1`] = `
+"
+
+
+
+
+
+        Goal paused: Finish the TUI modal redesign
+        No progress for 3 turns, so Fungi paused it.
+
+        Started  14:02 today
+        Goal     Read the approval card review, audit every modal in
+                 apps/tui and write the plan with mock-ups for each one
+                 of them, then build the shared anatomy and… d shows all
+
+        1 ▶ Resume goal
+        2   Replace goal…
+        3   Clear goal…
+
+        ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`Goal paused details view at 80 columns 1`] = `
+"
+
+        Details
+
+        Started  14:02 today
+        Goal     Read the approval card review, audit every modal in
+                 apps/tui and write the plan with mock-ups for each one
+                 of them, then build the shared anatomy and migrate
+                 every producer to it.
+        Paused   failed · Goal work failed
+
+
+
+
+
+
+
+
+
+
+
+        d back · Esc back"
+`;
+
+exports[`Clear goal confirm step at 80 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+        Clear this goal?
+        It moves to history and can't be resumed.
+
+        1 ▶ Keep goal
+        2   Clear goal
+
+        ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;
+
+exports[`Goal paused (failed) at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Goal paused: Finish the TUI modal redesign
+                            The last turn failed. Resume to try again.
+
+                            Started  14:02 today
+                            Goal     Read the approval card review, audit every modal in
+                                     apps/tui and write the plan with mock-ups for each one
+                                     of them, then build the shared anatomy and… d shows all
+
+                            1 ▶ Resume goal
+                            2   Replace goal…
+                            3   Clear goal…
+
+                            ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`Goal paused (blocked, quoted reason) at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+                            Goal paused: Finish the TUI modal redesign
+                            The Agent is stuck and needs you.
+
+                            Started  14:02 today
+                            Why      “No access to the release repo”
+                            Goal     Read the approval card review, audit every modal in
+                                     apps/tui and write the plan with mock-ups for each one
+                                     of them, then build the shared anatomy and… d shows all
+
+                            1 ▶ Resume goal
+                            2   Replace goal…
+                            3   Clear goal…
+
+                            ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`Goal paused (stalled) at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Goal paused: Finish the TUI modal redesign
+                            No progress for 3 turns, so Fungi paused it.
+
+                            Started  14:02 today
+                            Goal     Read the approval card review, audit every modal in
+                                     apps/tui and write the plan with mock-ups for each one
+                                     of them, then build the shared anatomy and… d shows all
+
+                            1 ▶ Resume goal
+                            2   Replace goal…
+                            3   Clear goal…
+
+                            ↑↓ choose · Enter select · d details · Esc close · 1–9 pick"
+`;
+
+exports[`Goal paused details view at 120 columns 1`] = `
+"
+
+                            Details
+
+                            Started  14:02 today
+                            Goal     Read the approval card review, audit every modal in
+                                     apps/tui and write the plan with mock-ups for each one
+                                     of them, then build the shared anatomy and migrate
+                                     every producer to it.
+                            Paused   failed · Goal work failed
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            d back · Esc back"
+`;
+
+exports[`Clear goal confirm step at 120 columns 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Clear this goal?
+                            It moves to history and can't be resumed.
+
+                            1 ▶ Keep goal
+                            2   Clear goal
+
+                            ↑↓ choose · Enter select · Esc close · 1–9 pick"
+`;

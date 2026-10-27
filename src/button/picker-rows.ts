@@ -4,6 +4,8 @@ export type TerminalChoice = Readonly<{
   name: string;
   description?: string | undefined;
   group?: string | undefined;
+  /** A destructive choice is drawn in the error tone. */
+  tone?: "destructive" | undefined;
 }>;
 
 export type PickerRow =

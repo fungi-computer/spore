@@ -11,13 +11,13 @@ export async function chooseSignInDoor(
   const doors: { value: SignInDoor | "later"; label: string; hint?: string }[] =
     [
       {
-        value: "fungi",
-        label: "Sign in to Fungi (recommended)",
-        hint: "Your Fungi account and Team",
+        value: "subscription",
+        label: "Use my Claude or ChatGPT subscription (recommended)",
       },
       {
-        value: "subscription",
-        label: "Use my Claude or ChatGPT subscription",
+        value: "fungi",
+        label: "Sign in to Fungi",
+        hint: "Your Fungi account and Team",
       },
       { value: "api_key", label: "Use an API key" },
     ];

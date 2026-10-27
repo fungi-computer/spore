@@ -250,7 +250,7 @@ test("the searchable /model choice keeps the draft and restores composer focus o
       await captureSurface("model", setup);
       await act(async () => setup.resize(48, 8));
       await act(async () => setup.renderOnce());
-      assert.match(setup.captureCharFrame(), /Model/u);
+      assert.match(setup.captureCharFrame(), /Choose a model/u);
       assert.match(setup.captureCharFrame(), /Enter · Esc/u);
       await captureSurface("model-compact", setup);
       await act(async () => setup.resize(96, 28));
@@ -298,7 +298,7 @@ test("login's provider choice consumes input and Ctrl+C dismisses without auth o
         await delay(25);
       });
       await act(async () => setup.renderOnce());
-      assert.match(setup.captureCharFrame(), /Choose a model provider/u);
+      assert.match(setup.captureCharFrame(), /Sign in to a model provider/u);
       assert.equal(editor.focused, false);
       await captureSurface("account", setup);
       await act(async () => setup.mockInput.typeText("sentinel"));
@@ -379,7 +379,7 @@ test("model provider and model each commit on one number key", async () => {
       await act(async () => setup.renderOnce());
       await act(async () => setup.mockInput.typeText("3"));
       await act(async () => setup.renderOnce());
-      assert.match(setup.captureCharFrame(), /Fixture · Sol/u);
+      assert.match(setup.captureCharFrame(), /Sol/u);
       await captureSurface("model-before-pick", setup);
       await act(async () => setup.mockInput.typeText("1"));
       await act(async () => choosing);

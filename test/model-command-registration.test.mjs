@@ -120,7 +120,10 @@ test("slash model saves update one mounted frame without duplicate commands", as
       await act(async () => setup.mockInput.pressArrow("down"));
       await act(async () => setup.mockInput.pressEnter());
       await act(async () => setup.renderOnce());
-      assert.match(setup.captureCharFrame(), /Fixture · Fixture model/u);
+      assert.match(
+        setup.captureCharFrame(),
+        /Choose a model[\s\S]*Fixture model/u,
+      );
       // Provider, model and thinking level all use Parakeet prompts.
       await act(async () => setup.mockInput.pressEnter());
       await act(async () => setup.renderOnce());

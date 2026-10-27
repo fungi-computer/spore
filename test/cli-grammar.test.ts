@@ -1,6 +1,13 @@
 import { createRequire } from "node:module";
 import { Readable } from "node:stream";
-import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
@@ -9,9 +16,164 @@ import { z } from "zod";
 import { createPrivateModels } from "@fungi.computer/truffle";
 import type { LocalAuthCliOptions } from "@fungi.computer/truffle/auth";
 import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
+import { localExtensions } from "@fungi.computer/truffle/extensions";
 import { manageLocalExecRules } from "@fungi.computer/truffle/rules";
 import { createIsolatedCliEnvironment } from "./cli-test-isolation.js";
 import { runFungiCli } from "../src/cli.js";
+
+test("version skips home work; refused activations and installed names warn once at distinct paths", async () => {
+  const home = await mkdtemp(join(tmpdir(), "fungi-cli-upgrade-"));
+  const project = join(home, "project");
+  const installed = join(home, ".fungi", "extensions", "installed.json");
+  const activations = join(home, ".fungi", "extensions", "activations.json");
+  const archive = join(home, ".fungi", "archive", "unversioned", "extensions");
+  const archivedInstalled = join(archive, "installed.json");
+  const archivedActivations = join(archive, "activations.json");
+  const marker = join(home, ".fungi", "version.json");
+  const source =
+    "git+https://x-access-token:NOTICE_TEST_TOKEN@example.test/tool";
+  let output = "";
+  let errors = "";
+  const originalStderr = process.stderr.write.bind(process.stderr);
+  try {
+    await mkdir(join(home, ".fungi", "extensions"), { recursive: true });
+    await mkdir(project);
+    // Synthetic reader-refused pair: the genuine npm 0.2.1 registry is compatible.
+    const oldInstalled = JSON.stringify({
+      extensions: {
+        old: { current: "a", revisions: { a: { source } } },
+      },
+    });
+    const oldActivations = JSON.stringify({
+      projects: {},
+      agents: { old: { x: { revision: "v1", capabilities: [] } } },
+    });
+    await writeFile(installed, oldInstalled);
+    await writeFile(activations, oldActivations);
+    process.stderr.write = (chunk: string | Uint8Array) => {
+      errors += String(chunk);
+      return true;
+    };
+    const io = {
+      stdout: {
+        write(chunk: string | Uint8Array) {
+          output += String(chunk);
+          return true;
+        },
+      },
+      stderr: {
+        write(chunk: string | Uint8Array) {
+          errors += String(chunk);
+          return true;
+        },
+      },
+    };
+    await runFungiCli(["--version"], io, {}, home);
+    expect(output).toContain("fungi ");
+    expect(errors).toBe("");
+    expect((await stat(installed)).isFile()).toBe(true);
+    await assert.rejects(stat(marker), { code: "ENOENT" });
+
+    const overrides = {
+      createServiceManager: () => ({
+        ...createPrivateLocalServiceManager({ home }),
+        async discover() {
+          // Exercise the real registry reader at the foreground CLI seam.
+          await localExtensions({ home }).project(project);
+          return { agents: [], sessions: [], problems: [] };
+        },
+      }),
+    };
+    await runFungiCli(["sessions", "list", "-C", project], io, overrides, home);
+    expect(output).toContain("No saved conversations in");
+    expect(errors).toContain("Upgraded an earlier Fungi →");
+    expect(
+      errors
+        .split("\n")
+        .filter((line) => line.includes("Extension activations:")),
+    ).toEqual([`  Extension activations: ${archivedActivations}`]);
+    expect(
+      errors
+        .split("\n")
+        .filter((line) =>
+          line.startsWith("Extensions from an earlier version"),
+        ),
+    ).toEqual([
+      "Extensions from an earlier version were set aside: old. Re-add each with: fungi extension add <its source>. Archived registry: ~/.fungi/archive/unversioned/extensions/installed.json.",
+    ]);
+    expect(errors).not.toContain(source);
+    expect(await readFile(archivedInstalled, "utf8")).toBe(oldInstalled);
+    expect(await readFile(archivedActivations, "utf8")).toBe(oldActivations);
+    expect(errors).toContain("What's new:");
+    const shippedNews = z
+      .strictObject({ release: z.string(), lines: z.array(z.string()) })
+      .parse(
+        JSON.parse(
+          await readFile(
+            join(import.meta.dir, "../dist/whats-new.json"),
+            "utf8",
+          ),
+        ),
+      );
+    expect(JSON.parse(await readFile(marker, "utf8"))).toMatchObject({
+      version: 1,
+      release: shippedNews.release,
+    });
+    errors = "";
+    await runFungiCli(["sessions", "list", "-C", project], io, overrides, home);
+    expect(errors).toBe("");
+  } finally {
+    process.stderr.write = originalStderr;
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("a corrupt home store and truncated activations do not block sessions dispatch", async () => {
+  const home = await mkdtemp(join(tmpdir(), "fungi-corrupt-cli-home-"));
+  const project = join(home, "project");
+  const database = join(home, ".fungi", "agents", "broken", "agent.sqlite");
+  const activations = join(home, ".fungi", "extensions", "activations.json");
+  const archived = join(
+    home,
+    ".fungi",
+    "archive",
+    "unversioned",
+    "extensions",
+    "activations.json",
+  );
+  let output = "";
+  let errors = "";
+  try {
+    await mkdir(project);
+    await mkdir(join(home, ".fungi", "agents", "broken"), { recursive: true });
+    await mkdir(join(home, ".fungi", "extensions"), { recursive: true });
+    await writeFile(database, "not a database");
+    await writeFile(activations, "{ truncated");
+    await runFungiCli(
+      ["sessions", "list", "-C", project],
+      {
+        stdout: { write: (chunk) => ((output += String(chunk)), true) },
+        stderr: { write: (chunk) => ((errors += String(chunk)), true) },
+      },
+      {
+        createServiceManager: () => ({
+          ...createPrivateLocalServiceManager({ home }),
+          discover() {
+            return Promise.resolve({ agents: [], sessions: [], problems: [] });
+          },
+        }),
+      },
+      home,
+    );
+    expect(output).toContain("No saved conversations in");
+    expect(errors).toContain(`Extension activations: ${archived}`);
+    expect(errors).not.toContain("file is not a database");
+    expect(await readFile(database, "utf8")).toBe("not a database");
+    expect(await readFile(archived, "utf8")).toBe("{ truncated");
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
 
 test("CLI proof environment isolates HOME, XDG runtime, and provider credentials", async () => {
   const isolated = await createIsolatedCliEnvironment();

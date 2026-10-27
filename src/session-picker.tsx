@@ -1,3 +1,6 @@
+import { useTerminalDimensions } from "@opentui/react";
+import { formatWhen } from "@fungi.computer/parakeet/headless";
+import { ModalHeader, modalContentWidth } from "./button/modal.js";
 import { Picker } from "./button/picker.js";
 import { DialogSurface, useHostColors } from "./button/dialog-surface.js";
 import type { PrivateLocalSessionChoice } from "@fungi.computer/truffle/service";
@@ -29,31 +32,37 @@ export function SessionPickerContent({
   themeError,
 }: SessionPickerProps) {
   const colors = useHostColors();
+  const dimensions = useTerminalDimensions();
+  const compact = dimensions.height < 14;
+  const width = modalContentWidth(dimensions.width);
+  const now = Date.now();
+  const whens = sessions.map((session) => formatWhen(session.updatedAt, now));
   return (
-    <>
+    <box flexDirection="column" rowGap={compact ? 0 : 1}>
+      <ModalHeader
+        content={{
+          title: "Resume a conversation",
+          summary: themeError ?? "Pick one to continue where you left off.",
+        }}
+        width={width}
+        compact={compact}
+        colors={colors}
+      />
       <Picker
-        title="Resume a conversation"
         searchable
         descriptionWrap={false}
         descriptionWidth={Math.max(
-          ...sessions.map((session) =>
-            Bun.stringWidth(new Date(session.updatedAt).toLocaleDateString()),
-          ),
+          ...whens.map((when) => Bun.stringWidth(when)),
           1,
         )}
         colors={colors}
-        choices={sessions.map((session) => ({
+        choices={sessions.map((session, index) => ({
           name: session.title.trim() || "Untitled",
-          description: new Date(session.updatedAt).toLocaleDateString(),
+          description: whens[index],
         }))}
         onCancel={onCancel}
         onSelect={onSelect}
       />
-      {themeError ? (
-        <text marginX={1} fg={colors.error}>
-          {themeError}
-        </text>
-      ) : null}
-    </>
+    </box>
   );
 }

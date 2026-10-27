@@ -619,3 +619,44 @@ for (const intent of ["Esc", "Ctrl+C", "/cancel"] as const) {
     }
   });
 }
+
+test("a waiting-row cancel that is still confirming is never timed out", async () => {
+  let controls: ReturnType<typeof useTerminalCancellation> | undefined;
+  const failures: unknown[] = [];
+  const confirmation = Promise.withResolvers<undefined>();
+  function Probe() {
+    controls = useTerminalCancellation({
+      commandId: undefined,
+      dismissInteraction: () => false,
+      status: "idle",
+      waitingLabel: "Waiting for approval",
+      interaction: null,
+      queued: false,
+      cancel: () => Promise.resolve(),
+      cancelWaiting: () => confirmation.promise,
+      cancelRequestTimeoutMs: 20,
+      onCancelFailure: (cause) => {
+        failures.push(cause);
+      },
+      exit: undefined,
+    });
+    return <box />;
+  }
+  const setup = await testRender(<Probe />, { width: 40, height: 5 });
+  try {
+    assert.ok(controls);
+    await act(async () => {
+      void controls?.keyboard(false);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    });
+    expect(failures).toEqual([]);
+  } finally {
+    await act(async () => {
+      confirmation.resolve(undefined);
+      await confirmation.promise;
+    });
+    act(() => {
+      setup.renderer.destroy();
+    });
+  }
+});

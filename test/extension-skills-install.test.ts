@@ -109,7 +109,7 @@ test("the install prompt lists the skill names and a yes adds them", async () =>
   expect(output).toContain("Skills (2): ");
   expect(output).toContain("greeter");
   expect(output).toContain("closer");
-  expect(questions).toEqual(["Add its 2 skills? (Y/n)"]);
+  expect(questions).toEqual(["Add its 2 skills?"]);
   expect(await enabledSkills()).toEqual(["acme-tools"]);
 });
 
@@ -173,9 +173,9 @@ test("retrying skills activation does not reinstall or repeat the install questi
       [store, "acme-tools"],
     ]);
     expect(questions).toEqual([
-      "Extensions",
-      "Trusted extension source (Git URL, npm spec or path)",
-      "Add its 2 skills? (Y/n)",
+      "Manage extensions",
+      "Add an extension",
+      "Add its 2 skills?",
     ]);
     expect(await enabledSkills()).toEqual(["acme-tools"]);
   } finally {

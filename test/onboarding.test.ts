@@ -30,6 +30,10 @@ test("a pipe skips every setup step without persisting consent; --yes saves loca
     ).toBe(false);
     expect(await hasOnboarding(path)).toBe(false);
     expect(output).toContain("fungi doctor");
+    expect(output).toContain("Claude or ChatGPT subscription (recommended)");
+    expect(output.indexOf("subscription")).toBeLessThan(
+      output.indexOf("sign in to Fungi"),
+    );
     expect(
       await runOnboarding({
         interactive: true,
@@ -98,16 +102,21 @@ test("first run asks one question, signs in once, and opens fungi by default", a
         screen,
       );
     expect(start).toBe(true);
-    expect(doors).toEqual(["fungi"]);
-    expect(screen).toContain("Sign in to Fungi (recommended)");
-    expect(screen).toContain("Use my Claude or ChatGPT subscription");
+    expect(doors).toEqual(["subscription"]);
+    expect(screen).toContain(
+      "Use my Claude or ChatGPT subscription (recommended)",
+    );
+    expect(screen.indexOf("Use my Claude")).toBeLessThan(
+      screen.indexOf("Sign in to Fungi"),
+    );
+    expect(screen).not.toContain("Sign in to Fungi (recommended)");
     expect(screen).toContain("Use an API key");
     expect(screen).toContain("Skip for now");
     expect(screen).not.toContain("Team MCP");
     expect(screen).not.toContain("Open Fungi now?");
     expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
       version: 1,
-      door: "hosted",
+      door: "subscription",
     });
   } finally {
     await rm(root, { recursive: true, force: true });

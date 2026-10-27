@@ -96,7 +96,7 @@ test.each([
     try {
       await act(async () =>
         setup.waitForFrame((frame) =>
-          frame.includes("Choose a model provider"),
+          frame.includes("Use a subscription or an API key."),
         ),
       );
       act(() => {
@@ -129,7 +129,10 @@ test.each([
         { providerId: "beta", method: "subscription" },
       ]);
       expect(providerReads).toBe(1);
-      expect(setup.captureCharFrame()).not.toContain("Choose a model provider");
+      // The provider picker does not come back; only its summary names it.
+      expect(setup.captureCharFrame()).not.toContain(
+        "Use a subscription or an API key.",
+      );
       await captureFrame(
         setup,
         process.env.LOGIN_RETRY_CAPTURE_DIR,
@@ -294,7 +297,7 @@ test("a choice prompt answers with the chosen option's value", async () => {
     const { answer } = await act(() => ({
       answer: session.interaction.prompt({
         type: "choice",
-        message: "Choose a model provider",
+        message: "Sign in to a model provider",
         options: [
           { value: "alpha", label: "Alpha", description: "Alpha API key" },
           { value: "beta", label: "Beta", description: "Beta Max" },

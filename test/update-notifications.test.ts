@@ -4,6 +4,14 @@ import {
   watchFungiUpdates,
   type UpdateNotification,
 } from "../src/update-notifications.js";
+import { releaseVersion } from "../src/release-registry.js";
+
+test("accepts a prerelease Spore candidate without accepting invalid versions", () => {
+  expect(releaseVersion.parse("0.4.1-rehearsal.0")).toBe("0.4.1-rehearsal.0");
+  expect(() => releaseVersion.parse("0.4..1")).toThrow(
+    "Expected a semantic release version",
+  );
+});
 
 test("source checkouts do not schedule an installed-release watcher", () => {
   const launcher = process.env.FUNGI_LAUNCHER;

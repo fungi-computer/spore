@@ -4,10 +4,17 @@ import type {
 } from "@fungi.computer/whistle";
 import type { PrivateLocalServiceManager } from "@fungi.computer/truffle/service";
 import type { LocalExtensions } from "@fungi.computer/truffle/extensions";
+import { oneLine } from "@fungi.computer/parakeet/headless";
 import {
   runExtensionCommand,
   type ExtensionCommandInput,
 } from "./extension-command.js";
+
+const agentName = (agent: Readonly<{ name?: string | undefined }>) =>
+  agent.name ?? "Unnamed Agent";
+
+const conversations = (count: number) =>
+  `${String(count)} conversation${count === 1 ? "" : "s"}`;
 
 /** Human command doors into the existing Local archive and extension owners. */
 export function localManagementCommands(
@@ -47,19 +54,30 @@ export function localManagementCommands(
         const agentId = await interaction.prompt({
           type: "choice",
           message: "Archive which Agent?",
+          summary: "Its conversations and files stay.",
           options: agents.map((agent) => ({
             value: agent.agentId,
-            label: agent.name ?? agent.agentId,
-            description: `${String(agent.sessionCount)} conversation${agent.sessionCount === 1 ? "" : "s"} · ${agent.agentId}`,
+            label: agentName(agent),
+            description: conversations(agent.sessionCount),
           })),
         });
         const agent = agents.find((candidate) => candidate.agentId === agentId);
         if (agent === undefined) throw new Error("Choose a listed Agent.");
         const confirmed = await interaction.prompt({
           type: "confirmation",
-          message: `Archive ${agent.name ?? agentId}? Its conversations and files stay.`,
+          message: `Archive ${oneLine(agentName(agent), 40)}?`,
+          summary:
+            "Its conversations and files stay. You can restore it later.",
+          facts: [
+            {
+              label: "Chats",
+              value: String(agent.sessionCount),
+            },
+          ],
+          details: [{ label: "Agent ID", value: agentId }],
           confirmLabel: "Archive",
-          cancelLabel: "Keep",
+          cancelLabel: "Keep Agent",
+          destructive: true,
         });
         if (!confirmed) return { cancelled: true };
         await interaction.run(() =>
@@ -70,7 +88,7 @@ export function localManagementCommands(
         );
         interaction.notify({
           type: "success",
-          message: `Archived ${agent.name ?? agentId}. Restore with fungi agents unarchive ${agentId}.`,
+          message: `Archived ${agentName(agent)}. Restore with fungi agents unarchive ${agentId}.`,
         });
         return undefined;
       },
@@ -110,7 +128,8 @@ async function manageExtensions(
   ];
   const selected = await interaction.prompt({
     type: "choice",
-    message: "Extensions",
+    message: "Manage extensions",
+    summary: "Extensions add tools, programs and skills to your Agents.",
     options: [
       { value: "list", label: "List installed extensions" },
       {
@@ -151,7 +170,9 @@ async function manageExtensions(
     args.push(
       await interaction.prompt({
         type: "text",
-        message: "Trusted extension source (Git URL, npm spec or path)",
+        message: "Add an extension",
+        summary: "Extensions run inside Fungi with access to every Agent.",
+        placeholder: "Git URL, npm package or folder path",
       }),
     );
   } else if (action !== "list") {
@@ -168,7 +189,8 @@ async function manageExtensions(
       args.push(
         await interaction.prompt({
           type: "choice",
-          message: "Where?",
+          message:
+            action === "enable" ? "Turn it on where?" : "Turn it off where?",
           options: [
             { value: "project", label: "This folder's client and programs" },
             { value: "agent", label: "This folder's Agent tools" },
@@ -178,7 +200,8 @@ async function manageExtensions(
       );
     const id = await interaction.prompt({
       type: "choice",
-      message: "Which extension?",
+      message:
+        action === "remove" ? "Remove which extension?" : "Which extension?",
       options: installed.map((extension) => ({
         value: extension.id,
         label: extension.id,
@@ -189,7 +212,12 @@ async function manageExtensions(
       action === "remove" &&
       !(await interaction.prompt({
         type: "confirmation",
-        message: `Remove ${id} and its activations?`,
+        message: `Remove ${oneLine(id, 40)}?`,
+        summary: "It stops working in every folder where it was turned on.",
+        details: [{ label: "Extension", value: id }],
+        confirmLabel: "Remove",
+        cancelLabel: "Keep extension",
+        destructive: true,
       }))
     )
       return;
@@ -207,7 +235,12 @@ async function manageExtensions(
         },
       },
       confirm: (message) =>
-        interaction.prompt({ type: "confirmation", message }),
+        interaction.prompt({
+          type: "confirmation",
+          message,
+          confirmLabel: "Add skills",
+          cancelLabel: "Skip",
+        }),
     },
     owner,
   );

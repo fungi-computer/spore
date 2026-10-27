@@ -5,8 +5,9 @@ import type {
 import { useEffect, useState } from "react";
 import {
   DialogSurface,
+  ModalPrompt,
   reportFailure,
-  terminalText,
+  type ModalContent,
   type ServiceRebind,
   type TuiPresentation,
 } from "../../button/index.js";
@@ -184,36 +185,26 @@ export function ServiceRecoveryOverlay({
   view: ServiceRecoveryView;
   colors: TuiPresentation["colors"];
 }>) {
+  const content: ModalContent =
+    view.phase === "incompatible"
+      ? { title: "Can't use the service", summary: view.message }
+      : view.phase === "restarting"
+        ? {
+            title: "Restarting the service",
+            summary: "Your conversation will resume.",
+          }
+        : {
+            title: "The service is not answering",
+            summary:
+              "Run `fungi resume` in another terminal. This conversation keeps trying and keeps your draft.",
+            facts:
+              view.lastError === undefined
+                ? []
+                : [{ label: "Error", value: view.lastError }],
+          };
   return (
     <DialogSurface colors={colors} onClose={() => undefined}>
-      {view.phase === "incompatible" ? (
-        <text fg={colors.foreground} wrapMode="char">
-          {terminalText(view.message)}
-        </text>
-      ) : view.phase === "restarting" ? (
-        <>
-          <text fg={colors.foreground} attributes={1}>
-            Restarting the service...
-          </text>
-          <text fg={colors.foreground}>your session will resume</text>
-        </>
-      ) : (
-        <>
-          <text fg={colors.foreground} attributes={1}>
-            The service is not answering
-          </text>
-          <text fg={colors.foreground}>
-            Run `fungi resume` in another terminal to start it. This session
-            keeps trying and resumes when the service is back; your draft is
-            kept.
-          </text>
-          {view.lastError === undefined ? null : (
-            <text fg={colors.error} wrapMode="char">
-              {terminalText(view.lastError)}
-            </text>
-          )}
-        </>
-      )}
+      <ModalPrompt content={content} colors={colors} />
     </DialogSurface>
   );
 }

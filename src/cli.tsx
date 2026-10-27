@@ -10,6 +10,7 @@ import corralClient from "@fungi.computer/corral";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { lstatSync } from "node:fs";
 import { agentsCommandHelp, runAgentsCommand } from "./agents-command.js";
 import {
@@ -20,6 +21,10 @@ import process from "node:process";
 import { Readable, Writable } from "node:stream";
 import { parseArgs } from "node:util";
 import { privateLocalServiceVersion } from "@fungi.computer/truffle/service";
+import {
+  formatLocalUpgradeNotice,
+  upgradeLocalHome,
+} from "@fungi.computer/truffle/upgrade";
 import { Cli, isCancel } from "@fungi.computer/lantern";
 import { z } from "zod";
 import { Schema } from "effect";
@@ -145,6 +150,7 @@ export type FungiCliIo = Readonly<{
   cwd?: string | undefined;
   stdin?: OneShotRunOptions["stdin"];
   stdout?: OneShotRunOptions["stdout"];
+  stderr?: OneShotRunOptions["stdout"];
   signals?: OneShotRunOptions["signals"];
   authModels?: LocalAuthCliOptions["models"];
   /** Override terminal detection for the standalone login surface. */
@@ -601,6 +607,20 @@ export async function runFungiCli(
   if (arguments_.values.help) {
     stdout.write(helpFor(command));
     return;
+  }
+  // The internal service branches never enter this dispatch. Git's credential
+  // protocol and an explicit stop must not be intercepted by the upgrade.
+  if (command !== "git-credential" && command !== "stop") {
+    const upgrade = await upgradeLocalHome({
+      home,
+      spore: fungiVersion,
+      newsPath: fileURLToPath(
+        new URL("../dist/whats-new.json", import.meta.url),
+      ),
+    });
+    if (upgrade.kind === "upgraded")
+      for (const line of formatLocalUpgradeNotice(upgrade.report))
+        (io.stderr ?? process.stderr).write(`${line}\n`);
   }
   const fullAccess =
     arguments_.values.yolo === true ||

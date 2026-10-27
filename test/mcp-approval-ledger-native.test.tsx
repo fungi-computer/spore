@@ -154,20 +154,30 @@ for (const { decision, revokeMembership } of [
         await act(async () => setup.renderOnce());
         const frame = await setup.waitForFrame(
           (value) =>
-            value.includes("computer.exec") && value.includes("Approve"),
+            value.includes("Allow computer · exec?") &&
+            value.includes("Approve once"),
         );
         const normalized = frame.replace(/\s+/gu, " ");
         expect(normalized).toContain("1 ▶ Approve once");
         expect(normalized).toContain("2 Deny");
         expect(normalized).not.toContain("Always allow");
         expect(frame).toContain("Research Agent");
-        expect(frame).toContain("agent:research");
-        expect(frame).toContain("session:research");
-        expect(frame.replace(/\s/gu, "")).toContain(
-          pending.description.inputSha256,
-        );
+        expect(frame).not.toContain("agent:research");
+        expect(frame).not.toContain("session:research");
+        expect(frame).not.toContain("SHA-256");
         expect(frame).not.toContain("NEVER_RENDER_LEDGER_INPUT");
         expect(frame).not.toContain("NEVER_RENDER_LEDGER_OUTPUT");
+        await pressDecodedKey(setup, () => {
+          setup.mockInput.pressKey("d");
+        });
+        const details = await setup.waitForFrame((value) =>
+          value.includes("agent:research"),
+        );
+        expect(details).toContain("session:research");
+        expect(details).toContain("SHA-256");
+        await pressDecodedKey(setup, () => {
+          setup.mockInput.pressKey("d");
+        });
         expect(writes).toBe(0);
         // Oyster re-resolves live membership for every answer. The displayed
         // snapshot can still be answerable when that membership disappears.
@@ -178,7 +188,7 @@ for (const { decision, revokeMembership } of [
         });
         if (revokeMembership) {
           await setup.waitForFrame((value) =>
-            value.includes("Approval refused: not-eligible"),
+            value.includes("Couldn't answer (not-eligible). Nothing ran."),
           );
           expect(ledger.get(pending.recordId)).toMatchObject({
             state: "pending",

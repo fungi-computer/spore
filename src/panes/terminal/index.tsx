@@ -10,7 +10,6 @@ import {
   PaneProvider,
   usePaneKit,
   usePaneFocused,
-  Picker,
   defineIdFamily,
   z,
   openLocalTerminal,
@@ -23,6 +22,7 @@ import {
   type PaneKindEntry,
 } from "../../button/index.js";
 import { admitTerminalTermination } from "./quit.js";
+import { TerminationPrompt } from "./termination-prompt.js";
 import { terminalControls } from "./controls.js";
 import { WhistleActionError } from "@fungi.computer/whistle";
 
@@ -77,18 +77,17 @@ function confirmTerminalTermination(
     let answered = false;
     kit.dialogs.show(
       (handle) => (
-        <Picker
-          title={
-            quitting
-              ? "Quit and terminate running shell jobs?"
-              : "Close local shell and terminate its jobs?"
-          }
+        <TerminationPrompt
+          quitting={quitting}
           colors={colors}
           choices={[
             {
               name: quitting ? "Keep shells running" : "Keep local shell open",
             },
-            { name: quitting ? "Quit and terminate" : "Terminate and close" },
+            {
+              name: quitting ? "Quit and terminate" : "Terminate and close",
+              tone: "destructive",
+            },
           ]}
           onCancel={handle.dismiss}
           onSelect={(index) => {

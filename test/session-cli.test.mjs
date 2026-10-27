@@ -1255,7 +1255,7 @@ test.each([
         await submit();
         await act(async () =>
           setup.waitForFrame((frame) =>
-            frame.includes("Choose a model provider"),
+            frame.includes("Sign in to a model provider"),
           ),
         );
         await act(async () => setup.mockInput.typeText("OpenAI"));
@@ -1376,7 +1376,7 @@ test("the production CLI keeps the frame mounted under the /model choice", async
         setup.waitForFrame((frame) => frame.includes("Use agent model")),
       );
       assert.ok(setup.renderer.currentFocusedRenderable?.focused);
-      assert.match(setup.captureCharFrame(), /Model/u);
+      assert.match(setup.captureCharFrame(), /Choose a provider/u);
       assert.equal(input.focused, false);
       await pressEscape(setup);
       assert.equal(input.focused, true);
@@ -2250,7 +2250,7 @@ test("model selection offers supported thinking before changing the mounted owne
         ).length,
         2,
       );
-      assert.match(setup.captureCharFrame(), /▶ Model default/u);
+      assert.match(setup.captureCharFrame(), /1 ▶ ● Model default/u);
       assert.match(setup.captureCharFrame(), /low/u);
       await pressEscape(setup);
       assert.equal(context.input.focused, true);
@@ -2287,12 +2287,12 @@ test("choosing a model returns keyboard focus to the composer without Escape", a
       await act(async () => setup.mockInput.pressArrow("down"));
       await act(async () => setup.mockInput.pressEnter());
       await act(async () =>
-        setup.waitForFrame((frame) => frame.includes("OpenAI · Luna")),
+        setup.waitForFrame((frame) => frame.includes("Choose a model")),
       );
       await act(async () => setup.mockInput.pressArrow("down"));
       await act(async () => setup.mockInput.pressEnter());
       await act(async () =>
-        setup.waitForFrame((frame) => !frame.includes("OpenAI · Luna")),
+        setup.waitForFrame((frame) => !frame.includes("Choose a model")),
       );
       await act(async () => setup.mockInput.typeText("new instruction"));
       assert.equal(input.focused, true);
@@ -2448,9 +2448,16 @@ test("native startup recovery shows the error and Exit restores the terminal", a
     });
     await act(async () => setup.renderOnce());
     const frame = setup.captureCharFrame();
-    assert.match(frame, /Fixture service unavailable/u);
+    assert.match(frame, /Connection unavailable/u);
+    assert.doesNotMatch(frame, /Fixture service unavailable/u);
     assert.match(frame, /Retry connection/u);
     assert.match(frame, /Exit/u);
+    // The raw error is behind d, never on the main view.
+    await act(async () => setup.mockInput.typeText("d"));
+    await act(async () => setup.renderOnce());
+    assert.match(setup.captureCharFrame(), /Fixture service unavailable/u);
+    await act(async () => setup.mockInput.typeText("d"));
+    await act(async () => setup.renderOnce());
     await act(async () => setup.mockInput.pressArrow("down"));
     await act(async () => setup.mockInput.pressEnter());
     await act(async () => running);

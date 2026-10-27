@@ -1,10 +1,11 @@
+import semver from "semver";
 import { z } from "zod";
 
 export const releaseVersion = z
   .string()
   .max(128)
   .refine(
-    (value) => Bun.semver.satisfies(value, ">=0.0.0-0"),
+    (value) => semver.valid(value) !== null,
     "Expected a semantic release version",
   );
 const release = z.object({ version: releaseVersion });

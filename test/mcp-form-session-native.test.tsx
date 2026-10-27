@@ -45,7 +45,7 @@ function form(
           displayName: "Research Agent",
         },
         module: "computer",
-        operation: "exec",
+        operation: title === "Allow computer.exec (external)?" ? "exec" : title,
         access: "external",
         description: {
           title,
@@ -173,14 +173,24 @@ test("a watched canonical approval displays ledger facts and answers with its re
     await waitForFrame(
       setup,
       (frame) =>
-        frame.includes("Allow computer.exec (external)?") &&
+        frame.includes("Allow computer · exec?") &&
         frame.includes("Approve") &&
         frame.includes("Deny"),
     );
     const frame = setup.captureCharFrame();
     expect(frame).toContain("Research Agent");
-    expect(frame).toContain("4321 bytes");
-    expect(frame).toContain("0123456789abcdef".repeat(4));
+    expect(frame).not.toContain("4321 bytes");
+    expect(frame).not.toContain("SHA-256");
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressKey("d");
+    });
+    const details = await waitForFrame(setup, (value) =>
+      value.includes("SHA-256"),
+    );
+    expect(details).toContain("4,321 bytes");
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressKey("d");
+    });
     expect(producer.calls).toEqual([]);
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
@@ -212,7 +222,7 @@ for (const action of ["deny", "escape"]) {
         producer.publish([form("host-minted-2")]);
       });
       await waitForFrame(setup, (frame) =>
-        frame.includes("Allow computer.exec (external)?"),
+        frame.includes("Allow computer · exec?"),
       );
       if (action === "deny")
         await pressDecodedKey(setup, () => {
@@ -255,13 +265,13 @@ for (const reason of ["not-attached", "not-pending"] as const) {
         producer.publish([form("refused-form")]);
       });
       await waitForFrame(setup, (frame) =>
-        frame.includes("Allow computer.exec (external)?"),
+        frame.includes("Allow computer · exec?"),
       );
       await pressDecodedKey(setup, () => {
         setup.mockInput.pressEnter();
       });
       const frame = await waitForFrame(setup, (frame) =>
-        frame.includes(`Approval refused: ${reason}`),
+        frame.includes(`Couldn't answer (${reason}). Nothing ran.`),
       );
       expect(frame).not.toContain("approved successfully");
       expect(producer.calls).toHaveLength(1);
@@ -283,7 +293,7 @@ test("a withdrawn form closes without a redundant or stale answer command", asyn
       producer.publish([form("withdrawn")]);
     });
     await waitForFrame(setup, (frame) =>
-      frame.includes("Allow computer.exec (external)?"),
+      frame.includes("Allow computer · exec?"),
     );
     act(() => {
       producer.publish([]);
@@ -292,7 +302,7 @@ test("a withdrawn form closes without a redundant or stale answer command", asyn
       setup,
       (frame) =>
         frame.includes("Ask anything") &&
-        !frame.includes("Allow computer.exec (external)?"),
+        !frame.includes("Allow computer · exec?"),
     );
     expect(producer.calls).toEqual([]);
   } finally {
@@ -376,7 +386,7 @@ test("losing an answer response is an unconfirmed outcome, never success or auto
       producer.publish([form("unconfirmed")]);
     });
     await waitForFrame(setup, (frame) =>
-      frame.includes("Allow computer.exec (external)?"),
+      frame.includes("Allow computer · exec?"),
     );
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
@@ -384,8 +394,8 @@ test("losing an answer response is an unconfirmed outcome, never success or auto
     await waitForFrame(
       setup,
       (frame) =>
-        frame.includes("Could not answer approval.") &&
-        frame.includes("not confirmed."),
+        frame.includes("Couldn't send your answer.") &&
+        frame.includes("not have been recorded."),
     );
     expect(producer.calls).toHaveLength(1);
   } finally {
@@ -400,7 +410,7 @@ test("closing the client releases its watch without answering through a dead att
       producer.publish([form("closing")]);
     });
     await waitForFrame(setup, (frame) =>
-      frame.includes("Allow computer.exec (external)?"),
+      frame.includes("Allow computer · exec?"),
     );
     await close();
     expect(producer.calls).toEqual([]);
@@ -420,7 +430,7 @@ test("a read-only Session view never offers or sends an approval", async () => {
       ]);
     });
     const frame = await waitForFrame(setup, (frame) =>
-      frame.includes("(read-only)"),
+      frame.includes("Waiting for approval."),
     );
     expect(frame).not.toContain("Approve");
     expect(frame).not.toContain("Deny");
@@ -469,13 +479,13 @@ test("a submitted-only result is unconfirmed, never a completed approval", async
       producer.publish([form("unconfirmed-submit")]);
     });
     await waitForFrame(setup, (frame) =>
-      frame.includes("Allow computer.exec (external)?"),
+      frame.includes("Allow computer · exec?"),
     );
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
     });
     await waitForFrame(setup, (frame) =>
-      frame.includes("The outcome is not confirmed."),
+      frame.includes("Couldn't send your answer."),
     );
     expect(producer.calls).toHaveLength(1);
   } finally {

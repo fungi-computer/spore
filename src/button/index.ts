@@ -373,6 +373,13 @@ export {
 export { z } from "zod";
 
 export { Picker } from "./picker.js";
+export {
+  ModalDetails,
+  ModalHeader,
+  ModalPrompt,
+  modalContentWidth,
+} from "./modal.js";
+export type { ModalContent } from "./modal.js";
 export { ToastProvider, useToast, toastDurationMs } from "./toast.js";
 export type { ToastInput } from "./toast.js";
 export { toneColor } from "./tone.js";

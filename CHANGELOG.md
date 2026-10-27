@@ -1,5 +1,61 @@
 # @fungi.computer/spore
 
+## 0.4.0
+
+### Minor Changes
+
+- Changes since 0.3.1:
+
+  - fix(shiitake-extensions): shorten the loop start prompt title to fit the
+    60-character contract
+  - fix(whistle,tui): cap prompt titles at 60 in the contract; waiting cancel is
+    not timed out
+  - fix(upgrade): preserve prior identity and tolerate refused home reads
+  - feat(cli): upgrade home before dispatch and join names-only notices
+  - feat(cli): recommend own subscription on first run
+  - feat(release): derive upgrade news from checked changelog
+  - fix(tui): keep full Git push warning visible on confirmation
+  - fix(tui): footer stop loop asks first; modal rules walk the real producers
+  - fix(release): inline Gitleaks fixture allows
+  - fix(tui): size pane modals in the Button, not the panes
+  - fix(tui): open details while typing, and say Esc close on text prompts
+  - fix(approvals): bound confirmation and refuse invalid noted approvals
+  - fix(goal): let an Agent settle and resume its own paused goal
+  - feat(tui): migrate the Loop, extension, Archive, Skills, question and
+    recovery modals
+  - fix(parakeet): no current marker on the sign-in provider list
+  - feat(tui): migrate the model, sign-in, resume, fork and Home pickers to the
+    shared modal
+  - feat(tui): shared modal anatomy with safe-first confirmations and Goal
+    paused
+  - fix(approval): type the native denial expectation
+  - feat(approval): carry bounded denial feedback and optional rule coverage
+  - fix(spore): keep escape risk visible with safe approval choices
+  - fix(cli): clarify provider-specific sign-in guidance
+  - feat(approval): make one-time approval the safe default
+  - fix(tui): approve MCP escapes once by default
+  - fix(cli): prioritize BYOK in missing-model guidance
+  - fix(tui): compose approval card on modal-c Integration
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/agar@0.4.0
+  - @fungi.computer/approvals@0.2.0
+  - @fungi.computer/parakeet@0.4.0
+  - @fungi.computer/shiitake-extensions@0.3.0
+  - @fungi.computer/shiitake@0.5.0
+  - @fungi.computer/veil@0.2.1
+  - @fungi.computer/whistle@0.2.0
+  - @fungi.computer/nacre@0.0.3
+  - @fungi.computer/corral@0.1.3
+
 ## 0.3.1
 
 ### Patch Changes

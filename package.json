@@ -1,6 +1,6 @@
 {
   "name": "@fungi.computer/spore",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": false,
   "type": "module",
   "bin": {
@@ -11,7 +11,7 @@
     "clean": "node --input-type=module --eval \"import { rm } from 'node:fs/promises'; await rm('dist', { recursive: true, force: true });\"",
     "lint": "eslint src test --max-warnings=0 && ../../node_modules/.bin/oxlint --config ../../oxlint.config.ts --deny-warnings src test",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "pnpm run clean && tsc -p tsconfig.build.json && node scripts/build-tool-sigils.mjs",
+    "build": "pnpm run clean && tsc -p tsconfig.build.json && node scripts/build-tool-sigils.mjs && node ../../tooling/release/whats-new.mjs --write",
     "test": "pnpm run test:unit && pnpm run test:merge",
     "test:unit": "node scripts/test-unit.mjs",
     "test:merge": "node --test scripts/cold-build.test.mjs test/host-autoload.proof.mjs",
@@ -34,6 +34,7 @@
     "proof:acp": "bun test/acp-stdio.proof.mjs",
     "proof:terminal-text": "node test/terminal-text-pty.proof.mjs",
     "proof:interactive": "bash ../../.agents/skills/orchestrate-multi-lane-work/scripts/run-proof.sh bun test/interactive-smoke.proof.mjs",
+    "proof:upgrade-rehearsal": "bash ../../.agents/skills/orchestrate-multi-lane-work/scripts/run-proof.sh bun test/upgrade-from-published.proof.mjs",
     "proof:inbox-pane-round-trip": "bun test/inbox-pane-round-trip.native.tsx",
     "test:goal-loop-rows": "bun test/goal-loop-native.proof.mjs && ORG_SIZE=160x48 bun test/goal-loop-native.proof.mjs && bun test/goal-states-native.proof.mjs",
     "proof:picker-stress": "bun test/picker-stress.proof.mjs"
@@ -67,6 +68,7 @@
     "react": "19.2.0",
     "react-devtools-core": "7.0.1",
     "react-dom": "19.2.0",
+    "semver": "7.8.5",
     "strip-ansi": "7.2.0",
     "web-tree-sitter": "0.25.10",
     "write-file-atomic": "8.0.0",
@@ -89,6 +91,7 @@
     "@fungi.computer/watchdog": "workspace:*",
     "@types/node": "24.13.3",
     "@types/react": "18.3.3",
+    "@types/semver": "7.8.0",
     "@types/write-file-atomic": "4.0.3",
     "bun": "1.4.2",
     "bun-types": "1.4.1",
