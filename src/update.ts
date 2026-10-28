@@ -212,6 +212,15 @@ export async function runFungiReleaseUpdate(
   }
 }
 
+/**
+ * The version a `--version` run reports. Releases print `Spore X`; builds from
+ * before the rename print `fungi X`, which a rollback must still recognise.
+ */
+function reportedVersion(stdout: string): string | undefined {
+  const parsed = releaseVersion.safeParse(stdout.trim().split(/\s+/).at(-1));
+  return parsed.success ? parsed.data : undefined;
+}
+
 async function updateRelease(
   notify: (message: string) => void,
   run: CommandRunner,
@@ -226,10 +235,10 @@ async function updateRelease(
       throw new Error(`${failure}\n${result.stderr.trim()}`.trim());
     return result.stdout;
   };
-  notify("Checking the latest fungi release…");
+  notify("Checking the latest Spore release…");
   const latest = releaseVersion.parse(await registry());
   if (latest === install.version) {
-    notify(`fungi ${install.version} is the latest release.`);
+    notify(`Spore ${install.version} is the latest release.`);
     await pruneFungiUpdates(updates);
     return;
   }
@@ -249,29 +258,29 @@ async function updateRelease(
             `${releasePackage}@${version}`,
           ]
         : ["add", "--global", `${releasePackage}@${version}`],
-      `${install.method} could not install fungi ${version}.`,
+      `${install.method} could not install Spore ${version}.`,
     );
   };
-  notify(`Installing fungi ${latest} with ${install.method}…`);
+  notify(`Installing Spore ${latest} with ${install.method}…`);
   try {
     await installVersion(latest);
     const started = await fungi(["--version"]);
-    if (started.code !== 0 || started.stdout.trim() !== `fungi ${latest}`)
-      throw new Error(`fungi ${latest} did not start after installing.`);
+    if (started.code !== 0 || reportedVersion(started.stdout) !== latest)
+      throw new Error(`Spore ${latest} did not start after installing.`);
   } catch (cause) {
-    notify(`Restoring fungi ${install.version}…`);
+    notify(`Restoring Spore ${install.version}…`);
     await installVersion(install.version);
     const restored = await fungi(["--version"]);
     if (
       restored.code !== 0 ||
-      restored.stdout.trim() !== `fungi ${install.version}`
+      reportedVersion(restored.stdout) !== install.version
     )
       throw new Error(
-        `Update to ${latest} failed; the previous fungi ${install.version} could not be verified. Reinstall with npm install -g ${releasePackage}@${install.version}.`,
+        `Update to ${latest} failed; the previous Spore ${install.version} could not be verified. Reinstall with npm install -g ${releasePackage}@${install.version}.`,
         { cause },
       );
     throw new Error(
-      `Update to ${latest} failed; fungi ${install.version} is restored. ${cause instanceof Error ? cause.message : ""}`.trim(),
+      `Update to ${latest} failed; Spore ${install.version} is restored. ${cause instanceof Error ? cause.message : ""}`.trim(),
       { cause },
     );
   }

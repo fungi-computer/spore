@@ -238,7 +238,12 @@ for (const size of sizes) {
       ["restarting", { phase: "restarting" }],
       [
         "stuck",
-        { phase: "stuck", lastError: "connect ECONNREFUSED 127.0.0.1:4317" },
+        {
+          phase: "stuck",
+          alive: false,
+          seconds: 40,
+          lastError: "connect ECONNREFUSED 127.0.0.1:4317",
+        },
       ],
       [
         "incompatible",
@@ -250,7 +255,13 @@ for (const size of sizes) {
     ];
     for (const [name, recovery] of views) {
       const modal = await render(
-        (colors) => <ServiceRecoveryOverlay view={recovery} colors={colors} />,
+        (colors) => (
+          <ServiceRecoveryOverlay
+            view={recovery}
+            colors={colors}
+            onClose={() => undefined}
+          />
+        ),
         size,
         false,
       );
@@ -330,8 +341,8 @@ test("Stop loop: Enter keeps the loop; only 2 stops it", async () => {
   }
 });
 
-test("a long Agent question or loop prompt never becomes a long title", async () => {
-  for (const name of ["question-long", "loop-menu"] as const) {
+test("a long loop prompt never becomes a long title", async () => {
+  for (const name of ["loop-menu"] as const) {
     const modal = await open(restPrompts[name]);
     try {
       const first = modal
@@ -372,9 +383,15 @@ test("Alt+D opens details while typing: a filtered picker and a text answer", as
     picker.destroy();
   }
   const text = await open({
-    ...restPrompts["question-multiple"],
+    ...restPrompts["loop-start"],
     body: "Which deliverables should ship this week, given the release notes, the docs refresh, the example apps and the test plan all compete for the same two people and one reviewer?",
     bodyLabel: "Question",
+    details: [
+      {
+        label: "Collision",
+        value: "Both sets of owners list the same reviewer.",
+      },
+    ],
   });
   try {
     expect(text.text()).toContain("Alt+D shows all");

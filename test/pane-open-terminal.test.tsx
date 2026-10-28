@@ -48,7 +48,7 @@ async function frameFor(
     const row = host.active().palette.find((entry) => entry.title === title);
     if (row === undefined) throw new Error(`${title} command missing`);
     await act(async () => {
-      await host.execute(row.commandId, { origin: "programmatic" });
+      await host.execute(row.command, { origin: "programmatic" });
     });
   };
   const type = async (text: string) => {

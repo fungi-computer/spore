@@ -85,7 +85,7 @@ function fakeKit() {
       },
     },
     commands: {
-      commandId: (id) => `probe:${id}`,
+      command: (id) => ({ namespace: "probe", id }),
       contribute: (contributed) => {
         for (const command of contributed) commands.set(command.id, command);
         return {

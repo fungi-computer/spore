@@ -1,5 +1,63 @@
 # @fungi.computer/spore
 
+## 0.5.0
+
+### Minor Changes
+
+- Changes since 0.4.0:
+
+  - fix(parakeet): polish the composer questions on the web and the terminal
+  - fix(lantern): remove the ASCII mushroom art everywhere
+  - fix(vishnu): name every block and trace command by its typed key
+  - refactor(vishnu-ui)!: name a window block's command by its typed Whistle key
+  - refactor(whistle)!: execute commands by their typed key; only Whistle mints
+    ids
+  - feat(composer): one Caps composer surface for chat and Prints
+  - fix(whistle): key commands by a typed namespace and id, not a rebuilt string
+  - fix(tui): the Board lines up, names its count once and shows its errors
+    apart
+  - fix(composer): public surfaces for the approval owners and the terminal's
+    home folder
+  - fix(tui): the Board reports the failures it shows
+  - fix(tui,truffle): the Board never breaks a live store or calls a stopped one
+    working
+  - fix(clients): explain the occupied offline prompt slot
+  - feat(tui,truffle): the Board ships as a program extension, read from stores
+  - fix(parakeet): confirm the family rule and keep approvals steady across
+    resizes
+  - feat(parakeet): answer tool approvals in the composer on the terminal and
+    the web
+  - feat(shiitake): route a child's waiting items to the Agent that sent the
+    work
+  - fix(tui): name the Esc handoff instead of a comma expression
+  - fix(tui): give a waiting decision the Esc the terminal keymap would take
+  - feat(parakeet): answer questions in the composer on the terminal and the web
+  - fix(parakeet): summarize repeated provider errors and disclose raw details
+  - feat(shiitake): support Local parent answers to child Asks
+  - fix(clients): finish live recovery and prove single frame application
+  - fix(tui): read observed reply age through Parakeet
+  - fix(tui): checkpoint bounded live client recovery
+  - fix(spore): say Spore in --help and the launch smoke version check
+  - fix(spore): label the CLI version as Spore, not fungi
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/agar@0.5.0
+  - @fungi.computer/lantern@0.3.1
+  - @fungi.computer/nacre@0.1.0
+  - @fungi.computer/parakeet@0.5.0
+  - @fungi.computer/shiitake-extensions@0.4.0
+  - @fungi.computer/shiitake@0.6.0
+  - @fungi.computer/whistle@0.3.0
+  - @fungi.computer/corral@0.1.4
+
 ## 0.4.0
 
 ### Minor Changes

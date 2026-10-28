@@ -37,6 +37,8 @@ function testClock() {
   let now = 0;
   const pending = new Map<() => void, number>();
   const clock: RecoveryClock = {
+    now: () => now,
+    random: () => 0.5,
     schedule(callback, milliseconds) {
       pending.set(callback, now + milliseconds);
       return () => {
@@ -46,6 +48,7 @@ function testClock() {
   };
   return {
     clock,
+    now: () => now,
     async advance(milliseconds: number) {
       const end = now + milliseconds;
       for (;;) {
@@ -62,6 +65,41 @@ function testClock() {
     },
   };
 }
+
+test("reconnect delay jitters and reaches a 30-second ceiling without overlapping attempts", async () => {
+  const timer = testClock();
+  const attempts: number[] = [];
+  const controls: ControlsRef = { current: undefined };
+  const setup = await testRender(
+    <Harness
+      rebind={() => {
+        attempts.push(timer.now());
+        return Promise.resolve({ kind: "unavailable", alive: true });
+      }}
+      reconnect={() => Promise.resolve({ kind: "reconnected" })}
+      controls={controls}
+      clock={{ ...timer.clock, random: () => 0.25 }}
+    />,
+    { width: 80, height: 24 },
+  );
+  try {
+    await act(async () => {
+      controls.current?.setUnavailable(true);
+      await setup.renderOnce();
+    });
+    await timer.advance(120_000);
+    const gaps = attempts
+      .slice(1)
+      .map((at, index) => at - (attempts[index] ?? 0));
+    expect(gaps.some((gap) => gap > 20_000)).toBe(true);
+    expect(gaps.every((gap) => gap <= 30_000)).toBe(true);
+    expect(attempts).toHaveLength(new Set(attempts).size);
+  } finally {
+    act(() => {
+      setup.renderer.destroy();
+    });
+  }
+});
 
 type Controls = {
   setUnavailable: (value: boolean) => void;
@@ -93,7 +131,11 @@ function Harness({
   return view === undefined ? (
     <text>connected</text>
   ) : (
-    <ServiceRecoveryOverlay view={view} colors={colors} />
+    <ServiceRecoveryOverlay
+      view={view}
+      colors={colors}
+      onClose={() => undefined}
+    />
   );
 }
 
@@ -142,12 +184,12 @@ test("a connection that comes back within the delay shows nothing", async () => 
   try {
     await lose();
     await settle(500);
-    expect(setup.captureCharFrame()).not.toContain("Restarting");
+    expect(setup.captureCharFrame()).not.toContain("Reconnecting");
     // Healed by the first attempt, before the overlay's delay.
     await heal();
     await settle(30_000);
     expect(attempts).toBeGreaterThan(0);
-    expect(setup.captureCharFrame()).not.toContain("Restarting");
+    expect(setup.captureCharFrame()).not.toContain("Reconnecting");
     expect(setup.captureCharFrame()).toContain("connected");
   } finally {
     act(() => {
@@ -161,16 +203,18 @@ test("a loss that outlasts the delay shows the overlay, and a successful rebind 
   const { setup, settle, lose, heal } = await mount(
     () =>
       Promise.resolve(
-        serviceBack ? { kind: "rebound" } : { kind: "unavailable" },
+        serviceBack
+          ? { kind: "rebound" }
+          : { kind: "unavailable", alive: false },
       ),
     () => Promise.resolve({ kind: "reconnected" }),
   );
   try {
     await lose();
     await settle(999);
-    expect(setup.captureCharFrame()).not.toContain("Restarting");
+    expect(setup.captureCharFrame()).not.toContain("Reconnecting");
     await settle(1);
-    expect(setup.captureCharFrame()).toContain("Restarting the service");
+    expect(setup.captureCharFrame()).toContain("Reconnecting to the service");
     expect(setup.captureCharFrame()).toContain(
       "Your conversation will resume.",
     );
@@ -178,7 +222,7 @@ test("a loss that outlasts the delay shows the overlay, and a successful rebind 
     await settle(200);
     await heal();
     await settle(50);
-    expect(setup.captureCharFrame()).not.toContain("Restarting");
+    expect(setup.captureCharFrame()).not.toContain("Reconnecting");
   } finally {
     act(() => {
       setup.renderer.destroy();
@@ -188,7 +232,7 @@ test("a loss that outlasts the delay shows the overlay, and a successful rebind 
 
 test("a service that stays away is named plainly with the command to run", async () => {
   const { setup, settle, lose } = await mount(
-    () => Promise.resolve({ kind: "unavailable" }),
+    () => Promise.resolve({ kind: "unavailable", alive: false }),
     () => Promise.resolve({ kind: "reconnected" }),
   );
   try {
@@ -197,10 +241,29 @@ test("a service that stays away is named plainly with the command to run", async
     expect(setup.captureCharFrame()).not.toContain("not answering");
     await settle(1);
     const frame = setup.captureCharFrame();
-    expect(frame).toContain("The service is not answering");
+    expect(frame).toContain("The service stopped");
     expect(frame).toContain("fungi resume");
-    expect(frame).not.toContain("Restarting the service");
+    expect(frame).not.toContain("Reconnecting to the service");
     await record("4-service-down-30s.txt", frame);
+  } finally {
+    act(() => {
+      setup.renderer.destroy();
+    });
+  }
+});
+
+test("a stalled watch with a living service reports busy, not stopped", async () => {
+  const { setup, settle, lose } = await mount(
+    () => Promise.resolve({ kind: "unavailable", alive: true }),
+    () => Promise.resolve({ kind: "reconnected" }),
+  );
+  try {
+    await lose();
+    await settle(40_000);
+    const frame = setup.captureCharFrame();
+    expect(frame).toContain("The service is busy (no reply for 40s)");
+    expect(frame).toContain("Your conversation will resume");
+    expect(frame).not.toContain("fungi resume");
   } finally {
     act(() => {
       setup.renderer.destroy();
@@ -255,7 +318,7 @@ for (const name of ["LocalServiceUpdated", "LocalServiceIncompatible"]) {
         const frame = setup.captureCharFrame();
         expect(frame).toContain(message);
         expect(frame).not.toContain("fungi resume");
-        expect(frame).not.toContain("Restarting the service");
+        expect(frame).not.toContain("Reconnecting to the service");
         expect(frame).not.toContain("not answering");
         await record(`5-${name}.txt`, frame);
       } finally {
@@ -294,7 +357,11 @@ function ObservedRecovery({
     <>
       <text>{status.observation.status}</text>
       {view === undefined ? null : (
-        <ServiceRecoveryOverlay view={view} colors={colors} />
+        <ServiceRecoveryOverlay
+          view={view}
+          colors={colors}
+          onClose={() => undefined}
+        />
       )}
     </>
   );
@@ -414,11 +481,11 @@ test("real controller opening retains outage recovery until a fresh snapshot", a
     expect(setup.captureCharFrame()).toContain("connecting");
     await timer.advance(750);
     await flush();
-    expect(setup.captureCharFrame()).toContain("Restarting the service");
+    expect(setup.captureCharFrame()).toContain("Reconnecting to the service");
     expect(signals[0]?.aborted).toBe(false);
     await timer.advance(29_000);
     await flush();
-    expect(setup.captureCharFrame()).toContain("fungi resume");
+    expect(setup.captureCharFrame()).toContain("The service is busy");
     // The real controller deadline must return to unavailable, allowing retry.
     await failed.promise;
     await observe("unavailable");
@@ -430,11 +497,11 @@ test("real controller opening retains outage recovery until a fresh snapshot", a
     await timer.advance(500);
     await observe("connecting");
     expect(opens).toHaveLength(3);
-    expect(setup.captureCharFrame()).toContain("fungi resume");
+    expect(setup.captureCharFrame()).toContain("The service is busy");
     // A late snapshot from the cancelled watch must not heal this outage.
     opens[1]?.resolve(watch().value);
     await flush();
-    expect(setup.captureCharFrame()).toContain("fungi resume");
+    expect(setup.captureCharFrame()).toContain("The service is busy");
     opens[2]?.resolve(watch().value);
     await waitForFrame(
       setup,

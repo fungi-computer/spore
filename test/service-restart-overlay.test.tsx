@@ -157,7 +157,10 @@ async function withOpenSession(
       const closing = running;
       if (closing !== undefined) {
         await act(async () => {
-          await commands.execute("tui:exit", { origin: "slash" });
+          await commands.execute(
+            { namespace: "tui", id: "exit" },
+            { origin: "slash" },
+          );
           await closing;
         });
       }
@@ -197,7 +200,7 @@ for (const stop of ["graceful", "SIGKILL"]) {
             () => composerText(setup)[0] === "my unsent draft",
           );
           await settle(100);
-          expect(frame()).not.toContain("Restarting the service");
+          expect(frame()).not.toContain("Reconnecting to the service");
           await record("1-before-restart.txt");
 
           await act(async () => {
@@ -207,19 +210,19 @@ for (const stop of ["graceful", "SIGKILL"]) {
           // Exact timing belongs to the injected-clock tests, not this
           // process-level proof, whose stop can take longer under load.
           await until("the restart overlay", () =>
-            frame().includes("Restarting the service"),
+            frame().includes("Reconnecting to the service"),
           );
           expect(frame()).toContain("Your conversation will resume.");
           await record("2-overlay.txt");
 
           // Still down a while later: still the overlay, still the draft.
           await settle(1_500);
-          expect(frame()).toContain("Restarting the service");
+          expect(frame()).toContain("Reconnecting to the service");
           const second = await act(async () => manager.start());
           assert.notEqual(second.baseUrl, firstBaseUrl);
           await until(
             "the overlay to go away",
-            () => !frame().includes("Restarting the service"),
+            () => !frame().includes("Reconnecting to the service"),
           );
           await settle(300);
           expect(frame()).not.toContain("not answering");

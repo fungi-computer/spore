@@ -5,6 +5,7 @@ import { localExtensions } from "@fungi.computer/truffle/extensions";
 import {
   createWhistle,
   type WhistlePrompt,
+  type WhistleCommandKey,
   type WhistleRuntime,
 } from "@fungi.computer/whistle";
 import {
@@ -52,7 +53,7 @@ const agents = [
  */
 export async function runCommand(
   contribute: (runtime: WhistleRuntime) => void,
-  commandId: string,
+  command: WhistleCommandKey,
   script: readonly (string | boolean)[],
   title = "Command",
 ): Promise<CommandRun> {
@@ -70,7 +71,7 @@ export async function runCommand(
     const answer = script[prompts.length - 1];
     if (answer !== undefined) host.answer(pending.sequence, answer);
   });
-  const finished = runtime.execute(commandId, { origin: "slash" });
+  const finished = runtime.execute(command, { origin: "slash" });
   let ended = false;
   void finished.then(
     () => {
@@ -144,7 +145,7 @@ export async function runProducer(
           }),
         ),
       }),
-    `local:${command}`,
+    { namespace: "local", id: command },
     script,
     "Management",
   );

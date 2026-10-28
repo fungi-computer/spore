@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { DatabaseSync } from "node:sqlite";
-import { act, useCallback, useState } from "react";
+import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
 import { RpcStub, RpcTarget } from "@fungi.computer/capnweb";
 import {
@@ -10,12 +10,8 @@ import {
   type ApprovalApplyHost,
 } from "@fungi.computer/approvals";
 import { fromNodeSqlite } from "@fungi.computer/watchdog/node-sqlite";
-import {
-  McpApprovalPrompt,
-  loadMcpApprovalSource,
-  type McpApprovalSource,
-} from "../src/button/mcp-approval.js";
-import { useTerminalTheme } from "../src/button/terminal-theme.js";
+import { loadMcpApprovalSource } from "../src/button/mcp-approval-source.js";
+import { ApprovalComposer } from "./approval-composer-harness.js";
 import { pressDecodedKey } from "./native-readiness.js";
 
 /** Real bound ledger methods behind the maintained native Agar RPC handle. */
@@ -37,17 +33,6 @@ class LedgerRpcHost extends RpcTarget {
   setAutoApprove(input: Parameters<Approvals["setAutoApprove"]>[0]) {
     return this.control.setAutoApprove(input);
   }
-}
-
-function View({ source }: Readonly<{ source: McpApprovalSource | undefined }>) {
-  const { colors } = useTerminalTheme("mocha");
-  const [open, setOpen] = useState(true);
-  const close = useCallback(() => {
-    setOpen(false);
-  }, []);
-  return source === undefined || !open ? null : (
-    <McpApprovalPrompt source={source} colors={colors} onClose={close} />
-  );
 }
 
 /** A manual-approval home using the owner's ordinary policy interface. */
@@ -146,10 +131,10 @@ for (const { decision, revokeMembership } of [
         await loadMcpApprovalSource(remote, "missing-record"),
       ).toBeUndefined();
       expect(writes).toBe(0);
-      const setup = await testRender(<View source={source} />, {
-        width: 100,
-        height: 30,
-      });
+      const setup = await testRender(
+        <ApprovalComposer source={source} width={100} height={30} />,
+        { width: 100, height: 30 },
+      );
       try {
         await act(async () => setup.renderOnce());
         const frame = await setup.waitForFrame(
@@ -158,8 +143,8 @@ for (const { decision, revokeMembership } of [
             value.includes("Approve once"),
         );
         const normalized = frame.replace(/\s+/gu, " ");
-        expect(normalized).toContain("1 ▶ Approve once");
-        expect(normalized).toContain("2 Deny");
+        expect(normalized).toContain("› 1. Approve once");
+        expect(normalized).toContain("2. Deny");
         expect(normalized).not.toContain("Always allow");
         expect(frame).toContain("Research Agent");
         expect(frame).not.toContain("agent:research");

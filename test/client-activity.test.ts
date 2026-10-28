@@ -120,6 +120,7 @@ test("Herdr activity only blocks for human-needed attention, not a person's paus
     queryClient.setQueryData(sessionQueryOptions(fake.session).queryKey, {
       observation: "live",
       snapshot: { ...snapshot, attention },
+      lastReplyAt: 0,
       latestPrompt: undefined,
     });
   const item = {
@@ -153,6 +154,7 @@ test("Herdr activity only blocks for human-needed attention, not a person's paus
         attention: [{ ...item, kind: "note" }],
         activity: runningActivity(),
       },
+      lastReplyAt: 0,
       latestPrompt: undefined,
     });
     assert.equal(states.at(-1), "working");
@@ -220,6 +222,7 @@ test("public activity gives independent latest-value subscriptions and ends at d
     queryClient.setQueryData(sessionQueryOptions(fake.session).queryKey, {
       observation: "live",
       snapshot,
+      lastReplyAt: 0,
       latestPrompt: undefined,
     });
   publish(snapshot);
@@ -294,6 +297,7 @@ test("an open agent question reports blocked mid-turn and parked, and answering 
     queryClient.setQueryData(sessionQueryOptions(fake.session).queryKey, {
       observation: "live",
       snapshot: next,
+      lastReplyAt: 0,
       latestPrompt: undefined,
     });
   const states: string[] = [];
@@ -344,6 +348,7 @@ test("only the question extension's headers reach the activity stream", async ()
     queryClient.setQueryData(sessionQueryOptions(fake.session).queryKey, {
       observation: "live",
       snapshot: next,
+      lastReplyAt: 0,
       latestPrompt: undefined,
     });
   const item = {

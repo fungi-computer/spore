@@ -84,7 +84,7 @@ const bounded = async (operation, label) => {
 async function command(alias) {
   const row = commands.snapshot().slash.find((entry) => entry.alias === alias);
   assert.ok(row, `missing ${alias}`);
-  await act(async () => commands.execute(row.commandId, { origin: "slash" }));
+  await act(async () => commands.execute(row.command, { origin: "slash" }));
 }
 async function login() {
   const row = commands
@@ -93,7 +93,7 @@ async function login() {
   assert.ok(row, "missing login");
   statusFinished = Promise.withResolvers();
   await act(() => {
-    loginRun = commands.execute(row.commandId, { origin: "slash" });
+    loginRun = commands.execute(row.command, { origin: "slash" });
   });
   // /login reads configured access over the Local door before it asks; frame
   // passes are not time, so wait for that round trip.

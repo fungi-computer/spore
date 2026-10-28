@@ -2,6 +2,10 @@ import { paletteRows } from "./palette-rows.js";
 import { displayText } from "./display-text.js";
 import { useEffect, useRef } from "react";
 import type { AppSurfaceCommandHost } from "@fungi.computer/nacre/command-host";
+import type {
+  WhistleCommand,
+  WhistleCommandKey,
+} from "@fungi.computer/whistle";
 import {
   Picker,
   reportFailure,
@@ -38,9 +42,12 @@ export function usePaneShellCommands(options: PaneShellCommandOptions) {
         return reportFailure("pane-shell-command", cause);
       });
   };
-  const execute = (commandId: string) => {
+  const execute = (
+    row: Readonly<{ commandId: string; command: WhistleCommandKey }>,
+  ) => {
+    const { commandId } = row;
     run(async () => {
-      const outcome = await current.current.host.execute(commandId, {
+      const outcome = await current.current.host.execute(row.command, {
         origin: "keyboard",
       });
       if (outcome.status === "handled")
@@ -78,7 +85,7 @@ export function usePaneShellCommands(options: PaneShellCommandOptions) {
           const row = rows[index];
           if (row !== undefined) {
             handle.dismiss();
-            execute(row.commandId);
+            execute(row);
           }
         }}
       />
@@ -119,7 +126,7 @@ export function usePaneShellCommands(options: PaneShellCommandOptions) {
       },
       handler,
     });
-    return options.host.registerShellCommands([
+    const shell: readonly WhistleCommand<never>[] = [
       {
         id: "open-app",
         title: "Open pane",
@@ -276,6 +283,61 @@ export function usePaneShellCommands(options: PaneShellCommandOptions) {
           current.current.registry.equalize();
         },
       },
-    ]);
+    ];
+    // A program's key never takes one the shell or an earlier program holds;
+    // it still opens from Open pane and the palette.
+    const taken = new Set(
+      shell.flatMap((command) =>
+        (command.projections?.bindings?.values ?? []).map(normalBinding),
+      ),
+    );
+    const programs = current.current.registry.launchers.flatMap((launcher) => {
+      if (launcher.binding === undefined) return [];
+      const key = normalBinding(launcher.binding);
+      const free = !taken.has(key);
+      if (free) taken.add(key);
+      else
+        reportFailure(
+          "pane-launcher-binding-taken",
+          new Error(
+            `${launcher.target.kind} asked for ${launcher.binding}, which is taken`,
+          ),
+        );
+      return [
+        {
+          // A program kind is `extension:<id>.<terminal>`; command ids hold no colon.
+          id: `open-${launcher.target.kind.replaceAll(":", "-")}`,
+          title: `Open ${launcher.name.toLowerCase()}`,
+          category: "Panes",
+          description: launcher.description,
+          projections: free
+            ? {
+                bindings: { values: [launcher.binding], order: 13 },
+                palette: { order: 1 },
+              }
+            : { palette: { order: 1 } },
+          handler: () => {
+            run(async () => {
+              const outcome = await current.current.registry.open(
+                launcher.target,
+                true,
+                { direction: "beside", afterPaneId: focused() ?? null },
+              );
+              if (outcome.kind === "refused")
+                current.current.toast({
+                  variant: "error",
+                  message: outcome.reason,
+                });
+            });
+          },
+        },
+      ];
+    });
+    return options.host.registerShellCommands([...shell, ...programs]);
   }, [options.host, options.registry]);
+}
+
+/** Bindings compare without surrounding space. */
+function normalBinding(binding: string): string {
+  return binding.trim();
 }

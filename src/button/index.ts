@@ -165,7 +165,8 @@ export type PaneSessionContext = Readonly<{
   interactions?:
     | import("@fungi.computer/parakeet/headless").ParakeetInteractions
     | undefined;
-  mcpApprovals?: import("./mcp-approval.js").McpApprovalSource | undefined;
+  mcpApprovals?:
+    import("./mcp-approval-source.js").McpApprovalSource | undefined;
   models?: import("./model-query.js").TuiModelSource | undefined;
   sandbox?: import("./local-sandbox.js").TuiSandboxSource | undefined;
   stopAll?: (() => Promise<StopAllResult>) | undefined;
@@ -278,6 +279,8 @@ export type PaneLauncher<Target extends PaneTarget = PaneTarget> = Readonly<{
   name: string;
   description: string;
   target: Target;
+  /** A shell key binding that opens this pane beside the focused one. */
+  binding?: string;
 }>;
 
 /** One pane kind: parses its target at the boundary and renders on the kit. */
@@ -330,7 +333,8 @@ export type { TuiPresentation } from "./presentation.js";
 
 /** Whether service.json now names a service that answers. */
 export type ServiceRebind =
-  Readonly<{ kind: "rebound" }> | Readonly<{ kind: "unavailable" }>;
+  | Readonly<{ kind: "rebound" }>
+  | Readonly<{ kind: "unavailable"; alive: boolean }>;
 export { applyNativeTerminalDefaults } from "./presentation.js";
 export { reportFailure } from "./log-event.js";
 export { footerLayout, fitFooterCaption } from "./footer-layout.js";
@@ -344,11 +348,10 @@ export { DialogSurface } from "./dialog-surface.js";
 export type { DialogController } from "./dialog.js";
 export { useInteractionDialog } from "./interaction-dialog.js";
 export {
-  useMcpApprovalDialog,
   loadMcpApprovalSource,
   type McpApprovalSource,
-} from "./mcp-approval.js";
-export { useMcpFormApprovalDialog } from "./mcp-form-approval.js";
+} from "./mcp-approval-source.js";
+export { useMcpFormApprovalSource } from "./mcp-form-approval.js";
 export { SlashCompletionList } from "./slash-completion.js";
 export { CopySurface } from "./copy-surface.js";
 export { toolCodeQuery } from "./tool-code-query.js";
@@ -373,6 +376,7 @@ export {
 export { z } from "zod";
 
 export { Picker } from "./picker.js";
+export { AwaitingDecisionBox, DecisionBox } from "./decision-box.js";
 export {
   ModalDetails,
   ModalHeader,
@@ -398,6 +402,7 @@ export {
 export { terminalText } from "./terminal-text.js";
 
 export { openLocalTerminal } from "./local-terminal.js";
+export { serveProgramRequests } from "./program-requests.js";
 export type { LocalTerminalFrame } from "./local-terminal.js";
 export { openMacTerminal } from "./local-terminal-mac.js";
 export { EmbeddedTerminalRenderable } from "./native-terminal.js";
@@ -414,3 +419,7 @@ export {
 } from "./sigil-gutter.js";
 
 export { conversationNavigation } from "./conversation-navigation.js";
+
+/** The person's home folder, which approval paths are shortened against. */
+export { homedir as homeFolder } from "node:os";
+export { MAX_APPROVAL_DENIAL_NOTE_LENGTH } from "@fungi.computer/approvals";

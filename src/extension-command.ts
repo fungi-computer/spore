@@ -193,13 +193,18 @@ export async function projectExtensionParts(
   for (const diagnostic of parts.diagnostics) report(diagnostic);
   return {
     clients: parts.clients,
-    programs: parts.terminals.map((terminal) => ({
-      kind: `extension:${terminal.extensionId}.${terminal.terminalId}`,
-      name: terminal.name,
-      description: terminal.description,
-      command: terminal.command,
-      cwd: terminal.cwd,
-      env: terminal.env,
-    })),
+    programs: parts.terminals.map((terminal) => {
+      const program = {
+        kind: `extension:${terminal.extensionId}.${terminal.terminalId}`,
+        name: terminal.name,
+        description: terminal.description,
+        command: terminal.command,
+        cwd: terminal.cwd,
+        env: terminal.env,
+      };
+      return terminal.binding === undefined
+        ? program
+        : { ...program, binding: terminal.binding };
+    }),
   };
 }

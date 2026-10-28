@@ -263,7 +263,7 @@ for (const command of ["resume", "fork"]) {
       assert.ok(paneCommand);
       await picker("Resume conversation", async () => {
         await act(async () => {
-          const result = await commands.execute(paneCommand.commandId, {
+          const result = await commands.execute(paneCommand.command, {
             origin: "keyboard",
           });
           assert.equal(result.status, "handled", JSON.stringify(result));
@@ -288,7 +288,9 @@ for (const command of ["resume", "fork"]) {
       assert.ok(scopes.includes(originalScope[0]));
       assert.deepEqual(closed, ["original", destination]);
     } finally {
-      await act(async () => commands.execute("tui:exit", { origin: "slash" }));
+      await act(async () =>
+        commands.execute({ namespace: "tui", id: "exit" }, { origin: "slash" }),
+      );
       await act(async () => {
         await running;
         query.clear();

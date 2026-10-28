@@ -43,9 +43,12 @@ test("named layout commands reach Maosaico through the real shell command host",
         await panes.open({ kind: "probe", label });
     });
     await act(async () => {
-      const outcome = await host.execute("shell:layout-grid", {
-        origin: "palette",
-      });
+      const outcome = await host.execute(
+        { namespace: "shell", id: "layout-grid" },
+        {
+          origin: "palette",
+        },
+      );
       expect(outcome.status).toBe("handled");
     });
     expect(panes.read().map((pane) => pane.frame)).toEqual([
@@ -62,9 +65,12 @@ test("named layout commands reach Maosaico through the real shell command host",
       ["grid", { x: 0, y: 0, width: 80, height: 24 }],
     ] as const) {
       await act(async () => {
-        const outcome = await host.execute(`shell:layout-${layout}`, {
-          origin: "palette",
-        });
+        const outcome = await host.execute(
+          { namespace: "shell", id: `layout-${layout}` },
+          {
+            origin: "palette",
+          },
+        );
         expect(outcome.status).toBe("handled");
       });
       expect(panes.read()[0]?.frame).toEqual(expected);
@@ -176,9 +182,12 @@ test("native layout and resize keys preserve panes and live input", async () => 
     await waitForFrame(setup, () => panes.read()[0]?.frame.width === 100);
     expect(panes.read()[0]?.frame.width).toBe(100);
     await act(async () => {
-      const outcome = await app.commandHost.execute("shell:layout-main-top", {
-        origin: "palette",
-      });
+      const outcome = await app.commandHost.execute(
+        { namespace: "shell", id: "layout-main-top" },
+        {
+          origin: "palette",
+        },
+      );
       expect(outcome.status).toBe("handled");
     });
     for (const [key, height] of [

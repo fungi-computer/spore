@@ -44,7 +44,15 @@ function fakeRelease(latest: string, broken: ReadonlySet<string> = new Set()) {
       return Promise.resolve(
         broken.has(installed)
           ? { code: 1, stdout: "", stderr: "crash" }
-          : { code: 0, stdout: `fungi ${installed}\n`, stderr: "" },
+          : {
+              code: 0,
+              // The original install predates the rename and prints `fungi X`.
+              stdout:
+                installed === install.version
+                  ? `fungi ${installed}\n`
+                  : `Spore ${installed}\n`,
+              stderr: "",
+            },
       );
     return Promise.resolve({ code: 0, stdout: "", stderr: "" });
   };
@@ -166,7 +174,7 @@ for (const method of alternateMethods) {
           calls.push(command.join(" "));
           return Promise.resolve({
             code: 0,
-            stdout: command.at(-1) === "--version" ? "fungi 0.0.2" : "",
+            stdout: command.at(-1) === "--version" ? "Spore 0.0.2" : "",
             stderr: "",
           });
         },
@@ -194,7 +202,7 @@ test("an up-to-date install changes nothing", async () => {
     updates: join(tmpdir(), "fungi-updates-missing"),
   });
   expect(release.calls.filter((call) => call.includes("install"))).toEqual([]);
-  expect(messages.at(-1)).toBe("fungi 0.0.1 is the latest release.");
+  expect(messages.at(-1)).toBe("Spore 0.0.1 is the latest release.");
 });
 
 test("a release that does not start is rolled back to the previous version", async () => {
@@ -212,7 +220,7 @@ test("a release that does not start is rolled back to the previous version", asy
     failure = cause;
   }
   expect(failure).toBeInstanceOf(Error);
-  expect(String(failure)).toContain("fungi 0.0.1 is restored");
+  expect(String(failure)).toContain("Spore 0.0.1 is restored");
   expect(release.installed()).toBe("0.0.1");
 });
 

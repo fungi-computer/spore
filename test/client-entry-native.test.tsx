@@ -156,7 +156,7 @@ for (const { width, height } of [
               .palette.find((row) => row.title === "Row actions");
             if (row === undefined)
               throw new Error("Row actions missing from palette");
-            void commands.execute(row.commandId, { origin: "keyboard" });
+            void commands.execute(row.command, { origin: "keyboard" });
           });
         }
         if (state === "queued" || state === "active") {

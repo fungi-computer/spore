@@ -34,16 +34,22 @@ test("/stop all invokes the same tree stop once even while the parent is idle", 
     toolGroup: () => undefined,
   });
   try {
-    const result = await commands.execute("tui:stop", {
-      origin: "slash",
-      arguments: { scope: "all" },
-    });
+    const result = await commands.execute(
+      { namespace: "tui", id: "stop" },
+      {
+        origin: "slash",
+        arguments: { scope: "all" },
+      },
+    );
     expect(result.status).toBe("handled");
     expect(calls).toBe(1);
-    const invalid = await commands.execute("tui:stop", {
-      origin: "slash",
-      arguments: { scope: "other" },
-    });
+    const invalid = await commands.execute(
+      { namespace: "tui", id: "stop" },
+      {
+        origin: "slash",
+        arguments: { scope: "other" },
+      },
+    );
     expect(invalid.status).toBe("failed");
     expect(calls).toBe(1);
   } finally {

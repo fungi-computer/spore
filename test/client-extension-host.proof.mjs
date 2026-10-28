@@ -158,7 +158,10 @@ try {
   await reported("idle");
   seedSessionQuery(queryClient, first, snapshot("working"));
   await reported("working");
-  const question = commands.execute("host-proof:question", { origin: "slash" });
+  const question = commands.execute(
+    { namespace: "host-proof", id: "question" },
+    { origin: "slash" },
+  );
   const block = await reported("blocked");
   assert.equal(block.params.message, "Waiting for your response");
   assert.ok(!JSON.stringify(requests).includes("PRIVATE_QUESTION"));

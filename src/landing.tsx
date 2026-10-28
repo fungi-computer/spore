@@ -3,7 +3,7 @@ import type {
   PrivateLocalAgentChoice,
   PrivateLocalSessionChoice,
 } from "@fungi.computer/truffle/service";
-import { compactMushroom, fungiWordmark } from "@fungi.computer/lantern/banner";
+import { fungiWordmark } from "@fungi.computer/lantern/banner";
 import type { createRoot } from "@opentui/react";
 import { useTerminalDimensions } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
@@ -51,7 +51,6 @@ export type LandingProps = Readonly<{
 }>;
 
 const wordmark = fungiWordmark.replace(/^\n+|\n+$/gu, "");
-const smallMark = compactMushroom.replace(/\n+$/u, "");
 
 /** A project folder with the home directory shortened to `~`. */
 export function displayFolder(folder: string) {
@@ -132,9 +131,11 @@ export function Landing({
         minHeight={0}
       >
         <box flexDirection="column" flexShrink={0}>
-          <text fg={colors.primary} alignSelf="center">
-            {roomy ? wordmark : smallMark}
-          </text>
+          {roomy ? (
+            <text fg={colors.primary} alignSelf="center">
+              {wordmark}
+            </text>
+          ) : null}
           <text
             fg={colors.foreground}
             attributes={2}

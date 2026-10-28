@@ -69,7 +69,7 @@ test("version skips home work; refused activations and installed names warn once
       },
     };
     await runFungiCli(["--version"], io, {}, home);
-    expect(output).toContain("fungi ");
+    expect(output).toContain("Spore ");
     expect(errors).toBe("");
     expect((await stat(installed)).isFile()).toBe(true);
     await assert.rejects(stat(marker), { code: "ENOENT" });
@@ -104,7 +104,6 @@ test("version skips home work; refused activations and installed names warn once
     expect(errors).not.toContain(source);
     expect(await readFile(archivedInstalled, "utf8")).toBe(oldInstalled);
     expect(await readFile(archivedActivations, "utf8")).toBe(oldActivations);
-    expect(errors).toContain("What's new:");
     const shippedNews = z
       .strictObject({ release: z.string(), lines: z.array(z.string()) })
       .parse(
@@ -115,6 +114,9 @@ test("version skips home work; refused activations and installed names warn once
           ),
         ),
       );
+    expect(errors.includes("What's new:")).toBe(shippedNews.lines.length > 0);
+    for (const line of shippedNews.lines)
+      expect(errors).toContain("  • " + line);
     expect(JSON.parse(await readFile(marker, "utf8"))).toMatchObject({
       version: 1,
       release: shippedNews.release,
@@ -938,7 +940,7 @@ test("--version and -V print the package version", async () => {
   for (const flag of ["--version", "-V"]) {
     const sink = capture();
     await runFungiCli([flag], { stdout: sink.stdout });
-    expect(sink.text()).toBe(`fungi ${packageVersion}\n`);
+    expect(sink.text()).toBe(`Spore ${packageVersion}\n`);
   }
 });
 

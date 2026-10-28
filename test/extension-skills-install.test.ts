@@ -159,7 +159,10 @@ test("retrying skills activation does not reinstall or repeat the install questi
     const answer = answers[questions.length - 1];
     if (answer !== undefined) host.answer(pending.sequence, answer);
   });
-  const running = runtime.execute("local:extensions", { origin: "slash" });
+  const running = runtime.execute(
+    { namespace: "local", id: "extensions" },
+    { origin: "slash" },
+  );
   try {
     await failed.promise;
     expect(installs).toEqual([source]);

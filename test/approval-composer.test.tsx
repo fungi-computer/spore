@@ -1,13 +1,9 @@
 import { expect, test } from "bun:test";
-import { act, useCallback, useState } from "react";
+import { act, useState } from "react";
 import { testRender } from "@opentui/react/test-utils";
-import {
-  McpApprovalPrompt,
-  type McpApprovalSource,
-} from "../src/button/mcp-approval.js";
 import type { ApprovalView } from "@fungi.computer/approvals";
-import { useTerminalTheme } from "../src/button/terminal-theme.js";
-import { DialogSurface } from "../src/button/dialog-surface.js";
+import type { McpApprovalSource } from "../src/button/mcp-approval-source.js";
+import { ApprovalComposer as Composer } from "./approval-composer-harness.js";
 import { pressDecodedKey, waitForFrame } from "./native-readiness.js";
 import { localExecEscapeReview } from "../../../runtimes/local/src/private-local-exec-review.js";
 import { localExecRules } from "../../../runtimes/local/src/private-local-exec-rules.js";
@@ -102,278 +98,26 @@ function fakeApprovals(respond?: McpApprovalSource["answer"]) {
   };
 }
 
-function View({
-  source,
-  surface = false,
-}: Readonly<{ source: McpApprovalSource; surface?: boolean }>) {
-  const { colors } = useTerminalTheme("mocha");
-  const [open, setOpen] = useState(true);
-  const close = useCallback(() => {
-    setOpen(false);
-  }, []);
-  const prompt = (
-    <McpApprovalPrompt source={source} colors={colors} onClose={close} />
-  );
-  return !open ? null : surface ? (
-    <DialogSurface colors={colors} onClose={close}>
-      {prompt}
-    </DialogSurface>
-  ) : (
-    prompt
-  );
-}
-
-test("Deny and say why preserves Esc, treats blank as Deny, and sends a typed note", async () => {
-  for (const input of ["escape", "empty", "note"] as const) {
-    const producer = fakeApprovals();
-    const setup = await testRender(<View source={producer.source} />, {
-      width: 80,
-      height: 30,
-    });
-    try {
-      act(() => {
-        producer.publish(approval());
-      });
-      const frame = await waitForFrame(setup, (value) =>
-        value.includes("Deny and say why"),
-      );
-      expect(frame).toContain("Deny and say why");
-      for (let index = 0; index < 2; index++)
-        await pressDecodedKey(setup, () => {
-          setup.mockInput.pressArrow("down");
-        });
-      await pressDecodedKey(setup, () => {
-        setup.mockInput.pressEnter();
-      });
-      expect(
-        await waitForFrame(setup, (value) => value.includes("Why deny?")),
-      ).toContain("Why deny?");
-      const askingWhy = setup.captureCharFrame();
-      expect(askingWhy.match(/Enter deny/gu)).toHaveLength(1);
-      expect(askingWhy).toContain("Esc back");
-      expect(askingWhy).not.toContain("Esc close");
-      if (input === "escape") {
-        await pressDecodedKey(setup, () => {
-          setup.mockInput.pressEscape();
-        });
-        expect(
-          await waitForFrame(setup, (value) =>
-            value.includes("Deny and say why"),
-          ),
-        ).toContain("Approve once");
-        expect(producer.answers).toEqual([]);
-      } else {
-        if (input === "note")
-          await act(async () => {
-            await setup.mockInput.typeText("Use the sandbox instead");
-          });
-        await pressDecodedKey(setup, () => {
-          setup.mockInput.pressEnter();
-        });
-        const expected = {
-          recordId: "approval-1",
-          decision: "deny",
-          expectedRevision: 7,
-        } satisfies Parameters<McpApprovalSource["answer"]>[0];
-        expect(producer.answers).toEqual([
-          input === "note"
-            ? { ...expected, denialNote: "Use the sandbox instead" }
-            : expected,
-        ]);
-      }
-    } finally {
-      act(() => {
-        setup.renderer.destroy();
-      });
-    }
-  }
-});
-
-test("typed rule coverage appears by Always allow; unavailable reason stays in Details", async () => {
-  for (const available of [true, false]) {
-    const producer = fakeApprovals();
-    const source: McpApprovalSource = {
-      ...producer.source,
-      review: {
-        form: "direct",
-        kind: "exec",
-        command: "git add hello.js",
-        cwd: "/project",
-        justification: "Stage changes",
-        ...(available
-          ? {
-              prefix: ["git", "add"],
-              alwaysAllowCoverage: "Any git add in this project",
-            }
-          : { alwaysAllowUnavailableReason: "This command cannot be reused." }),
-      },
-    };
-    const setup = await testRender(<View source={source} />, {
-      width: 120,
-      height: 30,
-    });
-    try {
-      act(() => {
-        producer.publish(approval());
-      });
-      const frame = await waitForFrame(setup, (value) =>
-        value.includes("Deny and say why"),
-      );
-      if (available) {
-        expect(frame).toContain("Any git add in this project");
-        expect(frame).toContain("Always allow");
-      } else {
-        expect(frame).not.toContain("Always allow");
-        await pressDecodedKey(setup, () => {
-          setup.mockInput.pressKey("d");
-        });
-        expect(
-          await waitForFrame(setup, (value) =>
-            value.includes("This command cannot be reused."),
-          ),
-        ).toContain("This command cannot be reused.");
-      }
-    } finally {
-      act(() => {
-        setup.renderer.destroy();
-      });
-    }
-  }
-});
-
-test("Enter, Enter-Enter, and 2-Enter cannot persist an Always-allow rule", async () => {
-  for (const keys of ["enter", "down-enter-enter", "2-enter", "2-down-enter"]) {
-    const root = await mkdtemp(join(tmpdir(), "approval-card-rule-"));
-    const producer = fakeApprovals();
-    const source: McpApprovalSource = {
-      ...producer.source,
-      review: {
-        form: "direct",
-        kind: "exec",
-        argv: ["git", "add", "hello.js"],
-        command: "git add hello.js",
-        cwd: root,
-        justification: "Git metadata is read-only",
-        prefix: ["git", "add"],
-        risk: {
-          summary:
-            "Git hooks in this project can run code as you, and this Agent can add hooks.",
-          detail:
-            "Git runs hook scripts from the folder the project's hooksPath setting names.",
-        },
-      },
-      answer: async (input) => {
-        if (input.decision === "always-allow")
-          localExecRules(root).add(["git", "add"]);
-        return producer.source.answer(input);
-      },
-    };
-    const setup = await testRender(<View source={source} />, {
-      width: 80,
-      height: 30,
-    });
-    try {
-      act(() => {
-        producer.publish(approval(keys));
-      });
-      const frame = await waitForFrame(setup, (value) =>
-        value.includes("Approve once"),
-      );
-      expect(frame).toMatch(/▶ Approve once/u);
-      for (const key of keys.split("-")) {
-        await pressDecodedKey(setup, () => {
-          if (key === "enter") setup.mockInput.pressEnter();
-          else if (key === "down") setup.mockInput.pressArrow("down");
-          else setup.mockInput.pressKey(key);
-        });
-      }
-      expect(producer.answers.map((answer) => answer.decision)).toEqual(
-        keys === "enter"
-          ? ["approve"]
-          : keys === "2-down-enter"
-            ? ["always-allow"]
-            : [],
-      );
-      const stored = await rulesFile(root);
-      if (keys === "2-down-enter") expect(stored).toContain("git");
-      else expect(stored).toBe("");
-    } finally {
-      act(() => {
-        setup.renderer.destroy();
-      });
-      await rm(root, { recursive: true, force: true });
-    }
-  }
-});
-
-test("an immediate Enter cannot write the project grant file", async () => {
-  const root = await mkdtemp(join(tmpdir(), "approval-card-immediate-"));
-  const producer = fakeApprovals();
-  const source: McpApprovalSource = {
-    ...producer.source,
-    review: {
-      ...localExecEscapeReview(
-        {
-          executable: "git",
-          args: ["add", "hello.js"],
-          escape: { justification: "Needs Git" },
-        },
-        root,
-      ),
-    },
-    answer: async (input) => {
-      if (input.decision === "always-allow")
-        localExecRules(root).add(["git", "add"]);
-      return producer.source.answer(input);
-    },
-  };
-  const setup = await testRender(<View source={source} />, {
-    width: 80,
-    height: 30,
-  });
-  try {
-    act(() => {
-      producer.publish(approval());
-    });
-    await waitForFrame(setup, (frame) => frame.includes("git add"));
-    await pressDecodedKey(setup, () => {
-      setup.mockInput.pressEnter();
-    });
-    expect(await rulesFile(root)).toBe("");
-    expect(producer.answers.map(({ decision }) => decision)).toEqual([
-      "approve",
-    ]);
-  } finally {
-    act(() => {
-      setup.renderer.destroy();
-    });
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
 async function card(
   review?: McpApprovalSource["review"],
   width = 80,
   view = approval(),
   respond?: McpApprovalSource["answer"],
   height = 30,
-  surface = false,
 ) {
   const producer = fakeApprovals(respond);
   const source: McpApprovalSource =
     review === undefined ? producer.source : { ...producer.source, review };
-  const setup = await testRender(<View source={source} surface={surface} />, {
-    width,
-    height,
-  });
+  const setup = await testRender(
+    <Composer source={source} width={width} height={height} />,
+    { width, height },
+  );
   act(() => {
     producer.publish(view);
   });
-  await waitForFrame(setup, (frame) =>
-    frame.includes(
-      view.canAnswer ? "Approve once" : "Approved. Waiting to run.",
-    ),
-  );
+  if (view.canAnswer)
+    await waitForFrame(setup, (frame) => frame.includes("Approve once"));
+  else await act(async () => setup.renderOnce());
   const press = async (key: string) => {
     await pressDecodedKey(setup, () => {
       if (key === "Enter") setup.mockInput.pressEnter();
@@ -405,6 +149,261 @@ const exec = (args: string[] = ["add", "hello.js"]) =>
     "/project/fungi",
     { configuredRemotes: new Set<string>() },
   );
+
+const flat = (frame: string) =>
+  frame
+    .split("\n")
+    .map((line) => line.trim())
+    .join(" ")
+    .replace(/\s+/gu, " ");
+
+test("Deny and say why preserves Esc, treats blank as Deny, and sends a typed note", async () => {
+  for (const input of ["escape", "empty", "note"] as const) {
+    const view = await card();
+    try {
+      expect(view.frame()).toContain("Deny and say why");
+      // Approve once, Deny, then the Other line: moving onto it asks why.
+      await view.press("Down");
+      await view.press("Down");
+      const askingWhy = await waitForFrame(view.setup, (value) =>
+        value.includes("Enter deny"),
+      );
+      expect(askingWhy.match(/Enter deny/gu)).toHaveLength(1);
+      expect(askingWhy).toContain("Esc back");
+      expect(askingWhy).not.toContain("Esc later");
+      if (input === "escape") {
+        await view.press("Esc");
+        expect(
+          await waitForFrame(view.setup, (value) =>
+            value.includes("Esc later"),
+          ),
+        ).toContain("Approve once");
+        expect(view.producer.answers).toEqual([]);
+      } else {
+        if (input === "note")
+          await act(async () => {
+            await view.setup.mockInput.typeText("Use the sandbox instead");
+          });
+        await view.press("Enter");
+        const expected = {
+          recordId: "approval-1",
+          decision: "deny",
+          expectedRevision: 7,
+        } satisfies Parameters<McpApprovalSource["answer"]>[0];
+        expect(view.producer.answers).toEqual([
+          input === "note"
+            ? { ...expected, denialNote: "Use the sandbox instead" }
+            : expected,
+        ]);
+      }
+    } finally {
+      view.close();
+    }
+  }
+});
+
+test("typed rule coverage appears by Always allow; unavailable reason stays in Details", async () => {
+  for (const available of [true, false]) {
+    const view = await card(
+      {
+        form: "direct",
+        kind: "exec",
+        command: "git add hello.js",
+        cwd: "/project",
+        justification: "Stage changes",
+        ...(available
+          ? {
+              prefix: ["git", "add"],
+              alwaysAllowCoverage: "Any git add in this project",
+            }
+          : { alwaysAllowUnavailableReason: "This command cannot be reused." }),
+      },
+      120,
+    );
+    try {
+      const frame = view.frame();
+      if (available) {
+        expect(frame).toContain("Any git add in this project");
+        expect(frame).toContain("Always allow");
+      } else {
+        expect(frame).not.toContain("Always allow");
+        await view.press("d");
+        expect(
+          await waitForFrame(view.setup, (value) =>
+            value.includes("This command cannot be reused."),
+          ),
+        ).toContain("This command cannot be reused.");
+      }
+    } finally {
+      view.close();
+    }
+  }
+});
+
+// Number keys only move the highlight now, so "2" then Enter is what the old
+// "2" alone was: it reaches the confirmation, which defaults to Back.
+test("Enter, Enter-Enter, and 2-Enter cannot persist an Always-allow rule", async () => {
+  for (const keys of [
+    "enter",
+    "down-enter-enter",
+    "2-enter-enter",
+    "2-enter-down-enter",
+  ]) {
+    const root = await mkdtemp(join(tmpdir(), "approval-card-rule-"));
+    const producer = fakeApprovals();
+    const source: McpApprovalSource = {
+      ...producer.source,
+      review: {
+        form: "direct",
+        kind: "exec",
+        argv: ["git", "add", "hello.js"],
+        command: "git add hello.js",
+        cwd: root,
+        justification: "Git metadata is read-only",
+        prefix: ["git", "add"],
+        risk: {
+          summary:
+            "Git hooks in this project can run code as you, and this Agent can add hooks.",
+          detail:
+            "Git runs hook scripts from the folder the project's hooksPath setting names.",
+        },
+      },
+      answer: async (input) => {
+        if (input.decision === "always-allow")
+          localExecRules(root).add(["git", "add"]);
+        return producer.source.answer(input);
+      },
+    };
+    const setup = await testRender(
+      <Composer source={source} width={80} height={30} />,
+      { width: 80, height: 30 },
+    );
+    try {
+      act(() => {
+        producer.publish(approval(keys));
+      });
+      const frame = await waitForFrame(setup, (value) =>
+        value.includes("Approve once"),
+      );
+      expect(frame).toMatch(/› 1\. Approve once/u);
+      for (const key of keys.split("-")) {
+        await pressDecodedKey(setup, () => {
+          if (key === "enter") setup.mockInput.pressEnter();
+          else if (key === "down") setup.mockInput.pressArrow("down");
+          else setup.mockInput.pressKey(key);
+        });
+      }
+      expect(producer.answers.map((answer) => answer.decision)).toEqual(
+        keys === "enter"
+          ? ["approve"]
+          : keys === "2-enter-down-enter"
+            ? ["always-allow"]
+            : [],
+      );
+      const stored = await rulesFile(root);
+      if (keys === "2-enter-down-enter") expect(stored).toContain("git");
+      else expect(stored).toBe("");
+    } finally {
+      act(() => {
+        setup.renderer.destroy();
+      });
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("a resize during the Always-allow confirmation keeps Back under Enter", async () => {
+  const producer = fakeApprovals();
+  const source: McpApprovalSource = {
+    ...producer.source,
+    review: {
+      form: "direct",
+      kind: "exec",
+      argv: ["git", "add", "hello.js"],
+      command: "git add hello.js",
+      cwd: "/project/fungi",
+      justification: "Git metadata is read-only",
+      prefix: ["git", "add"],
+    },
+  };
+  let resize: (width: number) => void = () => undefined;
+  function Resizable() {
+    const [width, setWidth] = useState(80);
+    resize = setWidth;
+    return <Composer source={source} width={width} height={30} />;
+  }
+  const setup = await testRender(<Resizable />, { width: 80, height: 30 });
+  try {
+    act(() => {
+      producer.publish(approval());
+    });
+    await waitForFrame(setup, (value) => value.includes("Approve once"));
+    for (const key of ["2", "enter"])
+      await pressDecodedKey(setup, () => {
+        if (key === "enter") setup.mockInput.pressEnter();
+        else setup.mockInput.pressKey(key);
+      });
+    await waitForFrame(setup, (value) => value.includes("› 1. Back"));
+    act(() => {
+      resize(70);
+    });
+    await act(async () => setup.renderOnce());
+    expect(setup.captureCharFrame()).toMatch(/› 1\. Back/u);
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressEnter();
+    });
+    expect(producer.answers).toEqual([]);
+  } finally {
+    act(() => {
+      setup.renderer.destroy();
+    });
+  }
+});
+
+test("an immediate Enter cannot write the project grant file", async () => {
+  const root = await mkdtemp(join(tmpdir(), "approval-card-immediate-"));
+  const producer = fakeApprovals();
+  const source: McpApprovalSource = {
+    ...producer.source,
+    review: {
+      ...localExecEscapeReview(
+        {
+          executable: "git",
+          args: ["add", "hello.js"],
+          escape: { justification: "Needs Git" },
+        },
+        root,
+      ),
+    },
+    answer: async (input) => {
+      if (input.decision === "always-allow")
+        localExecRules(root).add(["git", "add"]);
+      return producer.source.answer(input);
+    },
+  };
+  const setup = await testRender(
+    <Composer source={source} width={80} height={30} />,
+    { width: 80, height: 30 },
+  );
+  try {
+    act(() => {
+      producer.publish(approval());
+    });
+    await waitForFrame(setup, (frame) => frame.includes("git add"));
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressEnter();
+    });
+    expect(await rulesFile(root)).toBe("");
+    expect(producer.answers.map(({ decision }) => decision)).toEqual([
+      "approve",
+    ]);
+  } finally {
+    act(() => {
+      setup.renderer.destroy();
+    });
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("an unprotected Git approval keeps its hook risk on the main card and its rule reason in Details", async () => {
   const review = localExecEscapeReview(
@@ -461,13 +460,16 @@ test("an offered Git commit rule previews coverage, with the full host grammar i
     );
     expect(view.frame()).not.toContain("-am VALUE");
     await view.press("d");
-    const details = await waitForFrame(view.setup, (frame) =>
-      frame.includes("-am VALUE"),
+    const details = flat(
+      await waitForFrame(view.setup, (frame) =>
+        flat(frame).includes("-am VALUE"),
+      ),
     );
     expect(details).toContain("-m VALUE");
     expect(details).toContain("Workspace Agents");
     await view.press("d");
     await view.press("2");
+    await view.press("Enter");
     const confirm = await waitForFrame(view.setup, (frame) =>
       frame.includes("Back"),
     );
@@ -481,10 +483,10 @@ test("an offered Git commit rule previews coverage, with the full host grammar i
 
 test("a replacement approval can answer only its current record and revision", async () => {
   const producer = fakeApprovals();
-  const setup = await testRender(<View source={producer.source} />, {
-    width: 80,
-    height: 30,
-  });
+  const setup = await testRender(
+    <Composer source={producer.source} width={80} height={30} />,
+    { width: 80, height: 30 },
+  );
   try {
     act(() => {
       producer.publish(approval("old"));
@@ -514,10 +516,10 @@ test("a replacement approval can answer only its current record and revision", a
 
 test("a newer revision of the same approval replaces the answer fence", async () => {
   const producer = fakeApprovals();
-  const setup = await testRender(<View source={producer.source} />, {
-    width: 80,
-    height: 30,
-  });
+  const setup = await testRender(
+    <Composer source={producer.source} width={80} height={30} />,
+    { width: 80, height: 30 },
+  );
   try {
     act(() => {
       producer.publish(approval());
@@ -559,15 +561,16 @@ test("a Git escape presents command and reason but no internal identifiers on it
     ])
       expect(main).not.toContain(hidden);
     await view.press("d");
-    const details = await waitForFrame(view.setup, (frame) =>
-      frame.includes("principal-1"),
+    const details = await waitForFrame(
+      view.setup,
+      (frame) => frame.includes("principal-1") || frame.includes("Details"),
     );
-    // ModalDetails scrolls long host disclosures; verify the lower metadata is
-    // reachable rather than requiring every row to fit at once.
+    // The details scroll; verify the lower metadata is reachable rather than
+    // requiring every row to fit at once.
     const visible = [details];
     for (
       let scrolls = 0;
-      scrolls < 30 && !visible.join("\n").includes("SHA-256");
+      scrolls < 30 && !visible.join("\n").includes("approval-1");
       scrolls++
     ) {
       await view.press("Down");
@@ -615,6 +618,7 @@ for (const sub of [
         "Git hooks in this project can run code as you",
       );
       await view.press("2");
+      await view.press("Enter");
       const confirm = await waitForFrame(view.setup, (frame) =>
         frame.includes("Git hooks in this project can run code as you"),
       );
@@ -633,33 +637,26 @@ for (const sub of [
 
 for (const height of [24, 26, 22]) {
   test(`80x${String(height)} confirmation keeps both choices and the Git risk legible`, async () => {
-    const view = await card(exec(), 80, approval(), undefined, height, true);
+    const view = await card(exec(), 80, approval(), undefined, height);
     try {
       const main = view.frame();
       expect(main).toContain("Always allow “git add” in this project…");
       expect(main).not.toContain("Only these options are reusable");
-      expect(main).not.toContain("● Approval");
-      expect(main.match(/Enter select/gu)).toHaveLength(1);
       await view.press("2");
+      await view.press("Enter");
       const frame = await waitForFrame(view.setup, (value) =>
         value.includes("Back"),
       );
-      const visible = frame
-        .split("\n")
-        .map((line) => line.trim())
-        .join(" ")
-        .replace(/\s+/gu, " ");
+      const visible = flat(frame);
       expect(visible).toContain("Always allow “git add” in this project?");
       expect(visible).toContain(
         "Git hooks in this project can run code as you, and this Agent can add hooks.",
       );
       expect(frame).toContain("Always allow “git add” and run it now");
-      expect(frame).toMatch(/▶ Back/u);
-      // Modal-c confirmation carries only the warning and bounded coverage,
-      // not the main card's Folder, Why or Scope fact rows.
+      expect(frame).toMatch(/› 1\. Back/u);
+      // The confirmation carries only the warning and bounded coverage, not
+      // the main card's Folder, Why or Scope fact rows.
       expect(frame).not.toMatch(/^\s*(?:Folder|Why|Scope)\s{2,}/mu);
-      expect(frame).not.toContain("● Approval");
-      expect(frame.match(/Enter select/gu)).toHaveLength(1);
       expect(view.producer.answers).toEqual([]);
     } finally {
       view.close();
@@ -682,18 +679,14 @@ for (const [width, height] of [
       approval(),
       undefined,
       height,
-      true,
     );
     try {
       await view.press("2");
+      await view.press("Enter");
       const frame = await waitForFrame(view.setup, (value) =>
         value.includes("Back"),
       );
-      const visible = frame
-        .split("\n")
-        .map((line) => line.trim())
-        .join(" ")
-        .replace(/\s+/gu, " ");
+      const visible = flat(frame);
       expect(visible).toContain("Always allow “git push” in this project?");
       expect(visible).toContain(
         "Git hooks in this project can run code as you, and this Agent can add hooks.",
@@ -706,7 +699,7 @@ for (const [width, height] of [
       expect(
         frame.match(/Git hooks in this project can run code as you/gu),
       ).toHaveLength(1);
-      expect(frame).toMatch(/▶ Back/u);
+      expect(frame).toMatch(/› 1\. Back/u);
       expect(frame).toContain("Always allow “git push” and run it now");
       expect(view.producer.answers).toEqual([]);
     } finally {
@@ -719,6 +712,7 @@ test("Deny is directly selectable and never creates a rule", async () => {
   const view = await card(exec());
   try {
     await view.press("3");
+    await view.press("Enter");
     expect(view.producer.answers.map(({ decision }) => decision)).toEqual([
       "deny",
     ]);
@@ -731,11 +725,11 @@ test("Details returns to the previously highlighted choice without answering", a
   const view = await card(exec());
   try {
     await view.press("Down");
-    expect(view.frame()).toMatch(/▶ Always allow/u);
+    expect(view.frame()).toMatch(/› 2\. Always allow/u);
     await view.press("d");
     expect(view.frame()).toContain("Details");
     await view.press("d");
-    expect(view.frame()).toMatch(/▶ Always allow/u);
+    expect(view.frame()).toMatch(/› 2\. Always allow/u);
     expect(view.producer.answers).toEqual([]);
   } finally {
     view.close();
@@ -755,6 +749,7 @@ test("MCP tool has no Always-allow and discloses an irreversible external effect
     );
     expect(view.frame()).not.toContain("Always allow");
     await view.press("2");
+    await view.press("Enter");
     expect(view.producer.answers.map(({ decision }) => decision)).toEqual([
       "deny",
     ]);
@@ -799,6 +794,9 @@ test("Esc closes without denying a still-pending request", async () => {
     await view.press("Esc");
     expect(view.producer.answers).toEqual([]);
     expect(view.producer.source.snapshot()?.record.state).toBe("pending");
+    expect(
+      await waitForFrame(view.setup, (f) => f.includes("Ask anything")),
+    ).not.toContain("Approve once");
   } finally {
     view.close();
   }
@@ -812,8 +810,8 @@ test("read-only state has no answer picker", async () => {
     canAnswer: false,
   });
   try {
-    expect(view.frame()).toContain("Approved. Waiting to run.");
     expect(view.frame()).not.toContain("Approve once");
+    expect(view.frame()).toContain("Ask anything");
   } finally {
     view.close();
   }
@@ -854,9 +852,7 @@ test("eligibility refusal distinguishes a denied rule from lost answer rights", 
         await view.press("Down");
       }
       await view.press("Enter");
-      await waitForFrame(view.setup, (frame) =>
-        frame.includes(expected.slice(0, 24)),
-      );
+      await waitForFrame(view.setup, (frame) => flat(frame).includes(expected));
       expect(view.producer.source.snapshot()?.record.state).toBe("pending");
     } finally {
       view.close();
@@ -871,7 +867,7 @@ for (const width of [80, 60]) {
       width,
     );
     try {
-      expect(view.frame()).toMatch(/▶ Approve once/u);
+      expect(view.frame()).toMatch(/› 1\. Approve once/u);
       for (const line of view.frame().split("\n"))
         expect(line.length).toBeLessThanOrEqual(width);
     } finally {

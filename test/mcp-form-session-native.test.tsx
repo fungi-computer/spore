@@ -286,6 +286,41 @@ for (const reason of ["not-attached", "not-pending"] as const) {
   });
 }
 
+test("Esc steps back once from the Deny line, then postpones, through the terminal's own keymap", async () => {
+  const { producer, setup, close } = await mount();
+  try {
+    act(() => {
+      producer.publish([form("two-escapes")]);
+    });
+    await waitForFrame(setup, (frame) =>
+      frame.includes("Allow computer · exec?"),
+    );
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressArrow("down");
+    });
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressArrow("down");
+    });
+    await waitForFrame(setup, (frame) => frame.includes("Esc back"));
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressEscape();
+    });
+    // One Esc is one step: back to the options, still asking.
+    const back = await waitForFrame(setup, (frame) =>
+      frame.includes("Esc later"),
+    );
+    expect(back).toContain("Approve once");
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressEscape();
+    });
+    await waitForFrame(setup, (frame) => frame.includes("Ask anything"));
+    expect(producer.calls).toEqual([]);
+    expect(producer.fixture.cancelCalls()).toEqual([]);
+  } finally {
+    await close();
+  }
+});
+
 test("a withdrawn form closes without a redundant or stale answer command", async () => {
   const { producer, setup, close } = await mount();
   try {
@@ -429,11 +464,14 @@ test("a read-only Session view never offers or sends an approval", async () => {
         { ...pending, approval: { ...pending.approval, canAnswer: false } },
       ]);
     });
+    // Nothing to answer: the composer stays the composer.
+    await act(async () => setup.renderOnce());
     const frame = await waitForFrame(setup, (frame) =>
-      frame.includes("Waiting for approval."),
+      frame.includes("Ask anything"),
     );
     expect(frame).not.toContain("Approve");
     expect(frame).not.toContain("Deny");
+    expect(frame).not.toContain("Allow computer");
     expect(producer.calls).toEqual([]);
   } finally {
     await close();

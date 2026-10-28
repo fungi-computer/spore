@@ -333,7 +333,10 @@ for (const deferredNotifications of [false, true]) {
         unsubscribe();
         serviceGate.resolve();
         await act(async () => {
-          await commands.execute("tui:exit", { origin: "slash" });
+          await commands.execute(
+            { namespace: "tui", id: "exit" },
+            { origin: "slash" },
+          );
           await running;
         });
         if (!setup.renderer.isDestroyed) setup.renderer.destroy();

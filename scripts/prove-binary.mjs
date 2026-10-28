@@ -76,7 +76,7 @@ try {
         ),
       ),
     );
-  assert.equal(version.trim(), `fungi ${manifest.version}`);
+  assert.equal(version.trim(), `Spore ${manifest.version}`);
   console.log("$ fungi --version\n" + version);
   assert.match(run([]), /Welcome to fungi/u);
   const firstRun = run(["--yes"]);

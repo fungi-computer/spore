@@ -235,6 +235,8 @@ function PromptView({
         }}
       />
     );
+  // A decision is answered in the composer; no dialog ever receives one.
+  if (request.type === "decision") return null;
   // Harmless confirmations focus the action; destructive ones focus Keep.
   const choices: readonly TerminalChoice[] =
     request.type === "choice"

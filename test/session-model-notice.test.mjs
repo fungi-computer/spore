@@ -204,7 +204,10 @@ for (const [providerId, status, preferenceProviderId, expected] of [
         );
       }
       await act(async () => {
-        await commands.execute("tui:exit", { origin: "slash" });
+        await commands.execute(
+          { namespace: "tui", id: "exit" },
+          { origin: "slash" },
+        );
         await running;
       });
       await rm(directory, { recursive: true, force: true });

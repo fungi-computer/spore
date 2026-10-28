@@ -150,11 +150,14 @@ test("shared-shell-leader uses the same declarations and focused rows on both ho
     // Browser Mod-K and terminal Ctrl-K select the same shell command.
     expect(parseChord("mod+k", true)?.meta).toBe(true);
     expect(parseChord("mod+k", false)?.ctrl).toBe(true);
-    await host.execute("shell:show-command-palette", { origin: "keyboard" });
+    await host.execute(
+      { namespace: "shell", id: "show-command-palette" },
+      { origin: "keyboard" },
+    );
     expect(keys).toBe(1);
     const backRow = leaderKeys(host.active()).find((row) => row.key === "[");
     if (backRow === undefined) throw new Error("Back leader key absent");
-    await host.execute(backRow.commandId, { origin: "keyboard" });
+    await host.execute(backRow.command, { origin: "keyboard" });
     expect(back).toBe(1);
     expect(
       host
@@ -172,18 +175,18 @@ test("shared-shell-leader uses the same declarations and focused rows on both ho
       ),
     );
     if (chosen === undefined) throw new Error("leader key absent");
-    await host.execute(chosen.commandId, { origin: "keyboard" });
+    await host.execute(chosen.command, { origin: "keyboard" });
     expect(firstKey).toBe(1);
     expect(secondKey).toBe(0);
     expect(zoom).toBe(0);
     host.focus("second");
-    expect(
-      await host.execute(chosen.commandId, { origin: "keyboard" }),
-    ).toEqual({ status: "missing" });
+    expect(await host.execute(chosen.command, { origin: "keyboard" })).toEqual({
+      status: "missing",
+    });
     second.dispose();
     const global = leaderKeys(host.active()).find((row) => row.key === "z");
     if (global === undefined) throw new Error("shell leader key absent");
-    await host.execute(global.commandId, { origin: "keyboard" });
+    await host.execute(global.command, { origin: "keyboard" });
     expect(zoom).toBe(1);
   } finally {
     host.dispose();

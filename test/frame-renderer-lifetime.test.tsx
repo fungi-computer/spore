@@ -47,7 +47,7 @@ test("the production frame releases closed entries, retains the empty shell and 
       await act(async () => {
         expect(
           (
-            await app.commandHost.execute(command.commandId, {
+            await app.commandHost.execute(command.command, {
               origin: "programmatic",
             })
           ).status,

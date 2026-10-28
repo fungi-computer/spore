@@ -170,7 +170,7 @@ test("keyboard row picker dispatches the owning catalog prompt and opens its tar
         .palette.find((row) => row.title === "Row actions");
       if (row === undefined)
         throw new Error("Row actions missing from palette");
-      void commands.execute(row.commandId, { origin: "keyboard" });
+      void commands.execute(row.command, { origin: "keyboard" });
     });
     await frame("Choose a row");
     await key("RETURN");

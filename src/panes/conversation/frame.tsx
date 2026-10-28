@@ -1,5 +1,7 @@
 import { ScrollBoxRenderable } from "@opentui/core";
 import {
+  awaitingTakeover,
+  useApprovalAwaiting,
   formatContextUsage,
   formatModelWithLevel,
 } from "@fungi.computer/parakeet/headless";
@@ -39,6 +41,7 @@ import {
   placeClientTimeline,
   useSlashCommands,
   useStatus,
+  useLastSessionReplyAt,
   type ParakeetCommandRuntime,
   type ParakeetDraftIdentity,
   type ParakeetSession,
@@ -79,10 +82,14 @@ import {
 } from "../../button/index.js";
 import type { TuiModelSource } from "../../button/index.js";
 import { useModelControls } from "../../button/index.js";
-import { useInteractionDialog } from "../../button/index.js";
 import {
-  useMcpApprovalDialog,
-  useMcpFormApprovalDialog,
+  AwaitingDecisionBox,
+  useInteractionDialog,
+} from "../../button/index.js";
+import {
+  homeFolder,
+  MAX_APPROVAL_DENIAL_NOTE_LENGTH,
+  useMcpFormApprovalSource,
   type McpApprovalSource,
 } from "../../button/index.js";
 import { SlashCompletionList } from "../../button/index.js";
@@ -96,6 +103,10 @@ import {
   ServiceRecoveryOverlay,
   useServiceRecovery,
 } from "./service-recovery.js";
+
+function reportApprovalFailure(cause: unknown) {
+  reportFailure("mcp-approval-answer", cause);
+}
 
 const recoveryRequests = defineIdFamily({
   family: "tui-error-recovery",
@@ -208,17 +219,24 @@ function FooterNotice({
   color,
   inset,
   children,
+  oneLine = false,
 }: Readonly<{
   color: TuiPresentation["colors"]["error"];
   inset: number;
   children: string;
+  oneLine?: boolean;
 }>) {
   return (
     <box flexDirection="row" marginX={inset}>
       <text width={sigilGutterTotalWidth} flexShrink={0} fg={color}>
         {sigilGutterText("●")}
       </text>
-      <text flexGrow={1} flexShrink={1} fg={color}>
+      <text
+        flexGrow={1}
+        flexShrink={1}
+        fg={color}
+        wrapMode={oneLine ? "none" : "word"}
+      >
         {children}
       </text>
     </box>
@@ -283,6 +301,7 @@ function TuiFrameConversation({
     [kit.sessions, session, composer.checkpointDraft],
   );
   const sessionStatus = useStatus();
+  const lastReplyAt = useLastSessionReplyAt();
   const [sandboxRead, setSandboxRead] = useState<{
     identity: string;
     status: TuiSandboxStatus;
@@ -322,13 +341,18 @@ function TuiFrameConversation({
   const rowActions = useClientRowCommands(commands, onOpen);
   // Attention rows expose their own advertised commands; the pane stays
   // independent of extension protocols and never opens a prompt on arrival.
-  const attentionRows = contributions.flatMap(({ entryId, value }) =>
+  const allAttention = contributions.flatMap(({ entryId, value }) =>
     value.panel
       .filter(
         (row) => row.tone === "attention" && (row.actions?.length ?? 0) > 0,
       )
       .map((row) => ({ entryId, row, key: JSON.stringify([entryId, row.id]) })),
   );
+  // A row that asks for a decision belongs to the composer's queue, not to
+  // this row-by-row selection.
+  const asksForDecision = (row: (typeof allAttention)[number]["row"]) =>
+    row.actions?.some((action) => action.awaiting !== undefined) === true;
+  const attentionRows = allAttention.filter(({ row }) => !asksForDecision(row));
   const inspectionActive = useRef(false);
   const [attentionKey, setAttentionKey] = useState<string | null>(null);
   const [attentionFocused, setAttentionFocused] = useState(false);
@@ -378,7 +402,12 @@ function TuiFrameConversation({
     reconnect: sessionStatus.reconnect,
     onObservationUnavailable,
     rebindService: onRebindService,
+    lastReplyAt,
   });
+  const [recoveryCollapsed, setRecoveryCollapsed] = useState(false);
+  useEffect(() => {
+    if (serviceRecovery === undefined) setRecoveryCollapsed(false);
+  }, [serviceRecovery === undefined]);
   const themeControls = useThemeControls(dialog, {
     commands,
     initialTheme,
@@ -402,9 +431,12 @@ function TuiFrameConversation({
     busy: busyStatuses.has(sessionStatus.status),
     interactionStore,
     showCommands: async () => {
-      const outcome = await commands.execute("shell:command-line", {
-        origin: "slash",
-      });
+      const outcome = await commands.execute(
+        { namespace: "shell", id: "command-line" },
+        {
+          origin: "slash",
+        },
+      );
       if (outcome.status !== "handled")
         throw new Error(
           outcome.status === "failed"
@@ -499,24 +531,43 @@ function TuiFrameConversation({
     else if (initialCommandNotice !== undefined)
       store.report({ tone: "info", message: initialCommandNotice });
   }, [initialCommandError, initialCommandNotice, store]);
-  const approvalPending = useMcpApprovalDialog({
-    source: mcpApprovals,
-    dialog,
-    colors,
-    enabled: focused,
+  const takeover = awaitingTakeover(slash.awaiting, composer.draft);
+  // Esc may arrive through the terminal's cancel binding; the decision gets it.
+  const decisionEscape = useRef<(() => void) | undefined>(undefined);
+  const escapeDecision = () => {
+    const escape = decisionEscape.current;
+    if (escape === undefined) return false;
+    escape();
+    return true;
+  };
+  usePaneKeyboard((event) => {
+    if (dialog.isOpen || !focused || inspectionActive.current) return false;
+    if (event.name === "up" && event.meta && slash.awaiting.total > 0) {
+      slash.store.awaiting.focus();
+      return true;
+    }
+    return false;
   });
-  const formApprovalPending = useMcpFormApprovalDialog({
-    session,
-    dialog,
-    colors,
-    enabled: focused && !approvalPending,
+  const approvalWidth = width - 2;
+  const awaitingApproval = {
+    store: slash.store,
+    enabled: focused,
+    home: homeFolder(),
+    width: approvalWidth,
+    noteLimit: MAX_APPROVAL_DENIAL_NOTE_LENGTH,
+    onFailure: reportApprovalFailure,
+  };
+  useApprovalAwaiting({ ...awaitingApproval, source: mcpApprovals });
+  useApprovalAwaiting({
+    ...awaitingApproval,
+    source: useMcpFormApprovalSource({ session, enabled: focused }),
   });
   useInteractionDialog({
     dialog,
     colors,
     slash,
     inputHandoff,
-    enabled: focused && !approvalPending && !formApprovalPending,
+    enabled: focused,
   });
   const inset = 1;
   const draft = useRef(composer.draft);
@@ -554,6 +605,7 @@ function TuiFrameConversation({
     interaction: rowActions.selecting
       ? "actions"
       : dialog.isOpen ||
+          takeover !== undefined ||
           slash.interactions.open !== undefined ||
           inspectedRow !== undefined ||
           slash.open
@@ -585,6 +637,7 @@ function TuiFrameConversation({
     exit: onExit,
     dismissInteraction: () =>
       dialog.dismiss() ||
+      escapeDecision() ||
       ((slash.open ||
         slash.interactions.open !== undefined ||
         inspectedRow !== undefined) &&
@@ -598,6 +651,15 @@ function TuiFrameConversation({
     sessionStatus.viewState.kind === "error" &&
     composer.failure !== "admission";
   useTerminalBindings({
+    serviceStatusOpen: serviceRecovery !== undefined,
+    showServiceStatus: () => {
+      setRecoveryCollapsed(false);
+    },
+    collapseServiceStatus: () => {
+      if (serviceRecovery === undefined || recoveryCollapsed) return false;
+      setRecoveryCollapsed(true);
+      return true;
+    },
     canCancel:
       sessionStatus.status !== "queued" &&
       busyStatuses.has(sessionStatus.status),
@@ -650,7 +712,7 @@ function TuiFrameConversation({
     )
     .sort((a, b) => a.chip.order - b.chip.order || a.entryOrder - b.entryOrder);
   const waitingOnAnswer =
-    attentionRows.length > 0 &&
+    (allAttention.length > 0 || slash.awaiting.total > 0) &&
     (displayedState.kind === "idle" ||
       displayedState.kind === "waiting_for_you");
   // A host-owned selection wins; without one, the last reply names the model.
@@ -725,7 +787,7 @@ function TuiFrameConversation({
         terminalWidth={width}
       />
       <box flexShrink={0}>
-        {slash.open && !dialog.isOpen ? (
+        {slash.open && !dialog.isOpen && takeover === undefined ? (
           <SlashCompletionList
             slash={slash}
             colors={colors}
@@ -733,17 +795,41 @@ function TuiFrameConversation({
             width={width - 2}
           />
         ) : null}
+        {takeover === undefined ? null : (
+          <AwaitingDecisionBox
+            key={takeover.key}
+            item={takeover}
+            position={slash.awaiting.position}
+            total={slash.awaiting.total}
+            onLater={() => {
+              slash.store.awaiting.later(takeover.key);
+            }}
+            colors={colors}
+            surface={surface}
+            width={width - 2 * inset}
+            rows={height}
+            active={focused && !dialog.isOpen}
+            escapeRef={decisionEscape}
+          />
+        )}
+        {/* The draft stays mounted while a decision has the composer, so it returns untouched. */}
         <box
           flexDirection="row"
           backgroundColor={surface}
           paddingX={1}
           paddingY={1}
+          visible={takeover === undefined}
         >
           <text fg={colors.primary} width={2} flexShrink={0}>
             ›{" "}
           </text>
           <TerminalComposer
-            focused={focused && !dialog.isOpen && !showingAttention}
+            focused={
+              focused &&
+              !dialog.isOpen &&
+              !showingAttention &&
+              takeover === undefined
+            }
             readOnly={composer.recallState.kind === "recalling"}
             inputHandoff={inputHandoff}
             maxHeight={maxRows}
@@ -801,6 +887,13 @@ function TuiFrameConversation({
             value={composer.draft}
           />
         </box>
+        {composer.admissionError !== undefined ? (
+          <FooterNotice color={colors.warning} inset={inset}>
+            {composer.admissionError === "offline_queue_full"
+              ? "One prompt is already queued; it sends when the service is back."
+              : "Too many prompts are still awaiting admission. Try again shortly."}
+          </FooterNotice>
+        ) : null}
         {composer.recallState.kind === "recalling" ? (
           <text fg={colors.foreground} attributes={2}>
             Recalling queued message…
@@ -827,10 +920,47 @@ function TuiFrameConversation({
               !(
                 inspection?.entryId === entryId && inspection.rowId === row.id
               ) &&
-              !attentionRows.some(
+              !allAttention.some(
                 (item) => item.entryId === entryId && item.row === row,
               ),
           );
+          // A postponed or starting decision waits here; the one in the
+          // composer is not also a row.
+          const parked = rows.flatMap((row) => {
+            const key = JSON.stringify([entryId, row.id]);
+            if (!asksForDecision({ ...row }) || key === takeover?.key)
+              return [];
+            const place = slash.awaiting.items.findIndex(
+              (item) => item.key === key,
+            );
+            // One line per row: the title gives way so the count and the
+            // key always show, in the composer's own `1 of 3` words.
+            const detail = [
+              place >= 0 && slash.awaiting.total > 1
+                ? `${String(place + 1)} of ${String(slash.awaiting.total)}`
+                : undefined,
+              "Alt+↑ answer",
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return [
+              {
+                ...row,
+                title: fitFooterCaption(
+                  terminalText(row.title),
+                  Math.max(
+                    1,
+                    width -
+                      2 * inset -
+                      sigilGutterTotalWidth -
+                      terminalCellWidth(detail) -
+                      3,
+                  ),
+                ),
+                detail,
+              },
+            ];
+          });
           // An extension's retained-event notice and null-anchor rows join
           // its own footer entry; one with no panel or chip row here keeps
           // none of this, rather than growing a block just to show it.
@@ -882,11 +1012,12 @@ function TuiFrameConversation({
                 ];
           return ordinary.length === 0 &&
             attention.length === 0 &&
+            parked.length === 0 &&
             footerExtras.length === 0 ? null : (
             <TerminalClientRows
               key={entryId}
               id={`client-panel:${JSON.stringify([panelInstanceId, entryId])}`}
-              rows={[...ordinary, ...footerExtras, ...attention]}
+              rows={[...ordinary, ...footerExtras, ...attention, ...parked]}
               presentation={presentation}
               compactWidth={width - 2 * inset}
               expandedRowId={selected?.id}
@@ -958,9 +1089,28 @@ function TuiFrameConversation({
             {modelControls.loginNotice}
           </FooterNotice>
         ) : null}
+        {serviceRecovery !== undefined && recoveryCollapsed ? (
+          <FooterNotice color={colors.warning} inset={inset} oneLine>
+            {serviceRecovery.phase === "incompatible"
+              ? `${serviceRecovery.message} · Ctrl+B shows details`
+              : serviceRecovery.phase === "stuck" &&
+                  serviceRecovery.alive === false
+                ? "The service stopped. Run `fungi resume`. · Ctrl+B shows details"
+                : serviceRecovery.phase === "stuck" &&
+                    serviceRecovery.alive === true
+                  ? `Service busy (no reply for ${String(serviceRecovery.seconds)}s) · Ctrl+B shows details`
+                  : "Reconnecting to the service... · Ctrl+B shows details"}
+          </FooterNotice>
+        ) : null}
       </box>
-      {serviceRecovery === undefined ? null : (
-        <ServiceRecoveryOverlay view={serviceRecovery} colors={colors} />
+      {serviceRecovery === undefined || recoveryCollapsed ? null : (
+        <ServiceRecoveryOverlay
+          view={serviceRecovery}
+          colors={colors}
+          onClose={() => {
+            setRecoveryCollapsed(true);
+          }}
+        />
       )}
     </box>
   );

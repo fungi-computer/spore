@@ -226,7 +226,9 @@ function open(args) {
         const frame = text();
         if (
           frame.includes("Session stream is unavailable") ||
-          frame.includes("Restarting the service") ||
+          frame.includes("Reconnecting to the service") ||
+          frame.includes("The service is busy") ||
+          frame.includes("The service stopped") ||
           frame.includes("The service is not answering")
         )
           observations.push({ at: Date.now(), frame });
@@ -405,7 +407,9 @@ try {
       opened.observations.length > 0 &&
       text.includes("IN_FLIGHT") &&
       !text.includes("Session stream is unavailable") &&
-      !text.includes("Restarting the service") &&
+      !text.includes("Reconnecting to the service") &&
+      !text.includes("The service is busy") &&
+      !text.includes("The service stopped") &&
       !text.includes("The service is not answering"),
   );
   evidence.observations = opened.observations;

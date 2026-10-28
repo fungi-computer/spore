@@ -85,14 +85,16 @@ for (const [direction, key, choice] of [
         await setup.renderOnce();
       });
       await waitForFrame(setup, (frame) => frame.includes("Ask anything"));
-      const commandId = `shell:pane-open-${direction}`;
       expect(
-        app.commandHost.active().palette.map((row) => row.commandId),
-      ).toContain(commandId);
+        app.commandHost.active().palette.map((row) => row.command),
+      ).toContainEqual({ namespace: "shell", id: `pane-open-${direction}` });
       await act(async () => {
-        await app.commandHost.execute("shell:open-app", {
-          origin: "programmatic",
-        });
+        await app.commandHost.execute(
+          { namespace: "shell", id: "open-app" },
+          {
+            origin: "programmatic",
+          },
+        );
       });
       await waitForFrame(setup, (frame) => frame.includes("type to filter"));
       await act(async () => {

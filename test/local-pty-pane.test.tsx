@@ -94,7 +94,7 @@ async function openConversationTerminal(width: number, height: number) {
       .palette.find((row) => row.title === "Open pane");
     if (open === undefined) throw new Error("Open pane command missing");
     await act(async () => {
-      await app.commandHost.execute(open.commandId, { origin: "menu" });
+      await app.commandHost.execute(open.command, { origin: "menu" });
     });
     await frame((text) => text.includes("Local terminal"));
     await key("ARROW_DOWN");
@@ -363,7 +363,7 @@ for (const [width, height] of [
       if (literal === undefined) throw new Error("Literal leader missing");
       expect(
         (
-          await app.commandHost.execute(literal.commandId, {
+          await app.commandHost.execute(literal.command, {
             origin: "agent",
           })
         ).status,
@@ -408,7 +408,7 @@ for (const [width, height] of [
       await key("ESCAPE");
       expect(setup.captureCharFrame()).not.toContain("LEADER_BYTE_11");
       await act(async () => {
-        await app.commandHost.execute(literal.commandId, { origin: "menu" });
+        await app.commandHost.execute(literal.command, { origin: "menu" });
       });
       await frame((text) => text.includes("LEADER_BYTE_11"));
       let closing: Promise<void> | undefined;
@@ -602,7 +602,10 @@ for (const [width, height] of [
       );
       failInspection = true;
       await act(async () => {
-        await app.commands.execute("tui:exit", { origin: "menu" });
+        await app.commands.execute(
+          { namespace: "tui", id: "exit" },
+          { origin: "menu" },
+        );
       });
       await frame((text) => text.includes("Could not check shell jobs"));
       expect(app.destroyed()).toBe(false);
@@ -616,14 +619,20 @@ for (const [width, height] of [
       );
       failInspection = false;
       await act(async () => {
-        await app.commands.execute("tui:exit", { origin: "menu" });
+        await app.commands.execute(
+          { namespace: "tui", id: "exit" },
+          { origin: "menu" },
+        );
       });
       await frame((text) => text.includes("Keep shells running"));
       await key("RETURN");
       await frame((text) => !text.includes("Keep shells running"));
       expect(app.destroyed()).toBe(false);
       await act(async () => {
-        await app.commands.execute("tui:exit", { origin: "menu" });
+        await app.commands.execute(
+          { namespace: "tui", id: "exit" },
+          { origin: "menu" },
+        );
       });
       await frame((text) => text.includes("Keep shells running"));
       await key("ARROW_DOWN");
@@ -658,7 +667,7 @@ test("closing an idle local shell closes at once, without asking to terminate jo
       .palette.find((row) => row.title === "Close pane");
     if (close === undefined) throw new Error("Close pane command missing");
     await act(async () => {
-      await app.commandHost.execute(close.commandId, { origin: "menu" });
+      await app.commandHost.execute(close.command, { origin: "menu" });
     });
     await frame(() => !terminalFocused(app));
     expect(setup.captureCharFrame()).not.toContain("terminate its jobs");

@@ -36,7 +36,10 @@ test("failed-run choices retry or deliberately continue and report the result", 
     notify: (notice) => notices.push(notice.message),
   };
   try {
-    for (const command of ["tui:retry", "tui:continue"]) {
+    for (const command of [
+      { namespace: "tui", id: "retry" },
+      { namespace: "tui", id: "continue" },
+    ]) {
       const outcome = await commands.execute(command, {
         origin: "slash",
         interaction,
@@ -80,7 +83,12 @@ test("inactive terminal controls are unavailable and failure recovery leads slas
       );
     }
     assert.equal(
-      (await commands.execute("tui:cancel", { origin: "slash" })).status,
+      (
+        await commands.execute(
+          { namespace: "tui", id: "cancel" },
+          { origin: "slash" },
+        )
+      ).status,
       "unavailable",
     );
     assert.deepEqual(calls, []);
@@ -108,6 +116,68 @@ test("inactive terminal controls are unavailable and failure recovery leads slas
         ?.availability.status,
       "available",
     );
+  } finally {
+    lease.dispose();
+  }
+});
+
+test("Esc collapses the service status without cancelling work; Ctrl+B reopens it without colliding", async () => {
+  const commands = createWhistle();
+  const calls = [];
+  const actions = {
+    canCancel: false,
+    canRetry: false,
+    canContinue: false,
+    serviceStatusOpen: true,
+    cancel: async () => {
+      calls.push("cancel");
+    },
+    reconnect: async () => ({ kind: "reconnected" }),
+    retry: () => false,
+    continue: async () => false,
+    details: () => undefined,
+    toolGroup: () => undefined,
+    collapseServiceStatus: () => {
+      calls.push("collapse");
+      return true;
+    },
+    showServiceStatus: () => {
+      calls.push("expand");
+    },
+  };
+  const definitions = terminalCommandDefinitions(actions);
+  const bound = definitions.flatMap((command) =>
+    (command.projections?.bindings?.values ?? []).map((key) => [
+      key,
+      command.id,
+    ]),
+  );
+  assert.deepEqual(
+    bound.filter(([key]) => key === "ctrl+b"),
+    [["ctrl+b", "service-status"]],
+  );
+  assert.equal(new Set(bound.map(([key]) => key)).size, bound.length);
+  const lease = contributeTerminalCommands(commands, actions);
+  try {
+    assert.equal(
+      (
+        await commands.execute(
+          { namespace: "tui", id: "escape" },
+          { origin: "keyboard" },
+        )
+      ).status,
+      "handled",
+    );
+    assert.equal(
+      (
+        await commands.execute(
+          { namespace: "tui", id: "service-status" },
+          { origin: "keyboard" },
+        )
+      ).status,
+      "handled",
+    );
+    assert.deepEqual(calls, ["collapse", "expand"]);
   } finally {
     lease.dispose();
   }

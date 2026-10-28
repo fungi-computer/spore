@@ -92,7 +92,10 @@ test.each([
       width,
       height,
     });
-    const running = runtime.execute("account:login", { origin: "slash" });
+    const running = runtime.execute(
+      { namespace: "account", id: "login" },
+      { origin: "slash" },
+    );
     try {
       await act(async () =>
         setup.waitForFrame((frame) =>
@@ -204,7 +207,10 @@ test.each(["enter", "2"])(
       height: 20,
     });
     const { running } = await act(() => ({
-      running: runtime.execute("question:answer", { origin: "slash" }),
+      running: runtime.execute(
+        { namespace: "question", id: "answer" },
+        { origin: "slash" },
+      ),
     }));
     try {
       await act(async () =>

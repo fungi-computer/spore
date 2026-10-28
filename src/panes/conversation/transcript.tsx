@@ -943,6 +943,10 @@ function TimelineRowView({
     );
   }
   if (!assistantMessageVisible(item)) return null;
+  const text =
+    item.repeatCount === undefined
+      ? item.text
+      : `${item.text} x${String(item.repeatCount)}`;
   return (
     <box
       id={rowRenderableId(item.id)}
@@ -990,20 +994,36 @@ function TimelineRowView({
             </text>
           )}
           <box flexGrow={1} flexShrink={1}>
-            <TerminalMarkdown
-              content={item.text}
-              presentation={presentation}
-              foreground={item.isError ? colors.error : colors.foreground}
-              streaming={item.pending}
-            />
+            {item.isError && item.providerError !== undefined ? (
+              <text fg={colors.error} wrapMode="word">
+                {terminalText(text)}
+              </text>
+            ) : (
+              <TerminalMarkdown
+                content={text}
+                presentation={presentation}
+                foreground={item.isError ? colors.error : colors.foreground}
+                streaming={item.pending}
+              />
+            )}
           </box>
-          {item.isError ? (
+          {item.isError && item.providerError === undefined ? (
             <RowStatusTail tone={colors.error} presentation={presentation} />
           ) : null}
         </box>
       ) : null}
-      {item.isError && item.providerError !== undefined ? (
+      {item.isError && item.errorDetail ? (
+        <box marginLeft={sigilGutterTotalWidth}>
+          <text fg={colors.foreground} attributes={2}>
+            {terminalText(item.errorDetail)}
+          </text>
+        </box>
+      ) : null}
+      {item.isError &&
+      item.providerError !== undefined &&
+      disclosureOpen(disclosure, item.id, false) ? (
         <box marginLeft={sigilGutterTotalWidth} flexDirection="column">
+          <text fg={colors.error}>Provider details (latest response)</text>
           <text fg={colors.error}>{terminalText(item.providerError)}</text>
         </box>
       ) : null}

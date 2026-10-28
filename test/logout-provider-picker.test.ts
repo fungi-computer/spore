@@ -83,7 +83,10 @@ async function openLogout(credentialPath: string) {
     });
     return host.begin();
   });
-  await whistle.execute("account:logout", { origin: "slash" });
+  await whistle.execute(
+    { namespace: "account", id: "logout" },
+    { origin: "slash" },
+  );
   return { choices, messages };
 }
 

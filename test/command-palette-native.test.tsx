@@ -79,18 +79,16 @@ for (const width of [80, 160]) {
           /Null|preference|projection|session_fact/u,
         );
       }
-      const ids = catalog.palette.map((row) => row.commandId);
-      expect(ids.some((id) => id.endsWith(":tui/new"))).toBe(true);
-      expect(ids.some((id) => id.endsWith(":tui/theme"))).toBe(true);
-      expect(
-        ids.some(
-          (id) =>
-            id.endsWith("/help") ||
-            id.endsWith("/keys") ||
-            id.endsWith("/account"),
-        ),
-      ).toBe(false);
-      expect(ids).not.toContain("shell:pane-open");
+      const ids = catalog.palette.map((row) => row.command.id);
+      expect(ids).toContain("new");
+      expect(ids).toContain("theme");
+      expect(ids).not.toContain("help");
+      expect(ids).not.toContain("keys");
+      expect(ids).not.toContain("account");
+      expect(catalog.palette.map((row) => row.command)).not.toContainEqual({
+        namespace: "shell",
+        id: "pane-open",
+      });
       expect(catalog.palette.some((row) => row.title === "Show commands")).toBe(
         false,
       );

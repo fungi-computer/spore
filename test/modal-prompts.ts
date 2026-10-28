@@ -9,46 +9,20 @@ import {
   type ModelAccountContext,
 } from "@fungi.computer/parakeet/headless";
 import type { SessionMessage } from "@fungi.computer/shiitake/client";
-import { callTool, memoryHost } from "@fungi.computer/shiitake/testing";
-import type { Question } from "@fungi.computer/shiitake-extensions/question";
+import { memoryHost } from "@fungi.computer/shiitake/testing";
 import { botanicalExtensionsWithSkills } from "@fungi.computer/shiitake-extensions/roster";
 import type { SkillCatalog } from "@fungi.computer/shiitake-extensions/skills/source";
-import type { WhistlePrompt, WhistleRuntime } from "@fungi.computer/whistle";
+import type {
+  WhistleCommandKey,
+  WhistlePrompt,
+  WhistleRuntime,
+} from "@fungi.computer/whistle";
 import { catalogCommands, parseCatalog } from "@fungi.computer/whistle/catalog";
 import { runCommand, type CommandRun } from "./modal-producers.js";
 import { createTuiFixture } from "./fixture.js";
 
 const longText =
   "Check the build and fix what broke. If the same test fails twice, stop and tell me which one it was and what you tried, then wait for my answer before touching anything else.";
-
-const shortQuestion = {
-  id: "store",
-  header: "Store",
-  question: "Which store should hold the notes?",
-  options: [
-    { label: "SQLite", description: "One file." },
-    { label: "PostgreSQL", description: "A server." },
-  ],
-} satisfies Question;
-
-const longQuestion = {
-  ...shortQuestion,
-  id: "engine",
-  question:
-    "Which of these storage engines should hold the notes, given that they must survive a restart, be searchable, and stay small enough to sync over a slow connection between two laptops?",
-} satisfies Question;
-
-const multipleQuestion = {
-  id: "ship",
-  header: "Ship",
-  question: "Which deliverables should ship?",
-  multiple: true,
-  options: [
-    { label: "Docs", description: "Explain usage." },
-    { label: "Examples", description: "Show it working." },
-    { label: "Tests", description: "Verify behavior." },
-  ],
-} satisfies Question;
 
 const skills: SkillCatalog = {
   skills: [
@@ -106,10 +80,10 @@ async function advertised(session: Session) {
 /** Run one advertised command, keep the prompts it showed, then stop it. */
 async function promptsOf(
   session: Session,
-  commandId: string,
+  command: WhistleCommandKey,
   script: readonly (string | boolean)[],
 ) {
-  const run = await runCommand(await advertised(session), commandId, script);
+  const run = await runCommand(await advertised(session), command, script);
   run.stop();
   return run.prompts;
 }
@@ -140,11 +114,11 @@ function textAt(prompts: Prompts, index: number) {
   return prompt;
 }
 
-const goalCommand = "botanical-session-goal:goal";
-const loopCommand = "botanical-session-loop:loop";
+const goalCommand = { namespace: "botanical-session-goal", id: "goal" };
+const loopCommand = { namespace: "botanical-session-loop", id: "loop" };
 
 /**
- * Run the real Goal, Loop, Skills and Agent-question commands on a real
+ * Run the real Goal, Loop and Skills commands on a real
  * Shiitake Agent and collect what each shows, keyed by the modal it opens.
  */
 export async function collectRestPrompts() {
@@ -153,27 +127,12 @@ export async function collectRestPrompts() {
       catalog: () => Promise.resolve(skills),
       read: () => Promise.reject(new Error("No skill bodies in this test")),
     }),
-    script: [
-      callTool("question.ask", {
-        questions: [shortQuestion, longQuestion, multipleQuestion],
-        mode: "continue",
-      }),
-      "Continuing independent work.",
-    ],
   });
   try {
-    // The Agent parks its question before any other Session has work to run.
-    const questions = host.agent.session("questions");
-    await questions.send("Choose storage", { requestId: "choose" });
-    await host.settle("questions");
-    const answer = await promptsOf(
-      questions,
-      "botanical-session-question:answerFlow",
-      ["option:SQLite", "option:SQLite"],
-    );
+    const skillsSession = host.agent.session("skills");
     const skillsList = await promptsOf(
-      questions,
-      "botanical-skills:skills",
+      skillsSession,
+      { namespace: "botanical-skills", id: "skills" },
       [],
     );
 
@@ -219,9 +178,6 @@ export async function collectRestPrompts() {
         "loop-start": textAt(loopStart, 0),
         "loop-stop-confirm": confirmationAt(loopRun, 1),
         "skills-list": choiceAt(skillsList, 0),
-        "question-short": choiceAt(answer, 0),
-        "question-long": choiceAt(answer, 1),
-        "question-multiple": textAt(answer, 2),
       } satisfies Record<string, WhistlePrompt>;
     } finally {
       setSystemTime();
@@ -318,25 +274,25 @@ export async function commandRuns(): Promise<readonly CommandRun[]> {
             refreshModels: () => Promise.resolve([]),
           },
         ),
-      "session:model",
+      { namespace: "session", id: "model" },
       ["alpha", "1"],
     ),
     await runCommand(
       (runtime) =>
         contributeAccountCommands(runtime, accountOwner(true), accountOptions),
-      "account:login",
+      { namespace: "account", id: "login" },
       ["alpha", "logout"],
     ),
     await runCommand(
       (runtime) =>
         contributeAccountCommands(runtime, accountOwner(false), accountOptions),
-      "account:login",
+      { namespace: "account", id: "login" },
       ["alpha"],
     ),
     await runCommand(
       (runtime) =>
         contributeAccountCommands(runtime, accountOwner(true), accountOptions),
-      "account:logout",
+      { namespace: "account", id: "logout" },
       ["alpha"],
     ),
     await runCommand(
@@ -348,7 +304,7 @@ export async function commandRuns(): Promise<readonly CommandRun[]> {
           forkAvailable: true,
           onForked: () => undefined,
         }),
-      "session:fork",
+      { namespace: "session", id: "fork" },
       [],
     ),
   ];

@@ -7,6 +7,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import type { WhistleCommandKey } from "@fungi.computer/whistle";
 import type { KeyEvent, PasteEvent, Renderable } from "@opentui/core";
 import type { ParakeetCommandRuntime } from "@fungi.computer/parakeet/headless";
 import type { PaneKit } from "./index.js";
@@ -94,45 +95,51 @@ export function usePanePaste(handler: (event: PasteEvent) => void) {
   );
 }
 
-/** Adapt Parakeet's public contribution envelope to the pane-owned scope. */
+/**
+ * Adapt Parakeet's public contribution envelope to the pane-owned scope: each
+ * Parakeet namespace becomes a group inside the pane's own namespace. A key
+ * Parakeet names itself (`{ namespace, id }` of a command it contributed here)
+ * runs the pane's command of that group; any other key, such as a snapshot
+ * row's real key or a shell command, runs as is.
+ */
 export function paneCommandRuntime(kit: PaneKit): ParakeetCommandRuntime {
-  const ids = new Map<string, string>();
+  const groups = new Map<string, Map<object, ReadonlySet<string>>>();
+  const contributed = (key: WhistleCommandKey) =>
+    [...(groups.get(key.namespace)?.values() ?? [])].some((ids) =>
+      ids.has(key.id),
+    );
   return {
     ...kit.commands,
     contribute: (contribution) => {
-      const local = (id: string) =>
-        `${encodeURIComponent(contribution.namespace)}/${id}`;
-      const mapped = (commands: typeof contribution.commands) =>
-        commands.map((command) => ({ ...command, id: local(command.id) }));
-      let commands = contribution.commands;
-      const lease = kit.commands.contribute(mapped(commands));
-      const remember = () => {
-        for (const command of commands)
-          ids.set(
-            `${contribution.namespace}:${command.id}`,
-            kit.commands.commandId(local(command.id)),
-          );
+      const group = contribution.namespace;
+      const token = {};
+      const leases =
+        groups.get(group) ?? new Map<object, ReadonlySet<string>>();
+      groups.set(group, leases);
+      const remember = (commands: typeof contribution.commands) => {
+        leases.set(token, new Set(commands.map((command) => command.id)));
       };
-      const forget = () => {
-        for (const command of commands)
-          ids.delete(`${contribution.namespace}:${command.id}`);
-      };
-      remember();
+      const lease = kit.commands.contribute(contribution.commands, group);
+      remember(contribution.commands);
       return {
         update: (next) => {
-          lease.update(mapped(next));
-          forget();
-          commands = next;
-          remember();
+          lease.update(next);
+          remember(next);
         },
         dispose: () => {
-          forget();
+          leases.delete(token);
+          if (leases.size === 0) groups.delete(group);
           lease.dispose();
         },
       };
     },
-    execute: (commandId, input) =>
-      kit.commands.execute(ids.get(commandId) ?? commandId, input),
+    execute: (command, input) =>
+      kit.commands.execute(
+        contributed(command)
+          ? kit.commands.command(command.id, command.namespace)
+          : command,
+        input,
+      ),
   };
 }
 

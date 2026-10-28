@@ -6,13 +6,8 @@ import {
 } from "@fungi.computer/parakeet/headless";
 import { mcpFormApprovalContract } from "@fungi.computer/truffle";
 import * as Schema from "effect/Schema";
-import {
-  useMcpApprovalDialog,
-  type McpApprovalSource,
-} from "./mcp-approval.js";
+import type { McpApprovalSource } from "./mcp-approval-source.js";
 import { useToast } from "./toast.js";
-import type { DialogController } from "./dialog.js";
-import type { TuiPresentation } from "./presentation.js";
 
 const decodeProjection = Schema.decodeUnknownSync(
   mcpFormApprovalContract.projection.schema,
@@ -22,18 +17,17 @@ const decodeAnswerResult = Schema.decodeUnknownSync(
 );
 const noSubscription = () => () => undefined;
 
-/** Adapt the watched Session's canonical view; Local owns attachment and apply. */
-export function useMcpFormApprovalDialog({
+/**
+ * Adapt the watched Session's canonical view into an approval source for the
+ * composer's queue; Local owns attachment and apply.
+ */
+export function useMcpFormApprovalSource({
   session,
-  dialog,
-  colors,
   enabled,
 }: Readonly<{
   session: ParakeetSession;
-  dialog: Pick<DialogController, "show">;
-  colors: TuiPresentation["colors"];
   enabled: boolean;
-}>) {
+}>): McpApprovalSource | undefined {
   const slots = useExtensionSlots();
   const { observation } = useStatus();
   const toast = useToast();
@@ -116,5 +110,5 @@ export function useMcpFormApprovalDialog({
         message: "Invalid MCP form approval projection.",
       });
   }, [available, projection.invalid, toast]);
-  return useMcpApprovalDialog({ source, dialog, colors, enabled: available });
+  return source;
 }

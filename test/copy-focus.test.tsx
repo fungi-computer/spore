@@ -167,7 +167,7 @@ test("a dialog takes focus and returns it to the composer", async () => {
       .slash.find((command) => command.alias === "theme");
     if (theme === undefined) throw new Error("Missing theme command");
     await act(async () => {
-      await commands.execute(theme.commandId, { origin: "slash" });
+      await commands.execute(theme.command, { origin: "slash" });
     });
     await act(async () =>
       setup.waitForFrame((frame) => frame.includes("Esc cancel")),
@@ -199,7 +199,7 @@ test("selected text inside a dialog can be copied", async () => {
       .slash.find((command) => command.alias === "theme");
     if (theme === undefined) throw new Error("Missing theme command");
     await act(async () => {
-      await commands.execute(theme.commandId, { origin: "slash" });
+      await commands.execute(theme.command, { origin: "slash" });
     });
     await act(async () =>
       setup.waitForFrame((frame) => frame.includes("Esc cancel")),

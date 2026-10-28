@@ -147,7 +147,10 @@ async function withCli(
   } finally {
     if (hostCloses === 0)
       await act(async () => {
-        await commands.execute("tui:exit", { origin: "slash" });
+        await commands.execute(
+          { namespace: "tui", id: "exit" },
+          { origin: "slash" },
+        );
       });
     await act(async () => {
       await running;
@@ -161,7 +164,10 @@ async function withCli(
   assert.equal(hostCloses, 1);
   assert.equal(setup.renderer.listenerCount("resize"), 0);
   assert.deepEqual(
-    await commands.execute("retired-command", { origin: "slash" }),
+    await commands.execute(
+      { namespace: "retired", id: "command" },
+      { origin: "slash" },
+    ),
     {
       status: "closed",
     },
@@ -294,7 +300,10 @@ test("login's provider choice consumes input and Ctrl+C dismisses without auth o
       );
       assert.ok(editor);
       await act(async () => {
-        void commands.execute("account:login", { origin: "slash" });
+        void commands.execute(
+          { namespace: "account", id: "login" },
+          { origin: "slash" },
+        );
         await delay(25);
       });
       await act(async () => setup.renderOnce());
@@ -329,7 +338,10 @@ test("login provider and method each commit on one number key; success closes", 
     async ({ setup, commands }) => {
       let choosing;
       await act(async () => {
-        choosing = commands.execute("account:login", { origin: "slash" });
+        choosing = commands.execute(
+          { namespace: "account", id: "login" },
+          { origin: "slash" },
+        );
         await delay(25);
       });
       await act(async () => setup.renderOnce());
@@ -408,7 +420,10 @@ test("switching an already signed-in account closes success without Enter or Esc
     async ({ setup, commands }) => {
       let choosing;
       await act(async () => {
-        choosing = commands.execute("account:login", { origin: "slash" });
+        choosing = commands.execute(
+          { namespace: "account", id: "login" },
+          { origin: "slash" },
+        );
         await delay(25);
       });
       await act(async () => setup.renderOnce());

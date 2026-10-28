@@ -32,7 +32,10 @@ test("a command notice does not complete observation while its handler is pendin
       completed = true;
       return outcome;
     });
-    const executing = commands.execute("fixture:save", { origin: "slash" });
+    const executing = commands.execute(
+      { namespace: "fixture", id: "save" },
+      { origin: "slash" },
+    );
     await notified.promise;
     expect(completed).toBe(false);
     saved.resolve(undefined);

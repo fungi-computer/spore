@@ -444,7 +444,10 @@ export async function proveServiceRecovery({
         release();
         if (running !== undefined) {
           if (!setup?.renderer.isDestroyed)
-            await commands.execute("tui:exit", { origin: "slash" });
+            await commands.execute(
+              { namespace: "tui", id: "exit" },
+              { origin: "slash" },
+            );
           await running;
         } else await selected?.close();
       });

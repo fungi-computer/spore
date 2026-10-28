@@ -298,7 +298,7 @@ async function openThemePicker(setup, commands) {
   assert.ok(command);
   assert.equal(command.title, "Theme");
   await act(async () => {
-    const outcome = await commands.execute(command.commandId, {
+    const outcome = await commands.execute(command.command, {
       origin: "slash",
     });
     assert.equal(outcome.status, "handled");

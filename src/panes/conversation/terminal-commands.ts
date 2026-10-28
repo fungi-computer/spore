@@ -20,6 +20,10 @@ export type TerminalActions = {
   continue: () => Promise<boolean>;
   details: () => void;
   toolGroup: () => void;
+  /** Service status is available only while recovery is visible. */
+  serviceStatusOpen?: boolean;
+  showServiceStatus?: () => void;
+  collapseServiceStatus?: () => boolean;
 };
 
 /** Declarations for the mounted conversation's current controls. */
@@ -60,7 +64,10 @@ export function terminalCommandDefinitions(
       title: "Dismiss or stop",
       category: "Advanced",
       projections: { bindings: { values: ["escape"], order: 1 } },
-      handler: () => actions.cancel("keyboard"),
+      handler: () =>
+        actions.collapseServiceStatus?.()
+          ? undefined
+          : actions.cancel("keyboard"),
     },
     {
       id: "cancel",
@@ -148,6 +155,17 @@ export function terminalCommandDefinitions(
           });
         return started;
       },
+    },
+    {
+      id: "service-status",
+      title: "Show service status",
+      category: "Advanced",
+      projections: { bindings: { values: ["ctrl+b"], order: 2 } },
+      availability: () =>
+        actions.serviceStatusOpen
+          ? { status: "available" }
+          : { status: "unavailable", reason: "Service status is not open." },
+      handler: () => actions.showServiceStatus?.(),
     },
     {
       id: "details",

@@ -13,45 +13,44 @@ import {
 } from "@fungi.computer/whistle";
 import { TuiFrame } from "../src/frame.js";
 import { createTuiFixture } from "./fixture.js";
+import { captureFrame } from "./frame-capture.js";
 
-const privateText = "provider_error: 401 Bearer sk-live-fake-secret";
+const privateText =
+  '429 {"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed your account\'s rate limit. Please try again later."},"request_id":"req_redacted"}';
 
-test("a failed turn shows provider prose exactly once even with details open", async () => {
+test("consecutive provider failures show one headline and reveal the latest raw response only through existing details", async () => {
   const fixture = createTuiFixture({
-    messages: [
-      {
-        id: "failed-turn",
-        commandId: "failed-work",
-        sequence: 1,
-        value: {
-          role: "assistant",
-          content: [
-            { type: "thinking", thinking: "Details are actually open" },
-          ],
-          api: "pi",
-          provider: "faux",
-          model: "test",
-          usage: {
+    messages: Array.from({ length: 7 }, (_, index) => ({
+      id: `failed-turn-${String(index)}`,
+      commandId: `failed-work-${String(index)}`,
+      sequence: index + 1,
+      value: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "Details are actually open" }],
+        api: "pi",
+        provider: "anthropic",
+        model: "test",
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: {
             input: 0,
             output: 0,
             cacheRead: 0,
             cacheWrite: 0,
-            totalTokens: 0,
-            cost: {
-              input: 0,
-              output: 0,
-              cacheRead: 0,
-              cacheWrite: 0,
-              total: 0,
-            },
+            total: 0,
           },
-          stopReason: "error",
-          errorMessage: "Safe model failure",
-          providerError: privateText,
-          timestamp: 1,
         },
+        stopReason: "error",
+        errorMessage:
+          "Anthropic usage limit reached on your Claude subscription; resets at 16:00.",
+        providerError: privateText,
+        timestamp: index + 1,
       },
-    ],
+    })),
   });
   const query = createQueryClient();
   const commands = createWhistle();
@@ -63,7 +62,7 @@ test("a failed turn shows provider prose exactly once even with details open", a
         initialTheme="mocha"
       />
     </QueryClientProvider>,
-    { width: 100, height: 30 },
+    { width: 80, height: 42 },
   );
   const nativeKeymap = createDefaultOpenTuiKeymap(setup.renderer);
   const unregisterLeader = registerLeader(nativeKeymap, { trigger: "ctrl+k" });
@@ -81,13 +80,22 @@ test("a failed turn shows provider prose exactly once even with details open", a
   );
   try {
     await act(async () =>
-      setup.waitForFrame((frame) => frame.includes(privateText)),
+      setup.waitForFrame((frame) => frame.includes("Thinking")),
     );
     await act(async () => {
       await setup.renderOnce();
       await setup.renderOnce();
     });
-    expect(setup.captureCharFrame().split(privateText)).toHaveLength(2);
+    await captureFrame(
+      setup,
+      process.env.TUI_PROVIDER_ERRORS_CAPTURE_DIR,
+      "errors-80x42",
+    );
+    const summary = setup.captureCharFrame();
+    expect(summary).toContain("Anthropic usage limit reached");
+    expect(summary).toContain("x7");
+    expect(summary).not.toContain("req_redacted");
+    expect(summary).not.toContain("rate_limit_error");
     expect(setup.captureCharFrame()).not.toContain("Details are actually open");
     await act(async () => {
       setup.mockInput.pressKey("o", { ctrl: true });
@@ -100,8 +108,13 @@ test("a failed turn shows provider prose exactly once even with details open", a
       ),
     );
     expect(setup.captureCharFrame()).toContain("Details are actually open");
-    expect(setup.captureCharFrame().split(privateText)).toHaveLength(2);
-    expect(setup.captureCharFrame()).not.toContain("Safe model failure");
+    expect(setup.captureCharFrame()).toContain("req_redacted");
+    expect(setup.captureCharFrame().split("req_redacted")).toHaveLength(2);
+    await captureFrame(
+      setup,
+      process.env.TUI_PROVIDER_ERRORS_CAPTURE_DIR,
+      "errors-details-80x42",
+    );
   } finally {
     keymap.cleanup();
     unregisterLeader();

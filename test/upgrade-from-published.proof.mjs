@@ -351,7 +351,7 @@ try {
   assert.equal(nativeVersion, candidateVersion);
   assert.equal(
     (await success(launcher, ["--version"])).stdout.trim(),
-    `fungi ${candidateVersion}`,
+    `Spore ${candidateVersion}`,
   );
   const sha = (
     await success("git", ["rev-parse", "HEAD"], repository)

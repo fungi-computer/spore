@@ -179,13 +179,19 @@ async function runSession() {
       "failed display formatting preserves the original code",
     );
     await act(async () => {
-      await commands.execute("tui:exit", { origin: "slash" });
+      await commands.execute(
+        { namespace: "tui", id: "exit" },
+        { origin: "slash" },
+      );
       await running;
       reportExtensionFailure?.(new Error("Extension cleanup failed"));
     });
   } finally {
     await act(async () => {
-      await commands.execute("tui:exit", { origin: "slash" });
+      await commands.execute(
+        { namespace: "tui", id: "exit" },
+        { origin: "slash" },
+      );
       await running;
     });
   }

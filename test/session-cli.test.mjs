@@ -1125,7 +1125,9 @@ async function withCli(
     assert.equal(fixture.watchCalls(), expectedWatchCalls);
   } finally {
     if (hostCloses === 0)
-      await act(async () => commands.execute("tui:exit", { origin: "slash" }));
+      await act(async () =>
+        commands.execute({ namespace: "tui", id: "exit" }, { origin: "slash" }),
+      );
     await act(async () => running);
     const ownerDestroyed = setup.renderer.isDestroyed;
     if (!ownerDestroyed) setup.renderer.destroy();
@@ -1137,7 +1139,10 @@ async function withCli(
   assert.equal(hostCloses, 1);
   assert.equal(setup.renderer.listenerCount("resize"), 0);
   assert.deepEqual(
-    await commands.execute("retired-command", { origin: "slash" }),
+    await commands.execute(
+      { namespace: "retired", id: "command" },
+      { origin: "slash" },
+    ),
     {
       status: "closed",
     },
@@ -1428,9 +1433,12 @@ test("account failure stays failed through command execution and the native comp
   await withCli(
     async ({ commands, type, submit, input, setup, fixture }) => {
       await act(async () => {
-        const outcome = await commands.execute("account:account", {
-          origin: "agent",
-        });
+        const outcome = await commands.execute(
+          { namespace: "account", id: "account" },
+          {
+            origin: "agent",
+          },
+        );
         assert.equal(outcome.status, "failed");
         assert.equal(outcome.error.message, "Account service unavailable");
       });
@@ -1958,7 +1966,7 @@ function executeEscape(commands) {
     .snapshot()
     .bindings.find(({ binding }) => binding === "escape");
   assert.ok(row, "The selected conversation owns an Escape binding");
-  return commands.execute(row.commandId, { origin: "keyboard" });
+  return commands.execute(row.command, { origin: "keyboard" });
 }
 
 async function startFixtureRun(fixture, setup, requestId) {

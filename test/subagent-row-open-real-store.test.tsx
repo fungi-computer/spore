@@ -185,7 +185,10 @@ test("clicking a footer sub-agent row opens that Agent's conversation beside the
       const closing = running;
       if (closing !== undefined) {
         await act(async () => {
-          await commands.execute("tui:exit", { origin: "slash" });
+          await commands.execute(
+            { namespace: "tui", id: "exit" },
+            { origin: "slash" },
+          );
           await closing;
         });
       }

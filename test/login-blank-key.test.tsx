@@ -71,10 +71,13 @@ test("/login with a blank OpenAI API key shows No key entered in the dialog", as
     let outcome: ReturnType<typeof whistle.execute> | undefined;
     try {
       await act(async () => {
-        outcome = whistle.execute("account:login", {
-          origin: "slash",
-          arguments: { providerId: "openai", method: "api_key" },
-        });
+        outcome = whistle.execute(
+          { namespace: "account", id: "login" },
+          {
+            origin: "slash",
+            arguments: { providerId: "openai", method: "api_key" },
+          },
+        );
         // The real RPC must deliver its prompt before frame assertions begin.
         await prompted.promise;
       });

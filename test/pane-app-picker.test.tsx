@@ -85,7 +85,7 @@ test("the shell App picker hands an App without Gills to its admitted full UI", 
     const open = host.active().palette.find((row) => row.title === "Open pane");
     if (open === undefined) throw new Error("Open pane command missing");
     await act(async () => {
-      await host.execute(open.commandId, { origin: "programmatic" });
+      await host.execute(open.command, { origin: "programmatic" });
     });
     await waitForFrame(setup, (frame) => frame.includes("Open pane"));
     await pressDecodedKey(setup, () => {
@@ -103,7 +103,7 @@ test("the shell App picker hands an App without Gills to its admitted full UI", 
     expect(setup.captureCharFrame()).not.toContain("Gill");
     pending = Promise.withResolvers<AppDirectory>();
     await act(async () => {
-      await host.execute(open.commandId, { origin: "programmatic" });
+      await host.execute(open.command, { origin: "programmatic" });
     });
     await waitForFrame(setup, (frame) => frame.includes("Open pane"));
     await pressDecodedKey(setup, () => {
@@ -118,7 +118,7 @@ test("the shell App picker hands an App without Gills to its admitted full UI", 
       .bindings.find((row) => row.title === "All commands");
     if (keys === undefined) throw new Error("All commands binding missing");
     await act(async () => {
-      await host.execute(keys.commandId, { origin: "programmatic" });
+      await host.execute(keys.command, { origin: "programmatic" });
     });
     await waitForFrame(
       setup,
@@ -165,7 +165,7 @@ test("Open pane lists the launchers registered kinds declare", async () => {
     const open = host.active().palette.find((row) => row.title === "Open pane");
     if (open === undefined) throw new Error("Open pane command missing");
     await act(async () => {
-      await host.execute(open.commandId, { origin: "programmatic" });
+      await host.execute(open.command, { origin: "programmatic" });
     });
     await waitForFrame(setup, (frame) => frame.includes("Open pane"));
     const frame = setup.captureCharFrame();

@@ -1,5 +1,5 @@
 import type { InputRenderable, KeyEvent } from "@opentui/core";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TuiPresentation } from "./presentation.js";
 import { terminalText } from "./terminal-text.js";
 
@@ -12,6 +12,8 @@ export function Field({
   secret = false,
   maxLength,
   initialValue = "",
+  value,
+  focused = true,
   onInput,
   onSubmit,
   onKeyDown,
@@ -22,6 +24,10 @@ export function Field({
   maxLength: number;
   /** Text the input starts with, e.g. a draft kept across a remount. */
   initialValue?: string | undefined;
+  /** Text owned elsewhere; the input follows it when it changes under the person's hands. */
+  value?: string | undefined;
+  /** Whether the input holds the keys; a field that stays mounted gives them up. */
+  focused?: boolean | undefined;
   onInput?: ((value: string) => void) | undefined;
   onSubmit: (value: string) => void;
   /** Keys the input does not consume itself, e.g. Esc. */
@@ -29,7 +35,14 @@ export function Field({
   colors: TuiPresentation["colors"];
 }>) {
   const input = useRef<InputRenderable>(null);
-  const [length, setLength] = useState(initialValue.length);
+  const [length, setLength] = useState((value ?? initialValue).length);
+  useEffect(() => {
+    const native = input.current;
+    if (value === undefined || native === null || native.value === value)
+      return;
+    native.value = value;
+    setLength(value.length);
+  }, [value]);
   return (
     <box flexDirection="row" backgroundColor={colors.selection} paddingX={1}>
       {secret ? (
@@ -45,11 +58,11 @@ export function Field({
           ref={input}
           width="100%"
           maxLength={maxLength}
-          value={initialValue}
+          value={value ?? initialValue}
           placeholder={terminalText(placeholder ?? "")}
           showCursor={!secret}
           selectable={!secret}
-          focused
+          focused={focused}
           onInput={(value) => {
             setLength(value.length);
             onInput?.(value);

@@ -60,7 +60,7 @@ test("typing / opens the command menu, including after a pane fails to open", as
     const open = host.active().palette.find((row) => row.title === "Open pane");
     if (open === undefined) throw new Error("Open pane command missing");
     await act(async () => {
-      await host.execute(open.commandId, { origin: "programmatic" });
+      await host.execute(open.command, { origin: "programmatic" });
     });
     await waitForFrame(setup, (frame) => frame.includes("Open pane"));
     await pressDecodedKey(setup, () => {

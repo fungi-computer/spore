@@ -177,7 +177,10 @@ assert.deepEqual(cleanupEvents, [
   "host-close",
 ]);
 assert.deepEqual(
-  await cleanupCommands.execute("cleanup", { origin: "slash" }),
+  await cleanupCommands.execute(
+    { namespace: "retired", id: "cleanup" },
+    { origin: "slash" },
+  ),
   {
     status: "closed",
   },
@@ -438,7 +441,10 @@ for (const exitGesture of ["ctrl+c", "/exit"]) {
     assert.equal(ctrlSetup.renderer.isDestroyed, true);
   } finally {
     if (!ctrlSetup?.renderer.isDestroyed)
-      await ctrlCommands.execute("tui:exit", { origin: "slash" });
+      await ctrlCommands.execute(
+        { namespace: "tui", id: "exit" },
+        { origin: "slash" },
+      );
     await ctrlRunning;
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
   }
@@ -1051,7 +1057,10 @@ async function runSessionPickerProof() {
     assert.equal(pickerSetup.renderer.isDestroyed, true);
   } finally {
     if (!pickerSetup?.renderer.isDestroyed)
-      await pickerCommands.execute("tui:exit", { origin: "slash" });
+      await pickerCommands.execute(
+        { namespace: "tui", id: "exit" },
+        { origin: "slash" },
+      );
     await pickerRunning;
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
   }

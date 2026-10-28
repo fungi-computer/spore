@@ -26,9 +26,13 @@ export type ServiceRecoveryTiming = Readonly<{
 /** Injectable timer boundary; production uses the platform timers. */
 export type RecoveryClock = Readonly<{
   schedule: (callback: () => void, milliseconds: number) => () => void;
+  now: () => number;
+  random: () => number;
 }>;
 
 const recoveryClock: RecoveryClock = {
+  now: Date.now,
+  random: Math.random,
   schedule(callback, milliseconds) {
     const timer = setTimeout(callback, milliseconds);
     return () => {
@@ -41,14 +45,19 @@ const serviceRecoveryTiming: ServiceRecoveryTiming = {
   firstAttemptAfterMs: 250,
   appearAfterMs: 1_000,
   stuckAfterMs: 30_000,
-  maxRetryDelayMs: 5_000,
+  maxRetryDelayMs: 30_000,
 };
 
 /** What the pane shows while its service connection is being recovered. */
 export type ServiceRecoveryView =
   | Readonly<{ phase: "incompatible"; message: string }>
   | Readonly<{ phase: "restarting" }>
-  | Readonly<{ phase: "stuck"; lastError: string | undefined }>;
+  | Readonly<{
+      phase: "stuck";
+      alive: boolean | undefined;
+      seconds: number;
+      lastError: string | undefined;
+    }>;
 
 /**
  * Recover a lost Session observation. It re-reads service.json (the service
@@ -66,6 +75,8 @@ export function useServiceRecovery(
       ((signal: AbortSignal) => Promise<ServiceRebind>) | undefined;
     timing?: ServiceRecoveryTiming | undefined;
     clock?: RecoveryClock | undefined;
+    /** Latest successful connect or delivered frame, from the watch's cache. */
+    lastReplyAt?: number | undefined;
   }>,
 ): ServiceRecoveryView | undefined {
   const {
@@ -75,6 +86,7 @@ export function useServiceRecovery(
     rebindService,
     timing = serviceRecoveryTiming,
     clock = recoveryClock,
+    lastReplyAt,
   } = input;
   const [view, setView] = useState<ServiceRecoveryView>();
   const [recovering, setRecovering] = useState(false);
@@ -91,7 +103,12 @@ export function useServiceRecovery(
     let shown = false;
     let stuck = false;
     let lastError: string | undefined;
+    let alive: boolean | undefined;
     let terminalMessage: string | undefined;
+    const lostAt =
+      lastReplyAt === undefined || lastReplyAt === 0
+        ? clock.now()
+        : lastReplyAt;
     const publish = () => {
       setView(
         terminalMessage !== undefined
@@ -99,7 +116,15 @@ export function useServiceRecovery(
           : !shown
             ? undefined
             : stuck
-              ? { phase: "stuck", lastError }
+              ? {
+                  phase: "stuck",
+                  alive,
+                  seconds: Math.max(
+                    0,
+                    Math.floor((clock.now() - lostAt) / 1_000),
+                  ),
+                  lastError,
+                }
               : { phase: "restarting" },
       );
     };
@@ -113,7 +138,9 @@ export function useServiceRecovery(
         if (!isCurrent()) return;
         if (rebound?.kind === "unavailable") {
           lastError = undefined;
+          alive = rebound.alive;
         } else {
+          if (rebound?.kind === "rebound") alive = true;
           const outcome = await reconnect();
           if (outcome.kind === "reconnected" || !isCurrent()) return;
           lastError = outcome.kind === "failed" ? outcome.cause : undefined;
@@ -140,9 +167,13 @@ export function useServiceRecovery(
       schedule();
     };
     function schedule() {
-      const wait = Math.min(
+      const base = Math.min(
         timing.firstAttemptAfterMs * 2 ** attempts,
         timing.maxRetryDelayMs,
+      );
+      const wait = Math.min(
+        timing.maxRetryDelayMs,
+        base * (0.8 + 0.4 * clock.random()),
       );
       attempts += 1;
       cancelRetry = clock.schedule(() => {
@@ -159,11 +190,18 @@ export function useServiceRecovery(
       stuck = true;
       publish();
     }, timing.stuckAfterMs);
+    const tick = () => {
+      if (!isCurrent()) return;
+      if (stuck) publish();
+      cancelTick = clock.schedule(tick, 1_000);
+    };
+    let cancelTick = clock.schedule(tick, 1_000);
     return () => {
       cancellation.abort();
       cancelAppear();
       cancelGiveUp();
       cancelRetry?.();
+      cancelTick();
       setView(undefined);
     };
   }, [
@@ -173,6 +211,7 @@ export function useServiceRecovery(
     rebindService,
     timing,
     clock,
+    lastReplyAt,
   ]);
   return view;
 }
@@ -181,29 +220,38 @@ export function useServiceRecovery(
 export function ServiceRecoveryOverlay({
   view,
   colors,
+  onClose,
 }: Readonly<{
   view: ServiceRecoveryView;
   colors: TuiPresentation["colors"];
+  onClose: () => void;
 }>) {
   const content: ModalContent =
     view.phase === "incompatible"
       ? { title: "Can't use the service", summary: view.message }
       : view.phase === "restarting"
         ? {
-            title: "Restarting the service",
+            title: "Reconnecting to the service",
             summary: "Your conversation will resume.",
           }
         : {
-            title: "The service is not answering",
+            title:
+              view.alive === false
+                ? "The service stopped"
+                : view.alive === true
+                  ? `The service is busy (no reply for ${String(view.seconds)}s)`
+                  : "The service is not answering",
             summary:
-              "Run `fungi resume` in another terminal. This conversation keeps trying and keeps your draft.",
+              view.alive === false
+                ? "Run `fungi resume` in another terminal. This conversation keeps trying and keeps your draft."
+                : "Your conversation will resume; your draft is kept.",
             facts:
               view.lastError === undefined
                 ? []
                 : [{ label: "Error", value: view.lastError }],
           };
   return (
-    <DialogSurface colors={colors} onClose={() => undefined}>
+    <DialogSurface colors={colors} onClose={onClose}>
       <ModalPrompt content={content} colors={colors} />
     </DialogSurface>
   );

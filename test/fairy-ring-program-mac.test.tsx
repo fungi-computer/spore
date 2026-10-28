@@ -269,7 +269,7 @@ done
           .palette.find((entry) => entry.title === title);
         if (!action) throw new Error(`Missing ${title}`);
         await act(async () => {
-          await activeHost.execute(action.commandId, { origin: "menu" });
+          await activeHost.execute(action.command, { origin: "menu" });
         });
       };
       const key = async (

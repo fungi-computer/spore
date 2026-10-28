@@ -212,7 +212,10 @@ for (const [width, height] of [
       // A refused door must not reopen the inspection.
       refuse = true;
       await act(async () =>
-        commands.execute(`${planContract.id}:plan`, { origin: "slash" }),
+        commands.execute(
+          { namespace: planContract.id, id: "plan" },
+          { origin: "slash" },
+        ),
       );
       expect(setup.captureCharFrame()).not.toContain("↑/↓ scroll");
       // The human clears from the footer row through the plan owner's own command.
@@ -223,7 +226,7 @@ for (const [width, height] of [
           .palette.find((row) => row.title === "Row actions");
         if (row === undefined)
           throw new Error("Row actions missing from palette");
-        void commands.execute(row.commandId, { origin: "keyboard" });
+        void commands.execute(row.command, { origin: "keyboard" });
       });
       await frame("Choose a row");
       await key("RETURN");

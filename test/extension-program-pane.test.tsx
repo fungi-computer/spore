@@ -171,7 +171,7 @@ test("an installed program opens from Open pane and only the granted Agent's too
     const row = host.active().palette.find((entry) => entry.title === title);
     if (row === undefined) throw new Error(`${title} command missing`);
     await act(async () => {
-      await host.execute(row.commandId, { origin: "programmatic" });
+      await host.execute(row.command, { origin: "programmatic" });
     });
   };
   try {
@@ -224,7 +224,7 @@ test("an installed program opens from Open pane and only the granted Agent's too
       .palette.find((entry) => entry.title === "Close pane");
     if (close === undefined) throw new Error("Close pane command missing");
     await act(async () => {
-      await host.execute(close.commandId, { origin: "programmatic" });
+      await host.execute(close.command, { origin: "programmatic" });
     });
     await frame((text) => !text.includes("count: 1"));
     expect(

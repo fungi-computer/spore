@@ -253,7 +253,9 @@ async function withModels(
     });
   } finally {
     await act(async () => {
-      await commandOwners.at(-1)?.execute("tui:exit", { origin: "slash" });
+      await commandOwners
+        .at(-1)
+        ?.execute({ namespace: "tui", id: "exit" }, { origin: "slash" });
       await running;
     });
     for (const setup of setups) {

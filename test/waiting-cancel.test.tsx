@@ -53,7 +53,7 @@ async function mount() {
       .slash.find((candidate) => candidate.alias === "cancel");
     if (command === undefined) throw new Error("Missing cancel command");
     await act(async () => {
-      await commands.execute(command.commandId, { origin: "slash" });
+      await commands.execute(command.command, { origin: "slash" });
     });
   };
   const close = async () => {

@@ -22,9 +22,9 @@ test("slash model saves update one mounted frame without duplicate commands", as
   const execute = commands.execute;
   const observedCommands = {
     ...commands,
-    execute: async (commandId, options) => {
-      const outcome = await execute(commandId, options);
-      executions.push({ commandId, outcome });
+    execute: async (command, options) => {
+      const outcome = await execute(command, options);
+      executions.push({ command, outcome });
       return outcome;
     },
   };
@@ -183,7 +183,7 @@ test("slash model saves update one mounted frame without duplicate commands", as
     await act(async () => setup.mockInput.pressKey("c", { ctrl: true }));
     await act(async () => setup.renderOnce());
     assert.deepEqual(executions, [
-      { commandId: ctrlC.commandId, outcome: { status: "handled" } },
+      { command: ctrlC.command, outcome: { status: "handled" } },
     ]);
     assert.equal(setup.renderer.isDestroyed, true);
   } finally {

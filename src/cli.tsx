@@ -208,6 +208,7 @@ const fungiCommandSchema = z.enum([
   "serve",
   "stop",
   "reload",
+  "board",
   "update",
   "login",
   "status",
@@ -597,7 +598,7 @@ export async function runFungiCli(
     };
   };
   if (arguments_.values.version) {
-    stdout.write(`fungi ${fungiVersion}\n`);
+    stdout.write(`Spore ${fungiVersion}\n`);
     return;
   }
   if (arguments_.values["internal-build-id"]) {
@@ -935,6 +936,20 @@ export async function runFungiCli(
       source: resolve(io.cwd ?? process.cwd(), source),
       project: resolve(io.cwd ?? process.cwd(), arguments_.values.cd ?? "."),
       notify,
+    });
+    return;
+  }
+  if (command === "board") {
+    if (
+      positionals.length > 0 ||
+      Object.keys(arguments_.values).some((key) => key !== "cd")
+    )
+      throw new Error("fungi board accepts only -C <directory>");
+    const { runBoardProgram } = await import("./board/program.js");
+    await runBoardProgram({
+      root: resolve(io.cwd ?? process.cwd(), arguments_.values.cd ?? "."),
+      home,
+      environment: process.env,
     });
     return;
   }

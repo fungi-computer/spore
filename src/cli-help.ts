@@ -36,6 +36,7 @@ Team Computers:
 Fungi itself:
   fungi extension <action>       Add, list, remove, enable or disable extensions
   fungi permissions <action>     List or remove Always-allow command rules
+  fungi board                    What needs you, what is stuck, what shipped
   fungi stop                     Stop the local background service
   fungi reload                   Reload configuration for the next turn
   fungi update                   Update fungi to the latest release
@@ -43,7 +44,7 @@ Fungi itself:
 
 Options:
   -h, --help                     Show help for fungi or a command
-  -V, --version                  Print the fungi version
+  -V, --version                  Print the Spore version
   -C, --cd <path>                Project folder (default: current folder)
       --extension <entry>        Enable an installed client extension
                                  (repeatable)
@@ -181,6 +182,17 @@ Installed with install.sh? Run the install command again instead.
 
 Git credential helper for a Fungi Team's tracker. Git runs it for you; it is
 not meant to be run by hand.
+`,
+    board: `Usage: fungi board [-C <directory>]
+
+Show what needs you across this folder's Agents, which Agents are stuck, and
+what shipped today. It reads each Agent's saved state without starting the
+Agent. What shipped comes from board.shipping in .fungi/settings.json (in the
+folder or your home), as git or npm sources:
+  {"board":{"shipping":[{"kind":"git","ref":"main","shows":"landed"},
+                        {"kind":"npm","packages":["@scope/package"]}]}}
+With none named, a Git folder shows its current branch. Run it from Open pane
+(see fungi extension) and Enter opens the conversation beside it.
 `,
     reload: `Usage: fungi reload [-C <directory>]
 

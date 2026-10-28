@@ -128,7 +128,9 @@ async function withGarden(check, { garden = true } = {}) {
     };
     await check({ setup, commands, fixture, type, settle });
   } finally {
-    await act(async () => commands.execute("tui:exit", { origin: "slash" }));
+    await act(async () =>
+      commands.execute({ namespace: "tui", id: "exit" }, { origin: "slash" }),
+    );
     await act(async () => running);
     if (!setup.renderer.isDestroyed) setup.renderer.destroy();
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;

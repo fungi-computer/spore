@@ -441,7 +441,12 @@ async function terminalOpeningRetainsHome(
     expect(await managerA.status()).toBeDefined();
     expect(await managerB.status()).toBeUndefined();
     expect(
-      (await commands.execute("local:extensions", { origin: "slash" })).status,
+      (
+        await commands.execute(
+          { namespace: "local", id: "extensions" },
+          { origin: "slash" },
+        )
+      ).status,
     ).toBe("handled");
     expect(await readFile(manifestB, "utf8")).toBe(invalid);
   } finally {

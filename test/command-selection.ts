@@ -1,8 +1,10 @@
-import type {
-  WhistleExecutionInput,
-  WhistleExecutionOutcome,
-  WhistleRuntime,
-  WhistleSnapshot,
+import {
+  sameWhistleCommand,
+  type WhistleCommandKey,
+  type WhistleExecutionInput,
+  type WhistleExecutionOutcome,
+  type WhistleRuntime,
+  type WhistleSnapshot,
 } from "@fungi.computer/whistle";
 
 /** Tests choose a public slash alias instead of a host's private namespace. */
@@ -11,10 +13,10 @@ export function executeAlias(
   alias: string,
   input: WhistleExecutionInput,
 ) {
-  return commands.execute(slashCommandId(commands, alias), input);
+  return commands.execute(slashCommand(commands, alias), input);
 }
 
-function slashCommandId(
+function slashCommand(
   commands: Pick<WhistleRuntime, "snapshot">,
   alias: string,
 ) {
@@ -27,7 +29,7 @@ function slashCommandId(
     );
   const row = matches[0];
   if (row === undefined) throw new Error(`/${alias} command absent`);
-  return row.commandId;
+  return row.command;
 }
 
 /** Observe graph admission at its owner, not through renderer drain passes. */
@@ -49,15 +51,18 @@ export function waitForCommandGraph(
 export function observeCommandExecutions(runtime: WhistleRuntime) {
   let expected:
     | {
-        commandId: string;
+        command: WhistleCommandKey;
         completion: PromiseWithResolvers<WhistleExecutionOutcome>;
       }
     | undefined;
   const commands: WhistleRuntime = {
     ...runtime,
-    execute: (commandId, input) => {
-      const completion = runtime.execute(commandId, input);
-      if (expected?.commandId === commandId) {
+    execute: (command, input) => {
+      const completion = runtime.execute(command, input);
+      if (
+        expected !== undefined &&
+        sameWhistleCommand(expected.command, command)
+      ) {
         const waiting = expected;
         expected = undefined;
         waiting.completion.resolve(completion);
@@ -70,9 +75,9 @@ export function observeCommandExecutions(runtime: WhistleRuntime) {
     nextExecution: (alias: string) => {
       if (expected !== undefined)
         throw new Error("A command execution is already being observed");
-      const commandId = slashCommandId(commands, alias);
+      const command = slashCommand(commands, alias);
       const completion = Promise.withResolvers<WhistleExecutionOutcome>();
-      expected = { commandId, completion };
+      expected = { command, completion };
       return completion.promise;
     },
   };

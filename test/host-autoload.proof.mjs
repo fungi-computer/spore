@@ -46,6 +46,7 @@ try {
   const contaminated = join(project, "from-dotenv");
   for (const dir of [project, install, archive, join(fixture, "home")])
     mkdirSync(dir, { recursive: true });
+  copyFileSync(resolve(root, "package.json"), join(install, "package.json"));
   writeFileSync(
     join(project, "evil.js"),
     `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "AGENT PRELOAD RAN IN HOST");\n`,
@@ -61,6 +62,7 @@ try {
   const installedDist = join(install, "dist");
   mkdirSync(installedDist);
   writeFileSync(join(installedDist, "cli.js"), cli);
+  copyFileSync(resolve(root, "package.json"), join(install, "package.json"));
   copyFileSync(
     resolve(root, "scripts/fungi.cjs"),
     join(installedDist, "fungi.cjs"),
@@ -111,10 +113,17 @@ try {
     `@cloudflare/workerd-${process.platform}-${process.arch === "x64" ? "64" : "arm64"}`,
   );
   const opentui = join(archive, "node_modules", `@opentui/core-${platform}`);
+  const keyringTarget = `${platform}${process.platform === "linux" ? "-gnu" : ""}`;
+  const keyring = join(
+    archive,
+    "node_modules",
+    `@napi-rs/keyring-${keyringTarget}`,
+  );
   mkdirSync(join(archive, "dist"), { recursive: true });
   mkdirSync(join(nativePackage, "bin"), { recursive: true });
   mkdirSync(join(workerd, "bin"), { recursive: true });
   mkdirSync(join(opentui), { recursive: true });
+  mkdirSync(keyring, { recursive: true });
   mkdirSync(join(archive, "node_modules/miniflare"), { recursive: true });
   mkdirSync(join(archive, "node_modules", bunPackage, "bin"), {
     recursive: true,
@@ -133,6 +142,9 @@ try {
   writeFileSync(join(archive, "node_modules/miniflare/package.json"), "{}");
   writeFileSync(join(nativePackage, "bin/fungi-apply-patch"), "fixture");
   writeFileSync(join(workerd, "bin/workerd"), "fixture");
+  // This launcher-only fixture never loads native assets, but staging must
+  // include the keyring asset now required by the real binary builder.
+  writeFileSync(join(keyring, `keyring.${keyringTarget}.node`), "fixture");
   chmodSync(join(nativePackage, "bin/fungi-apply-patch"), 0o755);
   chmodSync(join(workerd, "bin/workerd"), 0o755);
   writeFileSync(
@@ -142,6 +154,7 @@ try {
     ),
     "fixture",
   );
+  writeFileSync(join(keyring, `keyring.${keyringTarget}.node`), "fixture");
   copyFileSync(bun, join(archive, "node_modules", bunPackage, "bin/bun"));
   const scripts = join(buildRoot, "apps/tui/scripts");
   mkdirSync(scripts, { recursive: true });

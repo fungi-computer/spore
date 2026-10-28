@@ -107,11 +107,17 @@ export function ModalHeader({
   width,
   compact,
   detailsKey = "d",
+  marker,
+  full = false,
   colors,
 }: Readonly<{
   content: ModalContent;
   /** Cells the dialog content spans. */
   width: number;
+  /** The words are the point (a confirmation): show the summary and body whole. */
+  full?: boolean | undefined;
+  /** A short count such as `1 of 3`, right-aligned on the title line at every width. */
+  marker?: string | undefined;
   /** Short terminals drop blank lines and the summary's second line. */
   compact: boolean;
   /** The key a cut body names for Details; Alt+D while the person types. */
@@ -133,14 +139,18 @@ export function ModalHeader({
   const summary =
     content.summary === undefined
       ? []
-      : clampLines(wrapCells(content.summary, width), compact ? 1 : 2, width);
+      : clampLines(
+          wrapCells(content.summary, width),
+          full ? Infinity : compact ? 1 : 2,
+          width,
+        );
   const bodyWidth = content.bodyLabel === undefined ? width : valueWidth;
   const body =
     content.body === undefined
       ? undefined
       : clampLines(
           wrapCells(content.body, bodyWidth),
-          bodyLines,
+          full ? Infinity : bodyLines,
           bodyWidth,
           `… ${detailsKey} shows all`,
         );
@@ -148,9 +158,23 @@ export function ModalHeader({
   return (
     <box flexDirection="column" rowGap={compact ? 0 : 1}>
       <box flexDirection="column">
-        <text fg={colors.foreground} attributes={1} wrapMode="none">
-          {fitFooterCaption(title, width)}
-        </text>
+        {marker === undefined ? (
+          <text fg={colors.foreground} attributes={1} wrapMode="none">
+            {fitFooterCaption(title, width)}
+          </text>
+        ) : (
+          <box flexDirection="row" justifyContent="space-between">
+            <text fg={colors.foreground} attributes={1} wrapMode="none">
+              {fitFooterCaption(
+                title,
+                Math.max(1, width - stringWidth(marker) - 2),
+              )}
+            </text>
+            <text fg={colors.foreground} attributes={2} wrapMode="none">
+              {marker}
+            </text>
+          </box>
+        )}
         {summary.map((line, index) => (
           <text
             key={`summary-${String(index)}`}

@@ -167,7 +167,10 @@ test("exit can interrupt held theme startup before connecting a client", async (
     },
   );
   await themeStarted.promise;
-  await commands.execute("tui:ctrl-c", { origin: "keyboard" });
+  await commands.execute(
+    { namespace: "tui", id: "ctrl-c" },
+    { origin: "keyboard" },
+  );
   await running;
   themeRead.resolve({ theme: "terminal" });
   await Promise.resolve();
@@ -619,9 +622,12 @@ test("local Ctrl+C is admitted before service connection and never stops the ser
     },
   });
   await connecting.promise;
-  const outcome = await app.commands.execute("tui:ctrl-c", {
-    origin: "keyboard",
-  });
+  const outcome = await app.commands.execute(
+    { namespace: "tui", id: "ctrl-c" },
+    {
+      origin: "keyboard",
+    },
+  );
   await app.running;
   assert.equal(outcome.status, "handled");
   assert.equal(app.destroyed, true);
@@ -838,7 +844,10 @@ test("Ctrl+C exits failed startup without retry or a selected client", async () 
     () => failed.resolve(),
   );
   await failed.promise;
-  await app.commands.execute("tui:ctrl-c", { origin: "keyboard" });
+  await app.commands.execute(
+    { namespace: "tui", id: "ctrl-c" },
+    { origin: "keyboard" },
+  );
   await app.running;
   assert.equal(app.destroyed, true);
   assert.equal(attempts, 1);

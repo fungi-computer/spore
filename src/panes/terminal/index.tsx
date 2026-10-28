@@ -20,6 +20,7 @@ import {
   type PaneKit,
   type LocalTerminalFrame,
   type PaneKindEntry,
+  serveProgramRequests,
 } from "../../button/index.js";
 import { admitTerminalTermination } from "./quit.js";
 import { TerminationPrompt } from "./termination-prompt.js";
@@ -446,10 +447,40 @@ export type LocalProgram = Readonly<{
   kind: string;
   name: string;
   description: string;
+  /** A shell key that opens this program beside the focused pane. */
+  binding?: string;
   command: readonly string[];
   cwd: string;
   env: Readonly<Record<string, string>>;
 }>;
+
+/**
+ * A program that has a runtime directory can ask this pane's shell to open a
+ * conversation: it writes a request file into `FUNGI_PANE_REQUESTS`, a folder
+ * served for as long as the pane lives. A program with no runtime directory,
+ * and the shell itself, get no such folder.
+ */
+async function withRequests(
+  kit: PaneKit,
+  program: LocalProgram | undefined,
+): Promise<LocalProgram | undefined> {
+  const runtime = program?.env.FUNGI_EXTENSION_RUNTIME_DIR;
+  if (program === undefined || runtime === undefined) return program;
+  const requests = await serveProgramRequests(runtime, async (target) => {
+    const outcome = await kit.open({ kind: "conversation", ...target });
+    if (outcome.kind === "refused")
+      kit.toast({ variant: "error", message: outcome.reason });
+  });
+  kit.onDispose(() => {
+    void requests.close().catch((cause: unknown) => {
+      reportFailure("program-requests-close", cause);
+    });
+  });
+  return {
+    ...program,
+    env: { ...program.env, FUNGI_PANE_REQUESTS: requests.directory },
+  };
+}
 
 function localTerminalKind(
   kind: string,
@@ -459,9 +490,13 @@ function localTerminalKind(
   program?: LocalProgram,
 ): PaneKindEntry {
   const targets = z.object({ kind: z.literal(kind) }).strict();
+  const launcher = { name, description, target: { kind } };
   return {
     kind,
-    launcher: { name, description, target: { kind } },
+    launcher:
+      program?.binding === undefined
+        ? launcher
+        : { ...launcher, binding: program.binding },
     instantiate: (input) => {
       if (!targets.safeParse(input).success) return undefined;
       return {
@@ -469,11 +504,12 @@ function localTerminalKind(
         title: name,
         render: async (kit) => {
           const viewport = kit.viewport.read();
+          const running = await withRequests(kit, program);
           if (process.platform === "darwin") {
             const terminal = await openMacTerminal({
               columns: viewport.width,
               rows: viewport.height,
-              program,
+              program: running,
             });
             kit.onDispose(() => {
               void terminal.close().catch((cause: unknown) => {
@@ -493,7 +529,7 @@ function localTerminalKind(
           const terminal = await openLocalTerminal({
             columns: viewport.width,
             rows: viewport.height,
-            program,
+            program: running,
           });
           const close = () => {
             void terminal

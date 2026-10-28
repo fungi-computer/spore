@@ -72,11 +72,14 @@ test("mounted account dispatch does not reconnect or close client resources", as
       render: (_root, _query, _session, _commands, exit) => {
         accountRun = setImmediate()
           .then(() =>
-            commands.execute("account:login", {
-              origin: "programmatic",
-              interaction,
-              arguments: { providerId: "openai", method: "api_key" },
-            }),
+            commands.execute(
+              { namespace: "account", id: "login" },
+              {
+                origin: "programmatic",
+                interaction,
+                arguments: { providerId: "openai", method: "api_key" },
+              },
+            ),
           )
           .finally(exit);
       },

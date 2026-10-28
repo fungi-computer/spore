@@ -262,6 +262,9 @@ export function useTerminalBindings(
     continue: () => Promise<boolean>;
     details: () => void;
     toolGroup: () => void;
+    serviceStatusOpen: boolean;
+    showServiceStatus: () => void;
+    collapseServiceStatus: () => boolean;
   }>,
 ) {
   const view = useRef(input);
@@ -286,6 +289,11 @@ export function useTerminalBindings(
     toolGroup: () => {
       view.current.toolGroup();
     },
+    serviceStatusOpen: view.current.serviceStatusOpen,
+    showServiceStatus: () => {
+      view.current.showServiceStatus();
+    },
+    collapseServiceStatus: () => view.current.collapseServiceStatus(),
   });
   const definitions = () => terminalCommandDefinitions(actions());
   useEffect(() => {
@@ -320,5 +328,10 @@ export function useTerminalBindings(
   }, [commands, application]);
   useEffect(() => {
     controls.current?.update(definitions());
-  }, [input.canCancel, input.canRetry, input.canContinue]);
+  }, [
+    input.canCancel,
+    input.canRetry,
+    input.canContinue,
+    input.serviceStatusOpen,
+  ]);
 }

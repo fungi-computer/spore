@@ -108,7 +108,10 @@ test("confirmed theme survives Session replacement in one terminal", async () =>
     assert.match(setup.captureCharFrame(), /▶ ● Latte/u);
   } finally {
     await act(async () => {
-      await commands.execute("tui:exit", { origin: "slash" });
+      await commands.execute(
+        { namespace: "tui", id: "exit" },
+        { origin: "slash" },
+      );
     });
     await running;
   }

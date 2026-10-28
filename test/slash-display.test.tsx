@@ -23,6 +23,7 @@ const completion: SlashCompletion = {
   command: {
     alias: "fixture",
     commandId: "fixture",
+    command: { namespace: "test", id: "fixture" },
     title: "Fixture",
     category: "test",
     order: 0,
@@ -49,6 +50,7 @@ test("slash native hint fitting rejects hostile terminal text", async () => {
     selected: 0,
     hints: [],
     store,
+    awaiting: { items: [], position: 0, total: 0, forced: false },
     interactions: store.snapshot(),
     move: () => false,
     highlight: () => undefined,
@@ -56,6 +58,8 @@ test("slash native hint fitting rejects hostile terminal text", async () => {
     dismiss: () => false,
     submit: () => undefined,
     choose: () => undefined,
+    available: () => false,
+    runCommand: () => undefined,
   };
   function View() {
     const { colors } = useTerminalTheme("mocha");
@@ -131,6 +135,7 @@ for (const width of [80, 160]) {
       selected: 0,
       hints: [],
       store,
+      awaiting: { items: [], position: 0, total: 0, forced: false },
       interactions: store.snapshot(),
       move: () => false,
       highlight: () => undefined,
@@ -138,6 +143,8 @@ for (const width of [80, 160]) {
       dismiss: () => false,
       submit: () => undefined,
       choose: () => undefined,
+      available: () => false,
+      runCommand: () => undefined,
     };
     function View() {
       const { colors } = useTerminalTheme("mocha");
