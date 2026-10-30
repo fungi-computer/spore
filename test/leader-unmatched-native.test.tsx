@@ -127,7 +127,10 @@ test("an unmatched native Ctrl-K z leaves composer text and focus unchanged", as
         delivery: "followUp",
       });
     });
-    await waitForFrame(setup, (frame) => frame.includes("queued for host"));
+    await waitForFrame(
+      setup,
+      (frame) => frame.includes("Keep working") && frame.includes("● idle"),
+    );
     for (const state of ["queued", "running"]) {
       if (state === "running") {
         act(() => {

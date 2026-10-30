@@ -392,10 +392,9 @@ export function createTuiFixture({
       progress: {
         messageId: `assistant-${prompt.requestId}`,
         revision: 1,
-        text: "Fixture is streaming a reply.",
-        textTruncated: false,
-        thinking: "",
-        thinkingTruncated: false,
+        text: { offset: 0, append: "Fixture is streaming a reply." },
+
+        thinking: { offset: 0, append: "" },
       },
     });
   }

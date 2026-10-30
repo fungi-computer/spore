@@ -1,39 +1,30 @@
-import { terminalText } from "../../button/index.js";
 import { userFacingCause } from "./user-facing-cause.js";
 import {
-  queuedSessionLabel,
+  sessionStateLabel as ownerStateLabel,
   type ParakeetSessionViewState,
 } from "@fungi.computer/parakeet/headless";
 
-/** Complete labels for a footer that cannot fit the detailed owner state. */
-export function compactSessionStateLabel(
+/** The status line has one vocabulary; connection/retry detail belongs in inspection. */
+export function sessionStateLabel(
   state: ParakeetSessionViewState,
+  waitingOnYou = false,
 ): string {
   switch (state.kind) {
-    case "queued":
-      return "queued";
-    case "waiting_for_you":
+    case "connecting":
       return "idle";
-    case "responding":
-    case "running_tool":
-      return "streaming";
     case "disconnected":
-      return "offline";
-    case "cancelling":
-      return "cancelling…";
+      return "failed";
     default:
-      return state.kind;
+      return ownerStateLabel(state, waitingOnYou);
   }
 }
 
-/** Diagnostic label retained verbatim by the structured Session status contract. */
+/** Structured inspection retains diagnostics without turning queued work into status. */
 export function sessionDiagnosticLabel(
   state: ParakeetSessionViewState,
   now = Date.now(),
 ): string {
   switch (state.kind) {
-    case "cancelling":
-      return "cancelling…";
     case "retrying": {
       const remaining = Math.max(
         0,
@@ -41,39 +32,11 @@ export function sessionDiagnosticLabel(
       );
       return `retrying ${String(state.attempt)}/${String(state.maxAttempts)} · ${state.cause} · ${remaining === 0 ? "next now" : `next in ${String(remaining)}s`}`;
     }
-    case "responding":
-    case "running_tool":
-      return "streaming";
-    case "queued":
-      return terminalText(queuedSessionLabel(state)).replace(/^./u, (letter) =>
-        letter.toLowerCase(),
-      );
-    case "waiting_for_you":
-      return "idle";
     case "error":
       return `error: ${userFacingCause(state.cause)}`;
     case "disconnected":
       return `disconnected: ${state.cause} · /reconnect`;
     default:
-      return state.kind;
-  }
-}
-
-/** Footer text: the transcript carries the stopped reason once. */
-export function sessionStateLabel(
-  state: ParakeetSessionViewState,
-  now = Date.now(),
-): string {
-  switch (state.kind) {
-    case "error":
-      return "stopped";
-    case "retrying":
-    case "disconnected":
-      return sessionDiagnosticLabel(
-        { ...state, cause: userFacingCause(state.cause) },
-        now,
-      );
-    default:
-      return sessionDiagnosticLabel(state, now);
+      return sessionStateLabel(state);
   }
 }

@@ -540,7 +540,7 @@ try {
     setup,
     (frame) =>
       frame.includes("Native prompt") &&
-      frame.includes("queued for host") &&
+      frame.includes("● idle") &&
       frame.includes("spaced text"),
   );
   assert.equal(
@@ -593,7 +593,7 @@ try {
     (frame) =>
       frame.includes("Native prompt") &&
       frame.includes("spaced text") &&
-      !frame.includes("queued for host"),
+      frame.includes("● thinking"),
   );
 
   // Inspect the confirmed user before streaming scrolls this 10-row viewport.
@@ -649,10 +649,9 @@ try {
     progress: {
       messageId: `assistant-${admittedRequestId}`,
       revision: 1,
-      text: "Fixture is streaming a reply.",
-      textTruncated: false,
-      thinking: "",
-      thinkingTruncated: false,
+      text: { offset: 0, append: "Fixture is streaming a reply." },
+
+      thinking: { offset: 0, append: "" },
     },
   });
   const streamingFrame = await waitForFrame(setup, (frame) =>

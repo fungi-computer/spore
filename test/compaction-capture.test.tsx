@@ -112,7 +112,7 @@ test("the footer shows compacting live with a real window, then the divider's pl
     expect(settledBefore.activity.queue.state).toBe("idle");
     // Host settlement is not acknowledgement by the streamed Query/React
     // projection. Observe its idle footer before capturing, just as we observe
-    // the later compacting state; one render can still show "queued for host".
+    // the later running state; one render can still show idle activity.
     for (let attempt = 0; attempt < 200; attempt += 1) {
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
@@ -137,16 +137,14 @@ test("the footer shows compacting live with a real window, then the divider's pl
         await new Promise((resolve) => setTimeout(resolve, 10));
         await setup.renderOnce();
       });
-      if (footerRow(setup.captureCharFrame(), "compacting") !== undefined) {
+      if (footerRow(setup.captureCharFrame(), "thinking") !== undefined) {
         sawCompacting = true;
         break;
       }
     }
     expect(sawCompacting).toBe(true);
     await captureFrame(setup, output, "compaction-capture-compacting");
-    expect(footerRow(setup.captureCharFrame(), "compacting")).toContain(
-      "/200K",
-    );
+    expect(footerRow(setup.captureCharFrame(), "thinking")).toContain("/200K");
 
     releaseHandoff?.();
     await running;
@@ -155,8 +153,7 @@ test("the footer shows compacting live with a real window, then the divider's pl
         await new Promise((resolve) => setTimeout(resolve, 10));
         await setup.renderOnce();
       });
-      if (footerRow(setup.captureCharFrame(), "compacting") === undefined)
-        break;
+      if (footerRow(setup.captureCharFrame(), "thinking") === undefined) break;
     }
     const settled = await session.read();
     const marker = settled.compactions?.at(-1);
@@ -205,7 +202,7 @@ test("the footer shows compacting live with a real window, then the divider's pl
     });
     await act(async () => setup.renderOnce());
     const footerFrame = setup.captureCharFrame();
-    expect(footerRow(footerFrame, "compacting")).toBeUndefined();
+    expect(footerRow(footerFrame, "thinking")).toBeUndefined();
     const idleAfter = footerRow(footerFrame, "idle");
     expect(idleAfter).toBeDefined();
     // The live figure now follows the fixed estimator: the real

@@ -65,7 +65,7 @@ export async function runExtensionCommand(
   const [first, second, third] = input.arguments;
   switch (input.action) {
     case "add": {
-      const installed = await owner.add(first ?? "");
+      const installed = await owner.add(first ?? "", input.cwd);
       stdout.write(
         `Installed ${installed.id} ${installed.version} (${installed.commit ?? installed.revision}).\n` +
           `Declares: ${installed.capabilities.join(", ") || "no Agent capabilities"}; programs: ${installed.terminals.join(", ") || "none"}.\n` +

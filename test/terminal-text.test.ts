@@ -1,6 +1,21 @@
 import { expect, test } from "bun:test";
 import { terminalText } from "../src/button/terminal-text.js";
 
+test.each([
+  ["zero-width space", "\u200b"],
+  ["word joiner", "\u2060"],
+  ["retained BOM", "\ufeff"],
+])(
+  "removes %s from final output just as live display text does",
+  (_, character) => {
+    expect(
+      terminalText(
+        `\u001b[31msafe${character}\u0000\u0007\u0085\u202e\u2066output\u2069\u001b[0m`,
+      ),
+    ).toBe("safeoutput");
+  },
+);
+
 test("terminal text removes OSC, CSI, C1 and format controls but preserves ordinary Unicode and layout", () => {
   const clean = "Hello 🪴 café\n\tsecond line";
   expect(terminalText(clean)).toBe(clean);

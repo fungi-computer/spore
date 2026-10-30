@@ -337,7 +337,7 @@ function serviceManager(
     databasePath: "/tmp/one-shot.sqlite",
     sessionId: "main",
     service: {
-      protocol: 4,
+      protocol: 5,
       diagnostics: { state: "active" },
       version: "source",
       serviceId: "fixture",
@@ -388,6 +388,9 @@ function serviceManager(
     close,
   };
   return {
+    schedules: () => {
+      throw new Error("schedules are unused in this one-shot fixture");
+    },
     connect: () => Promise.resolve(host),
     reload: () =>
       Promise.reject(new Error("reload is unused in this one-shot fixture")),
@@ -658,10 +661,8 @@ test("progress and missing durable assistant results never print fabricated outp
     progress: {
       messageId: "live",
       revision: 1,
-      text: "not durable",
-      thinking: "",
-      textTruncated: false,
-      thinkingTruncated: false,
+      text: { offset: 0, append: "not durable" },
+      thinking: { offset: 0, append: "" },
     },
   });
   fake.emit(idleFrame([user(1)]));

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import writeFileAtomic from "write-file-atomic";
@@ -20,6 +20,9 @@ export const tuiDraftStorage: ParakeetDraftStorage = {
     const directory = join(homedir(), ".fungi", "drafts");
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     writeFileAtomic.sync(pathFor(key), value, { mode: 0o600, fsync: true });
+  },
+  removeItem(key) {
+    rmSync(pathFor(key), { force: true });
   },
 };
 

@@ -38,6 +38,7 @@ import {
   toggleAllDisclosure,
   toggleDisclosure,
   toolCallDefaultOpen,
+  toolLiveLines,
   toolStatusTone,
   toolGroupDefaultOpen,
   visibleToolCalls,
@@ -520,6 +521,21 @@ function ToolCallRow({
           ))}
         </box>
       ) : null}
+      {call.live === undefined ? null : (
+        <box marginLeft={sigilGutterTotalWidth} flexShrink={0}>
+          {toolLiveLines(call, open).map((line, index) => (
+            <text
+              key={String(index)}
+              fg={colors.foreground}
+              attributes={2}
+              height={1}
+              wrapMode="none"
+            >
+              {terminalText(line)}
+            </text>
+          ))}
+        </box>
+      )}
     </box>
   );
 }

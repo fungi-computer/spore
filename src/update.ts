@@ -22,6 +22,10 @@ import {
 } from "./update-proof.js";
 import { installFungiCandidate, installedFungiLink } from "./update-install.js";
 import { latestFungiVersion, releaseVersion } from "./release-registry.js";
+import {
+  expectReportedVersion,
+  reportedVersion,
+} from "@fungi.computer/cli-version";
 import type { PrivateLocalServiceManager } from "@fungi.computer/truffle/service";
 
 /** The new launcher's fresh manager owns version-checked replacement under its startup lock. */
@@ -212,15 +216,6 @@ export async function runFungiReleaseUpdate(
   }
 }
 
-/**
- * The version a `--version` run reports. Releases print `Spore X`; builds from
- * before the rename print `fungi X`, which a rollback must still recognise.
- */
-function reportedVersion(stdout: string): string | undefined {
-  const parsed = releaseVersion.safeParse(stdout.trim().split(/\s+/).at(-1));
-  return parsed.success ? parsed.data : undefined;
-}
-
 async function updateRelease(
   notify: (message: string) => void,
   run: CommandRunner,
@@ -265,7 +260,7 @@ async function updateRelease(
   try {
     await installVersion(latest);
     const started = await fungi(["--version"]);
-    if (started.code !== 0 || reportedVersion(started.stdout) !== latest)
+    if (started.code !== 0 || !expectReportedVersion(started.stdout, latest))
       throw new Error(`Spore ${latest} did not start after installing.`);
   } catch (cause) {
     notify(`Restoring Spore ${install.version}…`);
@@ -273,7 +268,7 @@ async function updateRelease(
     const restored = await fungi(["--version"]);
     if (
       restored.code !== 0 ||
-      reportedVersion(restored.stdout) !== install.version
+      reportedVersion(restored.stdout)?.version !== install.version
     )
       throw new Error(
         `Update to ${latest} failed; the previous Spore ${install.version} could not be verified. Reinstall with npm install -g ${releasePackage}@${install.version}.`,

@@ -29,6 +29,13 @@ test("late status from a previous Session cannot replace the current mode", asyn
   const oldSignals: AbortSignal[] = [];
   const previous: TuiSandboxSource = {
     identity: "agent/previous-session",
+    setMode: () =>
+      Promise.reject(new Error("Status fixture cannot change mode")),
+    rules: {
+      list: () => Promise.resolve([]),
+      remove: () =>
+        Promise.reject(new Error("Status fixture cannot remove rules")),
+    },
     read: (signal) => {
       oldSignals.push(signal);
       oldReadStarted.resolve(undefined);
@@ -37,6 +44,13 @@ test("late status from a previous Session cannot replace the current mode", asyn
   };
   const current: TuiSandboxSource = {
     identity: "agent/current-session",
+    setMode: () =>
+      Promise.reject(new Error("Status fixture cannot change mode")),
+    rules: {
+      list: () => Promise.resolve([]),
+      remove: () =>
+        Promise.reject(new Error("Status fixture cannot remove rules")),
+    },
     read: () => currentReply,
   };
   let selectSource: (source: TuiSandboxSource) => void = () => {

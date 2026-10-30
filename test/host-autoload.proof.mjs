@@ -62,7 +62,6 @@ try {
   const installedDist = join(install, "dist");
   mkdirSync(installedDist);
   writeFileSync(join(installedDist, "cli.js"), cli);
-  copyFileSync(resolve(root, "package.json"), join(install, "package.json"));
   copyFileSync(
     resolve(root, "scripts/fungi.cjs"),
     join(installedDist, "fungi.cjs"),
@@ -154,7 +153,6 @@ try {
     ),
     "fixture",
   );
-  writeFileSync(join(keyring, `keyring.${keyringTarget}.node`), "fixture");
   copyFileSync(bun, join(archive, "node_modules", bunPackage, "bin/bun"));
   const scripts = join(buildRoot, "apps/tui/scripts");
   mkdirSync(scripts, { recursive: true });

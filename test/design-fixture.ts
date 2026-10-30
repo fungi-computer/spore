@@ -214,6 +214,8 @@ export const representativeDesignSnapshot: SessionSnapshot = {
     thinking: "Comparing the narrow frame with the normal-width layout.",
     textTruncated: false,
     thinkingTruncated: false,
+    textOffset: 0,
+    thinkingOffset: 0,
   },
 };
 

@@ -2,10 +2,24 @@
   "$schema": "https://turborepo.com/schema.json",
   "extends": ["//"],
   "tasks": {
+    "whats-new": {
+      "dependsOn": [],
+      "inputs": [
+        "$TURBO_ROOT$/apps/docs/src/content/docs/changelog.mdx",
+        "$TURBO_ROOT$/tooling/release/{whats-new,changelog-gate,changelog-claims,data-impact}.mjs",
+        "$TURBO_ROOT$/tooling/release/{fungi-version,data-impact-owners}.json",
+        "$TURBO_ROOT$/pnpm-lock.yaml",
+      ],
+      "outputs": [".botanical/whats-new.json"],
+    },
     // TUI's React 19 Parakeet copy lives in pnpm's virtual store. Its files
     // must be synchronized after a fresh build or a restored build artifact.
     "build": {
-      "dependsOn": ["^build", "@fungi.computer/parakeet#sync:injected"],
+      "dependsOn": [
+        "^build",
+        "@fungi.computer/parakeet#sync:injected",
+        "whats-new",
+      ],
     },
     "lint": {
       "dependsOn": ["^build", "@fungi.computer/parakeet#sync:injected"],
@@ -14,6 +28,10 @@
       "dependsOn": ["^build", "@fungi.computer/parakeet#sync:injected"],
     },
     // The regression builds only its disposable checkout, not this workspace.
-    "test:merge": { "dependsOn": [], "cache": false, "outputs": [] },
+    "test:merge": {
+      "dependsOn": [],
+      "cache": false,
+      "outputs": [],
+    },
   },
 }

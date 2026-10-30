@@ -1,8 +1,11 @@
 import { terminalText } from "./button/terminal-text.js";
+import { appendSessionProgress } from "@fungi.computer/shiitake/client";
 import type {
   SessionFrame,
   SessionMessage,
   SessionSnapshot,
+  SessionWatch,
+  WatchOptions,
 } from "@fungi.computer/shiitake/client";
 import type { PrivateLocalServiceSelection } from "@fungi.computer/truffle/service";
 import {
@@ -236,7 +239,7 @@ function applyFrame(
     return {
       ...snapshot,
       activity: frame.activity,
-      progress: frame.progress,
+      progress: appendSessionProgress(snapshot.progress, frame.progress),
     };
   if (frame.kind === "activity")
     return { ...snapshot, activity: frame.activity };
@@ -254,7 +257,11 @@ function applyFrame(
     pending: frame.pending,
     activity: frame.activity,
     extensions: frame.extensions,
-    progress: null,
+    progress:
+      frame.activity.queue.state === "idle" ||
+      frame.messages.some(({ id }) => id === snapshot.progress?.messageId)
+        ? null
+        : snapshot.progress,
   };
 }
 
@@ -266,10 +273,7 @@ export async function runSessionInspection(input: {
     Readonly<{
       snapshot: SessionSnapshot;
       session: Readonly<{
-        watch: (options?: { includeSandboxFailures: boolean }) => Promise<{
-          changes: AsyncIterable<SessionFrame>;
-          close: () => Promise<void>;
-        }>;
+        watch: (options?: WatchOptions) => Promise<SessionWatch>;
       }>;
       close: () => Promise<void>;
     }>
@@ -300,13 +304,19 @@ export async function runSessionInspection(input: {
       limit: sessionInspectionLimit,
       signal: input.signal ?? controller.signal,
     });
-    let snapshot = inspected.snapshot;
-    input.write(renderInspection(snapshot, input.errorsOnly, input.json));
-    if (!input.watch) return;
+    if (!input.watch) {
+      input.write(
+        renderInspection(inspected.snapshot, input.errorsOnly, input.json),
+      );
+      return;
+    }
     const watch = await inspected.session.watch({
       includeSandboxFailures: true,
+      limit: sessionInspectionLimit,
     });
     try {
+      let snapshot = watch.snapshot;
+      input.write(renderInspection(snapshot, input.errorsOnly, input.json));
       for await (const frame of watch.changes) {
         if (controller.signal.aborted || input.signal?.aborted) break;
         snapshot = applyFrame(snapshot, frame);

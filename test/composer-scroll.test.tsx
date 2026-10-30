@@ -319,13 +319,14 @@ test("editing a multiline draft preserves manual scroll while progress grows", a
   const progress = (lines: number) => ({
     messageId: "scroll-progress",
     revision: lines,
-    text: Array.from(
-      { length: lines },
-      (_, index) => `Working line ${String(index + 1)}.`,
-    ).join("\n\n"),
-    thinking: "",
-    textTruncated: false,
-    thinkingTruncated: false,
+    text: {
+      offset: 0,
+      append: Array.from(
+        { length: lines },
+        (_, index) => `Working line ${String(index + 1)}.`,
+      ).join("\n\n"),
+    },
+    thinking: { offset: 0, append: "" },
   });
   try {
     await act(async () => setup.renderOnce());

@@ -1,10 +1,7 @@
 import { expect, test } from "bun:test";
 import { stringWidth } from "bun";
 import { footerLayout } from "../src/button/footer-layout.js";
-import {
-  compactSessionStateLabel,
-  sessionStateLabel,
-} from "../src/panes/conversation/session-state-label.js";
+import { sessionStateLabel } from "../src/panes/conversation/session-state-label.js";
 import type { ParakeetSessionViewState } from "@fungi.computer/parakeet/headless";
 
 const model = "openai/gpt-6-sol";
@@ -31,7 +28,7 @@ for (const width of [60, 80, 100, 140]) {
       const result = footerLayout({
         width: width - 2,
         status: `● ${sessionStateLabel(state)}`,
-        compactStatus: `● ${compactSessionStateLabel(state)}`,
+        compactStatus: `● ${sessionStateLabel(state)}`,
         model,
       });
       expect(result.statusText).toBe(
@@ -68,16 +65,15 @@ test("all widths from 30–160 retain whole state without clipping provider/mode
     for (const state of states) {
       const result = footerLayout({
         width: width - 2,
-        status: `● ${sessionStateLabel(state, 0)}`,
-        compactStatus: `● ${compactSessionStateLabel(state)}`,
+        status: `● ${sessionStateLabel(state)}`,
+        compactStatus: `● ${sessionStateLabel(state)}`,
         model,
       });
       expect([model, ""]).toContain(result.modelText);
       if (width >= 40) expect(result.modelText).toBe(model);
       expect([
-        `● ${sessionStateLabel(state, 0)}`,
-        `● ${compactSessionStateLabel(state)}`,
-        compactSessionStateLabel(state),
+        `● ${sessionStateLabel(state)}`,
+        sessionStateLabel(state),
       ]).toContain(result.statusText);
       expect(
         stringWidth(

@@ -19,26 +19,23 @@ test("the status line leaves the stopped reason in the transcript", () => {
     kind: "error",
     cause: "model:rejected: No signed-in model provider is available.",
   });
-  expect(label).toBe("stopped");
+  expect(label).toBe("failed");
 });
 
-test("retry and disconnect labels strip diagnostic codes", () => {
+test("retry and disconnect causes stay out of the status line", () => {
   expect(
-    sessionStateLabel(
-      {
-        kind: "retrying",
-        cause: "model:unavailable: Try again.",
-        attempt: 1,
-        maxAttempts: 3,
-        nextRetryAt: 2000,
-      },
-      1000,
-    ),
-  ).toBe("retrying 1/3 · Try again. · next in 1s");
+    sessionStateLabel({
+      kind: "retrying",
+      cause: "model:unavailable: Try again.",
+      attempt: 1,
+      maxAttempts: 3,
+      nextRetryAt: 2000,
+    }),
+  ).toBe("thinking");
   expect(
     sessionStateLabel({
       kind: "disconnected",
       cause: "session:closed: Connection lost.",
     }),
-  ).toBe("disconnected: Connection lost. · /reconnect");
+  ).toBe("failed");
 });

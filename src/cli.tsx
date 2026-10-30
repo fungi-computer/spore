@@ -598,7 +598,7 @@ export async function runFungiCli(
     };
   };
   if (arguments_.values.version) {
-    stdout.write(`Spore ${fungiVersion}\n`);
+    stdout.write(`fungi ${fungiVersion}\n`);
     return;
   }
   if (arguments_.values["internal-build-id"]) {

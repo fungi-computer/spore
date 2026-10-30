@@ -36,7 +36,7 @@ const settled = {
   idle: `${sigilGutterText("●")}idle`,
   panel: "Verify the garden change",
   prompt: "Water one bed",
-  queued: `${sigilGutterText("●")}queued for host`,
+  queued: `${sigilGutterText("●")}idle`,
   active: `${sigilGutterText("●")}streaming`,
   waiting: "Loop ·",
   actions: "Choose a row",

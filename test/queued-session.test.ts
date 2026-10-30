@@ -160,7 +160,11 @@ for (const imageOnly of [false, true]) {
             (await session.read()).pending.prompts.map(
               (prompt) => prompt.commandId,
             ),
-          ).toEqual([first.commandId, second.commandId]);
+          ).toEqual(
+            imageOnly
+              ? [second.commandId, first.commandId]
+              : [first.commandId, second.commandId],
+          );
           for (const modifier of [
             { shift: true },
             { ctrl: true },
@@ -174,7 +178,11 @@ for (const imageOnly of [false, true]) {
               (await session.read()).pending.prompts.map(
                 (prompt) => prompt.commandId,
               ),
-            ).toEqual([first.commandId, second.commandId]);
+            ).toEqual(
+              imageOnly
+                ? [second.commandId, first.commandId]
+                : [first.commandId, second.commandId],
+            );
           }
           await act(async () => {
             setup.mockInput.pressArrow("up");
@@ -278,7 +286,8 @@ test("one conversation awaits its host without claiming another conversation blo
       "only-conversation",
       `awaiting-host-${process.env.TUI_QUEUE_WIDTH ?? "80"}`,
     );
-    expect(frame).toContain("queued for host");
+    expect(frame).toContain("● idle");
+    expect(frame).not.toContain("queued for host");
     expect(frame.split("Reply once.")).toHaveLength(2);
     expect(frame).not.toContain("PgUp/PgDn scroll");
     expect(frame).not.toContain("another conversation");
@@ -297,7 +306,7 @@ test("one conversation awaits its host without claiming another conversation blo
   }
 });
 
-test("a queued conversation identifies the actual Session holding the Agent", async () => {
+test("a queued message stays faded while the status shows Agent activity, never its blocker", async () => {
   const fixture = createNativeSqliteOwnerFixture();
   const runtime = createCompatibilityRuntimeHost();
   const started = Promise.withResolvers<undefined>();
@@ -326,6 +335,9 @@ test("a queued conversation identifies the actual Session holding the Agent", as
   });
   let running: Promise<void> | undefined;
   try {
+    await agent
+      .session("conversation-a")
+      .command({ type: "title", title: "Lanes tick" });
     const first = await agent
       .session("conversation-a")
       .send("First", { delivery: "followUp", requestId: "first" });
@@ -340,8 +352,19 @@ test("a queued conversation identifies the actual Session holding the Agent", as
       agent,
       "conversation-b",
       `session-blocker-${process.env.TUI_QUEUE_WIDTH ?? "80"}`,
+      (setup) => {
+        const queued = setup
+          .captureSpans()
+          .lines.flatMap((line) => line.spans)
+          .find((span) => span.text.includes("Second"));
+        expect(queued).toBeDefined();
+        expect((queued?.attributes ?? 0) & 2).toBe(2);
+      },
     );
-    expect(frame).toContain("waiting for Session conversation-a");
+    expect(frame).toContain("● thinking");
+    expect(frame).not.toContain("queued behind");
+    expect(frame).not.toContain("Lanes tick");
+    expect(frame).not.toContain("conversation-a");
     expect(frame.split("Second")).toHaveLength(2);
     expect(frame).not.toContain("PgUp/PgDn scroll");
     expect((await second.read()).activity.queue).toEqual({
@@ -351,6 +374,7 @@ test("a queued conversation identifies the actual Session holding the Agent", as
         kind: "session",
         sessionId: "conversation-a",
         commandId: first.commandId,
+        title: "Lanes tick",
       },
     });
   } finally {
@@ -514,7 +538,7 @@ test("Esc stops only the current run and the next queued message runs", async ()
     expect(frame).toContain("Next task");
     expect(frame).toContain("Another task");
     expect(frame).toContain("Last task");
-    expect(frame).not.toContain("waiting for Session");
+    expect(frame).not.toContain("queued behind");
     release.resolve(undefined);
     await running;
     running = undefined;

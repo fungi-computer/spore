@@ -19,6 +19,10 @@ import {
   type CommandRunner,
   type ReleaseInstall,
 } from "../src/update.js";
+import {
+  expectReportedVersion,
+  reportedVersion,
+} from "@fungi.computer/cli-version";
 
 const install: ReleaseInstall = {
   method: "npm",
@@ -46,11 +50,12 @@ function fakeRelease(latest: string, broken: ReadonlySet<string> = new Set()) {
           ? { code: 1, stdout: "", stderr: "crash" }
           : {
               code: 0,
-              // The original install predates the rename and prints `fungi X`.
+              // The installed 0.5.0 can say Spore when verifying a rollback;
+              // the newly installed CLI must satisfy older updaters' fungi line.
               stdout:
                 installed === install.version
-                  ? `fungi ${installed}\n`
-                  : `Spore ${installed}\n`,
+                  ? `Spore ${installed}\n`
+                  : `fungi ${installed}\n`,
               stderr: "",
             },
       );
@@ -90,6 +95,22 @@ test("update installs the npm latest release into the same global prefix", async
   }
 });
 
+test("installed version accepts only the complete published-updater handshake", () => {
+  expect(expectReportedVersion("fungi 0.7.0\n", "0.7.0")).toBe(true);
+  for (const stdout of [
+    "Spore 0.7.0\n",
+    "prefix fungi 0.7.0\n",
+    "fungi 0.7.0 extra\n",
+    "fungi 0.7.0 garbage\n",
+    "fungi 0.7.1\n",
+  ])
+    expect(expectReportedVersion(stdout, "0.7.0")).toBe(false);
+  expect(reportedVersion("Spore 0.5.0\n")).toEqual({
+    label: "Spore",
+    version: "0.5.0",
+  });
+});
+
 test("the new installed CLI delegates replacement to its public version-checked ensure without a separate stop", async () => {
   const calls: string[] = [];
   const manager = {
@@ -102,7 +123,7 @@ test("the new installed CLI delegates replacement to its public version-checked 
         serviceId: "fixture",
         baseUrl: "http://localhost",
         pid: 123,
-        protocol: 4,
+        protocol: 5,
         version: "fixture-new-launcher",
         diagnostics: { state: "active" },
       });
@@ -174,7 +195,7 @@ for (const method of alternateMethods) {
           calls.push(command.join(" "));
           return Promise.resolve({
             code: 0,
-            stdout: command.at(-1) === "--version" ? "Spore 0.0.2" : "",
+            stdout: command.at(-1) === "--version" ? "fungi 0.0.2" : "",
             stderr: "",
           });
         },

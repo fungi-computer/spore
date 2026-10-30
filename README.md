@@ -29,7 +29,15 @@ Inside the terminal, `/model` chooses a model and `/thinking` selects a
 supported level. **Use agent model** clears the Session override. Choices are
 validated by Local without replacing the conversation. Fungi model use is
 metered to the selected Team. Your own provider bills key/subscription work.
-Local files, tools and Session storage stay on your machine in either case.
+Local files, tools and Session storage are on your machine. Prompts and context
+go to the selected model provider; local storage is not a no-retention
+guarantee.
+
+`/permissions` shows the current Agent's mode and this project's Always-allow
+rules. Enter keeps the current mode. Switching to Full access needs a separate
+confirmation, as does removing a saved rule; both confirmations default to
+keeping the current permissions. Rules are shared by Workspace Agents in the
+project, while the mode belongs to the selected Agent.
 
 `fungi login` defaults to Fungi. Choose another provider explicitly with
 `fungi login --provider <id>` or `/login` inside a conversation. A Fungi sign-in
@@ -549,7 +557,7 @@ shell in this CLI's working directory: `$SHELL`, else your account's passwd
 shell, else `/bin/sh`, each only when it is an absolute path to an executable.
 It starts as an interactive login shell, so your profile and rc files load. This
 is a shell on your machine, with your user account's filesystem and OS access.
-It is not a Team Computer or a sandbox. Linux uses the existing Bun 1.4.2
+It is not a Team Computer or a sandbox. Linux uses the existing Bun 1.4.4
 `setsid`, `ps` and `pkill` path. On macOS the pane owns an `@opencode-ai/pty`
 0.3.0 daemon and its controlling PTY; the React pane mounts OpenTUI 0.5.10's
 `EmbeddedTerminalRenderable` directly instead of projecting another cell grid.
@@ -647,6 +655,31 @@ adapter has no renderer, queue, or duration timer of its own.
 yet: its restart callback must use the incoming lifecycle owner's
 version-checked ensure path. The standalone update overlay remains deleted.
 Release clients do not automatically replace the running terminal.
+
+### Published-updater rehearsals
+
+After building and packing the candidate, run both real published update paths:
+
+```sh
+pnpm --dir apps/tui run proof:upgrade-from-050 /absolute/spore.tgz /absolute/native-linux-x64.tgz
+pnpm --dir apps/tui run proof:upgrade-from-040 /absolute/spore.tgz /absolute/native-linux-x64.tgz
+```
+
+The shared `proof:upgrade-rehearsal` also accepts `UPGRADE_FROM=0.5.0` or
+`UPGRADE_FROM=0.4.0`. Spore 0.5.0 is the package shipped in Fungi release 0.6.0.
+Each run installs the published baseline into its own HOME and global prefix,
+creates and reads a Session, runs the actual published `fungi update`, then
+checks the candidate service's live build identity and reads that same Session
+by its original ID in the same project. It copies no model credentials and does
+not claim a completed model turn.
+
+The rehearsal supplies an isolated npm registry transport for the unpublished
+local archives, including a command-local CA for the published updater's
+registry lookup. It does not replace the update algorithm or publish anything.
+Use a distinct candidate package version, such as `0.7.0-candidate.<shortsha>`,
+stamped only into disposable pack artifacts; equal baseline/candidate versions
+prove only a no-op. Proof homes and JSON receipts remain under ignored
+`.botanical/upgrade-proof/`.
 
 ### Developer source builds
 

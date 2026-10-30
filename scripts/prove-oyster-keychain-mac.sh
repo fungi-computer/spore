@@ -4,7 +4,11 @@ set -euo pipefail
 [[ $(uname -s) == Darwin ]] || { echo 'This proof requires macOS' >&2; exit 1; }
 cd "$(dirname "$0")/../../.."
 root=$PWD
-heavy_slot=${HEAVY_SLOT:-$HOME/Botanical-cto/lanes/heavy-slot.sh}
+# A Mac is outside the box scheduler; an operator may supply its own heavy
+# command through HEAVY. Do not require the Linux box's ~/bin/heavy on macOS.
+run_heavy() {
+  if [[ -n ${HEAVY:-} ]]; then "$HEAVY" "$@"; else "$@"; fi
+}
 arch=$(uname -m)
 case "$arch" in arm64) target=darwin-arm64 ;; x86_64) target=darwin-x64 ;; *) exit 1 ;; esac
 scratch=$(mktemp -d)
@@ -26,8 +30,8 @@ if security find-generic-password -s "$service" -a "$account" "$keychain" >/dev/
   echo 'Refusing to overwrite an existing Keychain entry' >&2
   exit 1
 fi
-"$heavy_slot" pnpm turbo:run run build --filter=@fungi.computer/spore... --concurrency=4
-"$heavy_slot" pnpm --dir apps/tui run build:proof-package
+run_heavy pnpm turbo:run run build --filter=@fungi.computer/spore... --concurrency=4
+run_heavy pnpm --dir apps/tui run build:proof-package
 cli_tarball=$(npm pack --silent .botanical/fungi-cli-package --pack-destination "$scratch")
 native_tarball=$(npm pack --silent ".botanical/fungi-cli-native-$target" --pack-destination "$scratch")
 npm install --prefix "$scratch/install" --no-audit --no-fund \
@@ -35,7 +39,7 @@ npm install --prefix "$scratch/install" --no-audit --no-fund \
 package="$scratch/install/node_modules/@fungi.computer/spore"
 cp -R "$package" "$scratch/staged"
 ln -s "$scratch/install/node_modules" "$scratch/staged/node_modules"
-"$heavy_slot" pnpm --dir apps/tui run build:binaries "$scratch/staged" "$target"
+run_heavy pnpm --dir apps/tui run build:binaries "$scratch/staged" "$target"
 export HOME="$scratch/home" USERPROFILE="$scratch/home" FUNGI_INSTALL="$scratch/home/.fungi"
 mkdir -p "$HOME" "$scratch/project"
 created=1

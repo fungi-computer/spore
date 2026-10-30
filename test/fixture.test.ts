@@ -94,7 +94,9 @@ describe("TUI Session fixture", () => {
     });
     expect(progress.value).toMatchObject({
       kind: "progress",
-      progress: { text: "Fixture is streaming a reply." },
+      progress: {
+        text: { offset: 0, append: "Fixture is streaming a reply." },
+      },
     });
 
     await watch.close();

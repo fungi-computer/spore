@@ -26,10 +26,7 @@ import type { ToastInput } from "./toast-store.js";
 /** Outcome of the Agent-tree stop capability exposed to panes. */
 export type { StopAllResult };
 export { tuiDraftStorage } from "./draft-storage.js";
-export {
-  type TuiSandboxSource,
-  type TuiSandboxStatus,
-} from "./local-sandbox.js";
+export { type TuiSandboxSource } from "./local-sandbox.js";
 
 /** A read-only value that changes over the pane's lifetime. */
 export type PaneValue<Value> = Readonly<{
@@ -342,6 +339,7 @@ export { useThemeControls, useTerminalTheme } from "./terminal-theme.js";
 export { saveThemePreference } from "./theme-preferences.js";
 export type { ThemeName } from "./theme-preferences.js";
 export { useModelControls } from "./model-controls.js";
+export { usePermissionsControls } from "./permissions-controls.js";
 export type { TuiModelSource } from "./model-query.js";
 export { useDialog, DialogHost } from "./dialog.js";
 export { DialogSurface } from "./dialog-surface.js";

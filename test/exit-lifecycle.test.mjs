@@ -363,7 +363,7 @@ test("an unavailable stream on the same protocol keeps ordinary reconnect availa
   let reconnectHandled;
   // Decode eagerly so reconnect's error boundary cannot swallow a stale shape.
   const serviceStatus = liveServiceStatusSchema.parse({
-    protocol: 4,
+    protocol: 5,
     version: "b".repeat(64),
     serviceId: localServiceIds.service.generate(),
     pid: 1,

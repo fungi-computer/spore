@@ -1,5 +1,61 @@
 # @fungi.computer/spore
 
+## 0.6.0
+
+### Minor Changes
+
+- Changes since 0.5.0:
+
+  - fix(cli-version): release the public Spore source dependency
+  - feat(repository): scope docs-only gates
+  - fix(spore): point the binary proof at the shared version parser
+  - fix(release): give CLI version parsing a legal shared package
+  - fix(factory): unify heavy admission and pre-train grants
+  - fix(tui): show Agent activity instead of queued-message blockers
+  - fix(deployment): own launch-smoke parser dependency
+  - fix(deployment): resolve launch smoke version parser from dist
+  - fix(spore): emit updater parser and prove published upgrades
+  - feat(local): expose private retained schedule controls
+  - fix(tui): use published updater version handshake in release verifiers
+  - fix(parakeet): retain audited S7 follow-ups on current Integration
+  - fix: require fresh review for directory-scoped extension installs
+  - feat: support Agent-authored Local extension snapshots
+  - fix(tui): include Truffle in production Local deploy
+  - fix(spore): keep CLI version compatible with installed updater
+  - fix(local): upgrade Bun runtime to 1.4.4
+  - fix: respect Button boundaries in permissions controls
+  - feat: manage Local Agent permissions in the TUI
+  - fix(parakeet): share live and final display character policy
+  - fix(shiitake): name work blocking queued conversations
+  - fix(shiitake): keep progress through CLI watch updates
+  - fix(parakeet): keep folded live tails and row keys stable
+  - feat(parakeet): show live tool tails in existing call rows
+  - fix(shiitake): stream bounded offset append progress across all clients
+  - fix(trellis): merge landed Hub native fixtures into schedules
+  - fix(repository): merge integration into the docs gate lane
+  - fix(release): bundle the parser and qualify the post-revert graph
+  - fix(trellis): checkpoint schedule owner integration merge
+  - fix: merge Integration into TUI permissions picker
+  - fix: restack live tail on qualified Local streams
+  - fix: restack Computer streams on corrected live text policy
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/agar@0.6.0
+  - @fungi.computer/cli-version@0.0.2
+  - @fungi.computer/parakeet@0.6.0
+  - @fungi.computer/shiitake-extensions@0.5.0
+  - @fungi.computer/shiitake@0.7.0
+  - @fungi.computer/truffle@0.6.0
+  - @fungi.computer/nacre@0.1.1
+  - @fungi.computer/corral@0.1.5
+
 ## 0.5.0
 
 ### Minor Changes

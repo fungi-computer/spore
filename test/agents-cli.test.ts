@@ -59,6 +59,9 @@ function run(args: readonly string[], archive?: Manager["archive"]) {
 const unused = (): Promise<never> =>
   Promise.reject(new Error("unused in the agents command"));
 const unusedManager: Omit<Manager, "discover" | "archive"> = {
+  schedules: () => {
+    throw new Error("unused in the agents command");
+  },
   reload: unused,
   status: unused,
   start: unused,

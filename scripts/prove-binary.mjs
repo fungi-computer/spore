@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { z } from "zod";
+import { expectReportedVersion } from "@fungi.computer/cli-version";
 
 const sourceBinary = resolve(
   process.argv[2] ?? "../../.botanical/dist/fungi/fungi-linux-x64",
@@ -76,11 +77,17 @@ try {
         ),
       ),
     );
-  assert.equal(version.trim(), `Spore ${manifest.version}`);
+  assert.ok(
+    expectReportedVersion(version, manifest.version),
+    "Installed CLI version must satisfy the published updater",
+  );
   console.log("$ fungi --version\n" + version);
   assert.match(run([]), /Welcome to fungi/u);
   const firstRun = run(["--yes"]);
-  assert.match(firstRun, /Welcome to fungi\. Sign in to Fungi to use models/u);
+  assert.match(
+    firstRun,
+    /Welcome to fungi\. Use your Claude or ChatGPT subscription \(recommended\), or sign in to Fungi to use models/u,
+  );
   console.log("$ fungi --yes\n" + firstRun);
   const setup = JSON.parse(
     await readFile(join(root, ".fungi/onboarding.json"), "utf8"),

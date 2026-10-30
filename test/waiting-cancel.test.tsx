@@ -17,7 +17,6 @@ import { TuiFrame } from "../src/frame.js";
 import { rendererInteraction } from "../src/renderer-interaction.js";
 
 const idleStatus = `${sigilGutterText("●")}idle`;
-const waiting = `${sigilGutterText("●")}queued for host`;
 
 // Native frame waits stop when the renderer is idle; they do not drain Query's
 // notification timers. Let awaited React act flush those notifications first.
@@ -65,7 +64,7 @@ async function mount() {
   return { fixture, setup, cancel, close };
 }
 
-test("shows the owner's waiting state without cancelling queued work", async () => {
+test("shows idle activity without cancelling queued work", async () => {
   const { fixture, setup, cancel, close } = await mount();
   try {
     await act(async () => {
@@ -77,7 +76,10 @@ test("shows the owner's waiting state without cancelling queued work", async () 
       });
     });
     await act(async () =>
-      setup.waitForFrame((frame) => frame.includes(waiting)),
+      setup.waitForFrame(
+        (frame) =>
+          frame.includes("Second conversation") && frame.includes(idleStatus),
+      ),
     );
 
     await cancel();
@@ -106,7 +108,7 @@ test("leaves a stale waiting observation alone until the running turn is observe
       });
     });
     await act(async () =>
-      setup.waitForFrame((frame) => frame.includes(waiting)),
+      setup.waitForFrame((frame) => frame.includes(idleStatus)),
     );
 
     await cancel();

@@ -25,6 +25,13 @@ for (const [mode, label] of [
           initialTheme="mocha"
           sandboxSource={{
             identity: "agent/session",
+            rules: {
+              list: () => Promise.resolve([]),
+              remove: () =>
+                Promise.reject(new Error("Footer fixture cannot remove rules")),
+            },
+            setMode: () =>
+              Promise.reject(new Error("Footer fixture cannot change mode")),
             read: () =>
               Promise.resolve<TuiSandboxStatus>(
                 mode === "full-access"

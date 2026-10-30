@@ -21,7 +21,6 @@ import type {
   TuiPresentation,
   StopAllResult,
   TuiSandboxSource,
-  TuiSandboxStatus,
 } from "../../button/index.js";
 import {
   usePaneKit,
@@ -69,10 +68,7 @@ import { useThemeControls } from "../../button/index.js";
 import { saveThemePreference, type ThemeName } from "../../button/index.js";
 import { useSessionControls } from "./session-controls.js";
 import { useReloadControls } from "./reload-controls.js";
-import {
-  sessionStateLabel,
-  compactSessionStateLabel,
-} from "./session-state-label.js";
+import { sessionStateLabel } from "./session-state-label.js";
 import {
   footerLayout,
   PaneStatusLine,
@@ -81,7 +77,10 @@ import {
   type PaneTone,
 } from "../../button/index.js";
 import type { TuiModelSource } from "../../button/index.js";
-import { useModelControls } from "../../button/index.js";
+import {
+  useModelControls,
+  usePermissionsControls,
+} from "../../button/index.js";
 import {
   AwaitingDecisionBox,
   useInteractionDialog,
@@ -302,31 +301,6 @@ function TuiFrameConversation({
   );
   const sessionStatus = useStatus();
   const lastReplyAt = useLastSessionReplyAt();
-  const [sandboxRead, setSandboxRead] = useState<{
-    identity: string;
-    status: TuiSandboxStatus;
-  }>();
-  const sandboxStatus =
-    sandboxRead?.identity === sandboxSource?.identity
-      ? sandboxRead?.status
-      : undefined;
-  useEffect(() => {
-    if (sandboxSource === undefined) return;
-    const controller = new AbortController();
-    void sandboxSource.read(controller.signal).then(
-      (status) => {
-        if (controller.signal.aborted) return;
-        setSandboxRead({ identity: sandboxSource.identity, status });
-      },
-      (cause: unknown) => {
-        if (!controller.signal.aborted)
-          reportFailure("local-sandbox-status", cause);
-      },
-    );
-    return () => {
-      controller.abort();
-    };
-  }, [sandboxSource, sessionStatus.status, sessionStatus.commandId]);
   const contributions = useClientContributions();
   const timeline = useTimeline();
   const placed = useMemo(
@@ -418,6 +392,16 @@ function TuiFrameConversation({
   usePanePresentation(presentation);
   const { colors, surface } = presentation;
   const modelControls = useModelControls({ source: modelSource, commands });
+  const { status: sandboxStatus, refresh: refreshSandbox } =
+    usePermissionsControls({ source: sandboxSource, commands, dialog, colors });
+  useEffect(() => {
+    if (sandboxSource !== undefined) void refreshSandbox();
+  }, [
+    sandboxSource,
+    sessionStatus.status,
+    sessionStatus.commandId,
+    refreshSandbox,
+  ]);
   useReloadControls({
     commands,
     refreshModels: modelControls.refresh,
@@ -693,16 +677,6 @@ function TuiFrameConversation({
     },
   });
   const maxRows = Math.max(1, Math.min(6, Math.floor(height / 3)));
-  const [, refreshRetryCountdown] = useState(0);
-  useEffect(() => {
-    if (sessionStatus.viewState.kind !== "retrying") return;
-    const timer = setInterval(() => {
-      refreshRetryCountdown((value) => value + 1);
-    }, 1_000);
-    return () => {
-      clearInterval(timer);
-    };
-  }, [sessionStatus.viewState.kind]);
   const displayedState = cancellation.pending
     ? ({ kind: "cancelling" } as const)
     : sessionStatus.viewState;
@@ -727,8 +701,8 @@ function TuiFrameConversation({
       : formatModelWithLevel(footerModel, modelControls.selectedReasoning);
   const footer = footerLayout({
     width: width - 2 * inset,
-    status: `● ${waitingOnAnswer ? "waiting on you" : sessionStateLabel(displayedState)}`,
-    compactStatus: `● ${waitingOnAnswer ? "waiting on you" : compactSessionStateLabel(displayedState)}`,
+    status: `● ${sessionStateLabel(displayedState, waitingOnAnswer)}`,
+    compactStatus: `● ${sessionStateLabel(displayedState, waitingOnAnswer)}`,
     model: footerModelIdentity,
     context:
       sessionStatus.context === undefined

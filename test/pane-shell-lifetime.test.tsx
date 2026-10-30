@@ -302,7 +302,7 @@ test("real pane keymap cancels only the focused conversation", async () => {
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressEscape();
     });
-    await waitForFrame(setup, (text: string) => text.includes("cancelling…"));
+    await waitForFrame(setup, (text: string) => text.includes("● thinking"));
     expect(beta.cancelCalls()).toEqual([
       { type: "cancel", commandId: "owner-active" },
     ]);

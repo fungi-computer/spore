@@ -23,7 +23,7 @@ async function installed() {
   const home = await mkdtemp(join(tmpdir(), "board-extension-home-"));
   const project = await mkdtemp(join(tmpdir(), "board-extension-project-"));
   const owner = localExtensions({ home });
-  await owner.add(board);
+  await owner.add(board, project);
   await owner.enableProject(project, "board");
   const parts = await projectExtensionParts(owner, project, (error) => {
     throw error;

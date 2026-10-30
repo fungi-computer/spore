@@ -21,6 +21,10 @@ import { manageLocalExecRules } from "@fungi.computer/truffle/rules";
 import { createIsolatedCliEnvironment } from "./cli-test-isolation.js";
 import { runFungiCli } from "../src/cli.js";
 
+const cliVersion = z
+  .looseObject({ version: z.string().min(1) })
+  .parse(createRequire(import.meta.url)("../package.json")).version;
+
 test("version skips home work; refused activations and installed names warn once at distinct paths", async () => {
   const home = await mkdtemp(join(tmpdir(), "fungi-cli-upgrade-"));
   const project = join(home, "project");
@@ -69,7 +73,7 @@ test("version skips home work; refused activations and installed names warn once
       },
     };
     await runFungiCli(["--version"], io, {}, home);
-    expect(output).toContain("Spore ");
+    expect(output).toBe(`fungi ${cliVersion}\n`);
     expect(errors).toBe("");
     expect((await stat(installed)).isFile()).toBe(true);
     await assert.rejects(stat(marker), { code: "ENOENT" });
@@ -940,7 +944,7 @@ test("--version and -V print the package version", async () => {
   for (const flag of ["--version", "-V"]) {
     const sink = capture();
     await runFungiCli([flag], { stdout: sink.stdout });
-    expect(sink.text()).toBe(`Spore ${packageVersion}\n`);
+    expect(sink.text()).toBe(`fungi ${packageVersion}\n`);
   }
 });
 

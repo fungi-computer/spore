@@ -1670,6 +1670,7 @@ test("the production CLI handles /help without submitting a model prompt", async
           "theme",
           "model",
           "thinking",
+          "permissions",
           "new",
           "fork",
           "account",
@@ -1771,7 +1772,7 @@ test("rejected prompt keeps the native composer input", async () => {
         ),
       );
       assert.equal(input.plainText, "Keep this failed prompt");
-      assert.match(setup.captureCharFrame(), /stopped/u);
+      assert.match(setup.captureCharFrame(), /● failed/u);
       assert.match(
         setup.captureCharFrame(),
         /\/retry · or edit and submit the draft/u,
@@ -2201,10 +2202,8 @@ test("slash details and Ctrl+O share disclosure; slash exit closes the CLI", asy
           progress: {
             messageId: "thinking-message",
             revision: 1,
-            text: "Working response",
-            thinking: "Inspecting the command path",
-            textTruncated: false,
-            thinkingTruncated: false,
+            text: { offset: 0, append: "Working response" },
+            thinking: { offset: 0, append: "Inspecting the command path" },
           },
         });
       });

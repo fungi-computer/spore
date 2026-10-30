@@ -1,6 +1,14 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -212,6 +220,91 @@ test("--skills installs and adds the skills without a prompt", async () => {
   );
   expect(output).toContain("Added 2 skills");
   expect(await enabledSkills()).toEqual(["acme-tools"]);
+});
+
+test("a relative extension source resolves from CLI -C, not the private install directory", async () => {
+  await cp(join(scratch, "work"), join(project, "ext"), { recursive: true });
+  let output = "";
+  await runFungiCli(
+    ["-C", project, "extension", "add", "./ext", "--no-skills"],
+    {
+      cwd: scratch,
+      stdout: {
+        write(chunk) {
+          output += String(chunk);
+          return true;
+        },
+      },
+    },
+    { extensions: owner },
+  );
+  expect(output).toContain("Installed acme-tools 1.0.0");
+  expect((await owner.list()).map(({ id }) => id)).toEqual(["acme-tools"]);
+  expect(await enabledSkills()).toEqual([]);
+});
+
+test("editing and deleting an authored source cannot rewrite its installed program", async () => {
+  const directory = join(project, "source-program");
+  const executable = join(directory, "demo");
+  const scriptMarker = join(scratch, "lifecycle-script-ran");
+  await mkdir(directory);
+  await writeFile(
+    join(directory, "script.mjs"),
+    `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(scriptMarker)}, "ran");\n`,
+  );
+  await writeFile(
+    join(directory, "package.json"),
+    JSON.stringify({
+      name: "fungi-program-copy",
+      version: "1.0.0",
+      private: true,
+      scripts: Object.fromEntries(
+        ["prepack", "prepare", "postpack", "preinstall", "postinstall"].map(
+          (name) => [name, "node ./script.mjs"],
+        ),
+      ),
+      fungi: {
+        id: "program-copy",
+        terminals: [{ id: "demo", name: "Demo", command: ["./demo"] }],
+      },
+    }),
+  );
+  const original = "#!/bin/sh\nprintf 'original\\n'\n";
+  await writeFile(executable, original, { mode: 0o755 });
+  const cli = (arguments_: string[]) =>
+    runFungiCli(arguments_, { cwd: project }, { extensions: owner });
+  try {
+    await cli(["extension", "add", "./source-program", "--no-skills"]);
+    expect(await Bun.file(scriptMarker).exists()).toBe(false);
+    await cli(["extension", "enable", "project", "program-copy"]);
+    const [terminal] = (await owner.project(project)).terminals;
+    if (terminal === undefined) throw new Error("Installed program is missing");
+    const [installed] = terminal.command;
+    if (installed === undefined)
+      throw new Error("Installed executable is missing");
+    expect(await readFile(installed, "utf8")).toBe(original);
+    await writeFile(
+      executable,
+      "#!/bin/sh\nprintf 'changed without reinstall\\n'\n",
+    );
+    expect(await readFile(installed, "utf8")).toBe(original);
+    await rm(directory, { recursive: true });
+    const child = Bun.spawn([...terminal.command], {
+      cwd: terminal.cwd,
+      env: { ...process.env, ...terminal.env },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [code, output, error] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code, error).toBe(0);
+    expect(output).toBe("original\n");
+  } finally {
+    await owner.remove("program-copy");
+  }
 });
 
 test("--no-skills installs without adding skills and without a prompt", async () => {

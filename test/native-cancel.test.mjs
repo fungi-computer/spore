@@ -222,7 +222,7 @@ for (const deferredNotifications of [false, true]) {
           { type: "cancel", commandId: "owner-running-test" },
         ]);
         assert.equal(fixture.abortCalls(), 0);
-        assert.match(afterFirstPress, /cancelling…/u);
+        assert.match(afterFirstPress, /● thinking/u);
         assert.equal(cascades, 1);
         // Neither the pending cascade nor its eventual warning may own composer input.
         await act(async () => {

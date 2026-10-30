@@ -128,7 +128,7 @@ test("an uninstalled source CLI cannot replace the installed service; explicit f
     const after = recordSchema.parse(
       JSON.parse(await readFile(record, "utf8")),
     );
-    expect(after).toMatchObject({ protocol: 4, version: "source" });
+    expect(after).toMatchObject({ protocol: 5, version: "source" });
     expect(after.pid).not.toBe(stale.pid);
 
     expect(await fungi("stop")).toEqual({

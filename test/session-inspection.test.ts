@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
 import { z } from "zod";
+import { fauxAssistantMessage } from "@earendil-works/pi-ai/providers/faux";
+import { fauxModel } from "@fungi.computer/mule/testing";
+import { memoryHost } from "@fungi.computer/shiitake/testing";
 
 import { idleActivity, queuedActivity } from "@fungi.computer/parakeet-testing";
 import type {
@@ -13,6 +16,14 @@ import {
   renderSessionStatus,
   runSessionInspection,
 } from "../src/session-inspection.js";
+
+function deferred() {
+  let resolve: () => void = () => undefined;
+  const promise = new Promise<void>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
 
 const snapshot: SessionSnapshot = {
   attention: [],
@@ -309,6 +320,7 @@ test("watch applies an activity frame without treating it as a history update", 
         session: {
           watch: () =>
             Promise.resolve({
+              snapshot,
               changes: changes(),
               close: () => {
                 closed = true;
@@ -338,6 +350,198 @@ test("watch applies an activity frame without treating it as a history update", 
     activity,
   });
   expect(closed).toBe(true);
+});
+
+test("watch shows a 150 KB streaming reply from its own baseline, not the earlier inspection read", async () => {
+  const firstAppend = deferred();
+  const continueReply = deferred();
+  const reply = fauxModel([fauxAssistantMessage("x".repeat(150_000))], {
+    tokenSize: { min: 1024, max: 1024 },
+  });
+  const host = await memoryHost({
+    model: {
+      acquire: () =>
+        Promise.resolve({
+          model: reply.model,
+          retryable: reply.retryable,
+          release: () => Promise.resolve(),
+          stream: (...args) => {
+            const source = reply.stream(...args);
+            return {
+              result: () => source.result(),
+              async *[Symbol.asyncIterator]() {
+                let first = true;
+                for await (const event of source) {
+                  yield event;
+                  if (event.type === "text_delta" && first) {
+                    first = false;
+                    firstAppend.resolve();
+                    await continueReply.promise;
+                  }
+                }
+              },
+            };
+          },
+        }),
+      describe: () => Promise.resolve({ contextWindow: 200_000 }),
+    },
+  });
+  const sessionId = "inspection-stream";
+  const session = host.agent.session(sessionId);
+  const controller = new AbortController();
+  const states: string[] = [];
+  let settled: Promise<SessionSnapshot> | undefined;
+  try {
+    await runSessionInspection({
+      inspect: async () => {
+        const earlier = await session.read();
+        await session.send("stream 150 KB");
+        settled = host.settle(sessionId);
+        await firstAppend.promise;
+        return {
+          snapshot: earlier,
+          session: {
+            watch: async (options) => {
+              const watch = await session.watch(options);
+              continueReply.resolve();
+              return {
+                ...watch,
+                changes: (async function* () {
+                  for await (const frame of watch.changes) {
+                    yield frame;
+                    const activity =
+                      frame.kind === "reset"
+                        ? frame.baseline.activity
+                        : frame.activity;
+                    if (activity.queue.state === "idle") break;
+                  }
+                })(),
+              };
+            },
+          },
+          close: () => Promise.resolve(),
+        };
+      },
+      selection: {
+        invocationRoot: "/tmp/project",
+        databasePath: "/tmp/project/agent.sqlite",
+        sessionId,
+      },
+      watch: true,
+      errorsOnly: false,
+      json: true,
+      signal: controller.signal,
+      signals: { on: () => undefined, off: () => undefined },
+      write(value) {
+        const view = z
+          .object({ viewState: z.object({ kind: z.string() }) })
+          .parse(JSON.parse(value));
+        states.push(view.viewState.kind);
+      },
+    });
+    await settled;
+    expect(states).toContain("responding");
+    const streaming = states.indexOf("responding");
+    expect(streaming).toBe(0);
+    expect(
+      states.filter((state) => state === "responding").length,
+    ).toBeGreaterThan(5);
+    expect(states.at(-1)).toBe("waiting_for_you");
+    expect((await session.read()).messages.at(-1)?.value).toMatchObject({
+      role: "assistant",
+      content: [{ type: "text", text: "x".repeat(150_000) }],
+    });
+  } finally {
+    continueReply.resolve();
+    controller.abort();
+    await settled;
+    await host.close();
+  }
+});
+
+test("watch retains thinking offsets across unrelated updates and clears progress on message completion", async () => {
+  const activity = {
+    ...idleActivity,
+    queue: { state: "running", commandId: "command-1" },
+  } as const;
+  const baseline: SessionSnapshot = {
+    ...snapshot,
+    activity,
+    progress: {
+      messageId: "live",
+      revision: 1,
+      text: "",
+      thinking: "plan",
+      textOffset: 0,
+      thinkingOffset: 0,
+      textTruncated: false,
+      thinkingTruncated: false,
+    },
+  };
+  const update: Extract<SessionFrame, { kind: "update" }> = {
+    kind: "update",
+    delivery: "live",
+    cursor: snapshot.cursor,
+    messages: [],
+    terminals: [],
+    pending: snapshot.pending,
+    activity,
+    extensions: {},
+    attention: [],
+  };
+  const completed = snapshot.messages.find(
+    ({ id }) => id === "assistant-text-1",
+  );
+  if (completed === undefined) throw new Error("Missing completed fixture");
+  const frames: SessionFrame[] = [
+    update,
+    {
+      kind: "progress",
+      activity,
+      progress: {
+        messageId: "live",
+        revision: 2,
+        text: { offset: 0, append: "answer" },
+        thinking: { offset: 4, append: " done" },
+      },
+    },
+    { ...update, messages: [{ ...completed, id: "live" }] },
+  ];
+  const states: string[] = [];
+  await runSessionInspection({
+    inspect: () =>
+      Promise.resolve({
+        snapshot: baseline,
+        session: {
+          watch: () =>
+            Promise.resolve({
+              snapshot: baseline,
+              changes: (async function* () {
+                for (const frame of frames) yield await Promise.resolve(frame);
+              })(),
+              close: () => Promise.resolve(),
+            }),
+        },
+        close: () => Promise.resolve(),
+      }),
+    selection: {
+      invocationRoot: "/tmp/project",
+      databasePath: "/tmp/project/agent.sqlite",
+      sessionId: snapshot.sessionId,
+    },
+    watch: true,
+    errorsOnly: false,
+    json: true,
+    signals: { on: () => undefined, off: () => undefined },
+    write(value) {
+      states.push(
+        z
+          .object({ viewState: z.object({ kind: z.string() }) })
+          .parse(JSON.parse(value)).viewState.kind,
+      );
+    },
+  });
+  expect(states).toEqual(["thinking", "thinking", "responding", "thinking"]);
 });
 
 test("operator inspection resolves sandbox references without treating diagnostics as messages", () => {

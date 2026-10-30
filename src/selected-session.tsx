@@ -1,5 +1,6 @@
 import { createAppPaneService } from "./app-pane-service.js";
 import { localManagementCommands } from "./local-management-commands.js";
+import { manageLocalExecRules } from "@fungi.computer/truffle/rules";
 import { localExtensions } from "@fungi.computer/truffle/extensions";
 import { homedir } from "node:os";
 import { resolveDefaultCredentialPath } from "@fungi.computer/truffle";
@@ -456,6 +457,8 @@ export async function runSessionApplication(
           () =>
             select({
               ...options,
+              // The launch flag was applied already; navigation uses saved modes.
+              mode: undefined,
               sessionId: undefined,
               databasePath: undefined,
               resume: true,
@@ -489,6 +492,40 @@ export async function runSessionApplication(
       sandboxSource: {
         identity: JSON.stringify([host.agentId, host.sessionId]),
         read: (signal) => host.sandboxStatus({ signal }),
+        setMode: async (mode, signal) => {
+          if (!ownsView()) throw new Error("The selected Agent changed.");
+          signal.throwIfAborted();
+          // The ordinary human selection API persists/admit-checks mode at its
+          // existing Local owner. Retire only this temporary observation lease.
+          const temporary = await serviceManager.connect(
+            {
+              invocationRoot: options.invocationRoot,
+              databasePath: host.databasePath,
+              sessionId: host.sessionId,
+              mode,
+              fungiMcp: options.fungiMcp,
+            },
+            { signal },
+          );
+          await temporary.close();
+        },
+        rules: {
+          list: (signal) =>
+            Promise.resolve().then(() => {
+              signal.throwIfAborted();
+              return manageLocalExecRules(options.invocationRoot, "list");
+            }),
+          remove: (prefix, signal) =>
+            Promise.resolve().then(() => {
+              if (!ownsView()) throw new Error("The selected Agent changed.");
+              signal.throwIfAborted();
+              return manageLocalExecRules(
+                options.invocationRoot,
+                "remove",
+                prefix,
+              );
+            }),
+        },
       },
       reloadSources: localReload,
       onResume: async (paneId) => {
@@ -497,6 +534,7 @@ export async function runSessionApplication(
           () =>
             select({
               ...options,
+              mode: undefined,
               databasePath: undefined,
               sessionId: undefined,
               resume: true,
@@ -512,6 +550,7 @@ export async function runSessionApplication(
           () =>
             select({
               ...options,
+              mode: undefined,
               databasePath: host.databasePath,
               sessionId,
             }),
