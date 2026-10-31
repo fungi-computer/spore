@@ -81,7 +81,6 @@ function startFixtureHub(appDirectoryResponseSchema) {
         marketplacePermissions: {
           browse: false,
           purchase: false,
-          installFree: false,
         },
         // The Hub's noAppAgentPermission: an installed App with no Agent grant.
         agentPermission: {

@@ -12,7 +12,7 @@ it("shows only the Agent's own activity in the status line", () => {
     [{ kind: "responding" }, "streaming"],
     [{ kind: "running_tool", tool: "Local_Computer.exec" }, "running a tool"],
     [{ kind: "waiting_for_you" }, "idle"],
-    [{ kind: "cancelling" }, "thinking"],
+    [{ kind: "cancelling" }, "cancelling"],
     [{ kind: "compacting", trigger: "manual" }, "thinking"],
     [{ kind: "connecting" }, "idle"],
     [{ kind: "disconnected", cause: "Session stream closed" }, "failed"],
@@ -34,27 +34,24 @@ it("shows only the Agent's own activity in the status line", () => {
   expect(sessionStateLabel({ kind: "waiting_for_you" }, true)).toBe(
     "waiting on you",
   );
+  expect(sessionDiagnosticLabel({ kind: "cancelling" })).toBe("cancelling");
 });
 
-it("never substitutes a queued message's blocker for Agent state", () => {
-  for (const runningWork of [
-    null,
-    {
-      kind: "session",
-      sessionId: "session-a",
-      commandId: "first",
-      title: "Lanes tick",
-    },
-    { kind: "host", lane: "mail", jobId: "delivery-a" },
+it("shows the occupant's phase without substituting a queued-message label", () => {
+  for (const [runningWork, label] of [
+    [null, "idle"],
+    [{ phase: "thinking" }, "thinking"],
+    [{ phase: "streaming" }, "streaming"],
+    [{ phase: "running_tool" }, "running a tool"],
+    [{ phase: "waiting_on_you" }, "waiting on you"],
+    [{ phase: "cancelling" }, "cancelling"],
   ] as const) {
     const state = {
       kind: "queued",
       queuedCommandId: "next",
       runningWork,
     } as const;
-    expect(sessionStateLabel(state)).toBe(
-      runningWork === null ? "idle" : "thinking",
-    );
+    expect(sessionStateLabel(state)).toBe(label);
     expect(sessionDiagnosticLabel(state)).toBe(sessionStateLabel(state));
   }
 });

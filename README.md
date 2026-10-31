@@ -658,20 +658,36 @@ Release clients do not automatically replace the running terminal.
 
 ### Published-updater rehearsals
 
-After building and packing the candidate, run both real published update paths:
+After building and packing the candidate, select published **Fungi releases**.
+`--from` is required and repeatable; candidate directory and report are
+required:
 
 ```sh
-pnpm --dir apps/tui run proof:upgrade-from-050 /absolute/spore.tgz /absolute/native-linux-x64.tgz
-pnpm --dir apps/tui run proof:upgrade-from-040 /absolute/spore.tgz /absolute/native-linux-x64.tgz
+pnpm proof:upgrade-rehearsal --from 0.6.0 --from 0.5.0 --candidate /absolute/pack-npm-dir --report /absolute/fresh-report.json
 ```
 
-The shared `proof:upgrade-rehearsal` also accepts `UPGRADE_FROM=0.5.0` or
-`UPGRADE_FROM=0.4.0`. Spore 0.5.0 is the package shipped in Fungi release 0.6.0.
-Each run installs the published baseline into its own HOME and global prefix,
-creates and reads a Session, runs the actual published `fungi update`, then
-checks the candidate service's live build identity and reads that same Session
-by its original ID in the same project. It copies no model credentials and does
-not claim a completed model turn.
+The rulebook's sole `releasePackages(fungiVersion)` walks main's first-parent
+history, matches the version JSON, reads that commit's exact Spore and Oyster
+versions, and decodes both `npm view --json` integrities with Zod. Zero or
+multiple matching commits are refused; releases before Fungi 0.4.0 have no
+version JSON and are unsupported. No version is inferred from commit subjects.
+Fungi 0.6.0 ships Spore 0.5.0; those version lines are not interchangeable.
+
+The candidate is the existing `pack-npm` directory with verified `order.tsv` and
+`SHA256SUMS`: no loose tarballs, fallback pack or implicit baseline. The fresh
+JSON report is decoded with the exported `upgradeReportSchema` in
+`test/upgrade-report.mjs`. Its `from[]` records Fungi, Spore, Oyster and both
+integrities; `checks[]` records name, Fungi baseline and pass/fail. Failed or
+empty checks fail the command. S3's populated/named-check extension and Z1's
+runner consume this same interface.
+
+Each run installs the resolved Spore baseline into its own HOME and global
+prefix, creates and reads a Session, runs the actual published `fungi update`,
+then checks the candidate service's live build identity and reads that same
+Session by its original ID in the same project. It copies no model credentials
+and does not claim a completed model turn. This proves the Local service/Session
+transition, **not an Oyster host, populated registry, App-data or Home
+upgrade**.
 
 The rehearsal supplies an isolated npm registry transport for the unpublished
 local archives, including a command-local CA for the published updater's

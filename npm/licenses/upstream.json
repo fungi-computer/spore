@@ -1,12 +1,12 @@
 [
   {
-    "packages": ["@nodable/entities@3.0.0"],
-    "sourceRevision": "d2070d76a8ba07e6c7fa142caeb51ffd756e47eb",
-    "revisionEvidence": "upstream v3.0.0 release tag",
+    "packages": ["@nodable/entities@3.1.0"],
+    "sourceRevision": "ac48e7ea591da372be023a481875c747535812b3",
+    "revisionEvidence": "npm @nodable/entities@3.1.0 gitHead",
     "notices": [
       {
-        "file": "nodable-val-parsers-v3.0.0-LICENSE",
-        "source": "https://raw.githubusercontent.com/nodable/val-parsers/d2070d76a8ba07e6c7fa142caeb51ffd756e47eb/LICENSE",
+        "file": "nodable-val-parsers-v3.1.0-LICENSE",
+        "source": "https://raw.githubusercontent.com/nodable/val-parsers/ac48e7ea591da372be023a481875c747535812b3/LICENSE",
         "sha256": "750cb3fb6362804957ef52caaf9b5c824015be44d494637330d7cd8834d31d40"
       }
     ]

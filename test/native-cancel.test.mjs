@@ -216,13 +216,17 @@ for (const deferredNotifications of [false, true]) {
         ]);
         assert.equal(fixture.abortCalls(), 0);
         assert.equal(cascades, 0);
-        const afterFirstPress = setup.captureCharFrame();
+        // The first Esc must register visibly before another Esc or settlement.
+        const afterFirstPress = await waitForFrame(setup, (frame) =>
+          frame.includes("● cancelling"),
+        );
+        await captureFrame(setup, process.env.STOP_ALL_FRAMES, "cancelling");
         await pressDecodedKey(setup, () => setup.mockInput.pressEscape());
         assert.deepEqual(fixture.cancelCalls(), [
           { type: "cancel", commandId: "owner-running-test" },
         ]);
         assert.equal(fixture.abortCalls(), 0);
-        assert.match(afterFirstPress, /● thinking/u);
+        assert.match(afterFirstPress, /● cancelling/u);
         assert.equal(cascades, 1);
         // Neither the pending cascade nor its eventual warning may own composer input.
         await act(async () => {

@@ -18,7 +18,10 @@ import {
 } from "@fungi.computer/whistle";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { act, createElement } from "react";
-import { fauxAssistantMessage } from "@earendil-works/pi-ai/providers/faux";
+import {
+  fauxAssistantMessage,
+  fauxToolCall,
+} from "@earendil-works/pi-ai/providers/faux";
 import { fauxModel } from "@fungi.computer/mule/testing";
 import {
   compatibilityRunDependencies,
@@ -29,6 +32,8 @@ import { TuiFrame } from "../src/frame.js";
 import { rendererInteraction } from "../src/renderer-interaction.js";
 import type { Setup } from "./frame-capture.js";
 import { captureFrame } from "./frame-capture.js";
+import { attentionExtension } from "../../../packages/shiitake/test/fixtures/attention.fixture.js";
+import { grantAll } from "../../../packages/shiitake/test/fixtures/fixture-extensions.js";
 
 /** Await the terminal parser's real Esc event before observing its consequence. */
 async function pressEsc(setup: Setup) {
@@ -338,7 +343,7 @@ test("a queued message stays faded while the status shows Agent activity, never 
     await agent
       .session("conversation-a")
       .command({ type: "title", title: "Lanes tick" });
-    const first = await agent
+    await agent
       .session("conversation-a")
       .send("First", { delivery: "followUp", requestId: "first" });
     running = runtime.runNext();
@@ -370,15 +375,211 @@ test("a queued message stays faded while the status shows Agent activity, never 
     expect((await second.read()).activity.queue).toEqual({
       state: "queued",
       commandId: accepted.commandId,
-      runningWork: {
-        kind: "session",
-        sessionId: "conversation-a",
-        commandId: first.commandId,
-        title: "Lanes tick",
-      },
+      runningWork: { phase: "thinking" },
     });
   } finally {
     release.resolve(undefined);
+    await running;
+    await agent.close();
+    fixture.close();
+  }
+});
+
+test("a queued view shows waiting on you when its occupant needs a human, without exposing its identity", async () => {
+  const fixture = createNativeSqliteOwnerFixture();
+  const runtime = createCompatibilityRuntimeHost();
+  const started = Promise.withResolvers<undefined>();
+  const release = Promise.withResolvers<undefined>();
+  const streamed = Promise.withResolvers<undefined>();
+  const finishStreaming = Promise.withResolvers<undefined>();
+  const toolStarted = Promise.withResolvers<undefined>();
+  const finishTool = Promise.withResolvers<undefined>();
+  const dependencies = compatibilityRunDependencies();
+  const faux = fauxModel([
+    async () => {
+      started.resolve(undefined);
+      await release.promise;
+      return fauxAssistantMessage(
+        [
+          { type: "text", text: "Private occupying reply" },
+          fauxToolCall("execute", { code: "return 1" }),
+        ],
+        { stopReason: "toolUse" },
+      );
+    },
+    fauxAssistantMessage("First completed"),
+    fauxAssistantMessage("Second reply"),
+  ]);
+  const agent = await Shiitake.make({
+    ...dependencies,
+    store: fixture.owner,
+    runtime: runtime.runtime,
+    extensions: grantAll([attentionExtension()]),
+    tools: {
+      ...dependencies.tools,
+      sandbox: {
+        ...dependencies.tools.sandbox,
+        execute: async (...args) => {
+          toolStarted.resolve(undefined);
+          await finishTool.promise;
+          return dependencies.tools.sandbox.execute(...args);
+        },
+      },
+    },
+    model: {
+      acquire: () =>
+        Promise.resolve({
+          retryable: () => false,
+          model: faux.model,
+          stream: (...args) => {
+            const source = faux.stream(...args);
+            return {
+              result: () => source.result(),
+              async *[Symbol.asyncIterator]() {
+                for await (const event of source) {
+                  yield event;
+                  if (event.type !== "text_delta") continue;
+                  streamed.resolve(undefined);
+                  await finishStreaming.promise;
+                }
+              },
+            };
+          },
+          release: () => Promise.resolve(),
+        }),
+    },
+  });
+  let running: Promise<void> | undefined;
+  try {
+    const occupant = agent.session("private-occupant");
+    await occupant.command({ type: "title", title: "Private occupant title" });
+    await occupant.send("First", { delivery: "followUp", requestId: "first" });
+    running = runtime.runNext();
+    await started.promise;
+    await occupant.extension("attention-probe").call("set", {
+      id: "human-choice",
+      kind: "question",
+      summary: "Choose a destination",
+      since: 1,
+    });
+    expect((await occupant.read()).attention).toMatchObject([
+      { id: "human-choice", kind: "question" },
+    ]);
+    const queued = agent.session("queued-view");
+    const accepted = await queued.send("Second stays queued", {
+      delivery: "followUp",
+      requestId: "second",
+    });
+    const queuedCursor = (await queued.read()).cursor;
+    const frame = await queuedFrame(
+      agent,
+      "queued-view",
+      "occupant-waiting-on-human",
+      async (setup) => {
+        await act(async () =>
+          setup.waitForFrame((value) => value.includes("Second stays queued")),
+        );
+      },
+    );
+    expect(frame).toContain("● waiting on you");
+    expect(frame).not.toContain("Private occupant title");
+    expect(frame).not.toContain("private-occupant");
+    expect((await queued.read()).activity.queue).toEqual({
+      state: "queued",
+      commandId: accepted.commandId,
+      runningWork: { phase: "waiting_on_you" },
+    });
+    const resumed = await queuedFrame(
+      agent,
+      "queued-view",
+      "occupant-before-live-transitions",
+      async (setup) => {
+        expect(setup.captureCharFrame()).toContain("● waiting on you");
+        await act(async () => {
+          await occupant.extension("attention-probe").call("clear", {
+            id: "human-choice",
+          });
+        });
+        await act(async () =>
+          setup.waitForFrame((value) => value.includes("● thinking")),
+        );
+        await captureFrame(
+          setup,
+          process.env.TUI_QUEUE_SHOTS,
+          "occupant-thinking",
+        );
+        for (const item of [
+          {
+            id: "drawer",
+            kind: "notice",
+            summary: "Paused background work",
+            since: 1,
+            inbox: false,
+          },
+          {
+            id: "delegated",
+            kind: "question",
+            summary: "Waiting on another Agent",
+            since: 1,
+            waitingOn: {
+              agentId: "private-parent",
+              sessionId: "private-parent-session",
+              name: "Parent",
+            },
+          },
+        ] as const) {
+          await act(async () => {
+            await occupant.extension("attention-probe").call("set", item);
+          });
+          expect((await queued.read()).activity.queue).toEqual({
+            state: "queued",
+            commandId: accepted.commandId,
+            runningWork: { phase: "thinking" },
+          });
+        }
+        await act(async () => {
+          release.resolve(undefined);
+          await streamed.promise;
+        });
+        await act(async () =>
+          setup.waitForFrame((value) => value.includes("● streaming")),
+        );
+        expect((await queued.read()).activity.queue).toMatchObject({
+          runningWork: { phase: "streaming" },
+        });
+        await captureFrame(
+          setup,
+          process.env.TUI_QUEUE_SHOTS,
+          "occupant-streaming",
+        );
+        await act(async () => {
+          finishStreaming.resolve(undefined);
+          await toolStarted.promise;
+        });
+        await act(async () =>
+          setup.waitForFrame((value) => value.includes("● running a tool")),
+        );
+        expect((await queued.read()).activity.queue).toEqual({
+          state: "queued",
+          commandId: accepted.commandId,
+          runningWork: { phase: "running_tool" },
+        });
+        expect((await queued.read()).cursor).toBe(queuedCursor);
+        expect(setup.captureCharFrame()).not.toContain(
+          "Private occupying reply",
+        );
+        await captureFrame(
+          setup,
+          process.env.TUI_QUEUE_SHOTS,
+          "occupant-running-tool",
+        );
+      },
+    );
+    expect(resumed).toContain("● running a tool");
+  } finally {
+    release.resolve(undefined);
+    finishStreaming.resolve(undefined);
+    finishTool.resolve(undefined);
     await running;
     await agent.close();
     fixture.close();

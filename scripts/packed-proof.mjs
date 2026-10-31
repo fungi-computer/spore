@@ -21,10 +21,7 @@ try {
   const result = await runCommand(
     [
       "bash",
-      resolve(
-        root,
-        ".agents/skills/orchestrate-multi-lane-work/scripts/run-proof.sh",
-      ),
+      resolve(root, "tooling/proof-runner/run-proof.sh"),
       process.execPath,
       "apps/tui/scripts/prove-bundle.mjs",
       packed.tarball,

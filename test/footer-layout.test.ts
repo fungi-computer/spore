@@ -11,6 +11,7 @@ const states: readonly ParakeetSessionViewState[] = [
   { kind: "queued", queuedCommandId: "other-conversation", runningWork: null },
   { kind: "running_tool", tool: "Local_Computer.exec" },
   { kind: "waiting_for_you" },
+  { kind: "cancelling" },
   {
     kind: "retrying",
     attempt: 2,

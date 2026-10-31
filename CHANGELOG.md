@@ -1,5 +1,36 @@
 # @fungi.computer/spore
 
+## 0.6.1
+
+### Patch Changes
+
+- Changes since 0.6.0:
+
+  - fix(spore): refresh bundled entities license provenance
+  - fix(apps): require owner confirmation for every installation
+  - fix(spore): order bundled notices by package version
+  - fix(release): isolate suite pack and proof phases
+  - fix(release): qualify maintained proof interfaces
+  - fix(release): maintain packed upgrade and lab proofs
+  - fix(release): merge published alignment into maintained proofs
+  - fix(tui): retain cancelling phase in focused pane proof
+  - fix(tui): carry real occupancy phases and show cancelling
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/nacre@0.1.2
+  - @fungi.computer/parakeet@0.6.1
+  - @fungi.computer/shiitake-extensions@0.6.0
+  - @fungi.computer/shiitake@0.8.0
+  - @fungi.computer/truffle@0.7.0
+  - @fungi.computer/veil@0.3.0
+  - @fungi.computer/agar@0.6.1
+  - @fungi.computer/corral@0.1.6
+
 ## 0.6.0
 
 ### Minor Changes

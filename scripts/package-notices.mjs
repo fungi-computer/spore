@@ -104,8 +104,11 @@ export async function writeCliNotices({
   ];
   const texts = new Map();
   const missing = [];
-  for (const owner of [...owners.values()].sort((a, b) =>
-    a.name.localeCompare(b.name),
+  // Bundler input order may vary between builds of the same dependency graph.
+  for (const owner of [...owners.values()].sort(
+    (a, b) =>
+      a.name.localeCompare(b.name) ||
+      (a.version ?? "").localeCompare(b.version ?? ""),
   )) {
     const identity = [owner.name, owner.version].filter(Boolean).join("@");
     const contents =
