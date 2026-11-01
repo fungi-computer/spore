@@ -111,6 +111,7 @@ function assistantText(message: SessionMessage["value"]): string {
 
 function frameMessages(frame: SessionFrame): readonly SessionMessage[] {
   if (
+    frame.kind === "heartbeat" ||
     frame.kind === "activity" ||
     frame.kind === "progress" ||
     frame.kind === "tool_output"
@@ -121,6 +122,7 @@ function frameMessages(frame: SessionFrame): readonly SessionMessage[] {
 
 function frameTerminals(frame: SessionFrame): readonly SessionTerminal[] {
   if (
+    frame.kind === "heartbeat" ||
     frame.kind === "activity" ||
     frame.kind === "progress" ||
     frame.kind === "tool_output"
@@ -241,7 +243,12 @@ async function consumeSessionSettlement(
   };
   for await (const frame of { [Symbol.asyncIterator]: () => changes }) {
     throwIfRequested(cancellation);
-    if (frame.kind === "progress" || frame.kind === "tool_output") continue;
+    if (
+      frame.kind === "heartbeat" ||
+      frame.kind === "progress" ||
+      frame.kind === "tool_output"
+    )
+      continue;
     state = reduceSettlementState(state, frame, commandId);
     const terminal = state.terminal;
     if (terminal === undefined) continue;

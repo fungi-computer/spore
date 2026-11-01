@@ -1,6 +1,6 @@
 {
   "name": "@fungi.computer/spore",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "private": false,
   "type": "module",
   "bin": {

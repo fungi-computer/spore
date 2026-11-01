@@ -228,6 +228,7 @@ function applyFrame(
   snapshot: SessionSnapshot,
   frame: SessionFrame,
 ): SessionSnapshot {
+  if (frame.kind === "heartbeat") return snapshot;
   if (frame.kind === "reset") return frame.baseline;
   if (frame.kind === "tool_output")
     return {

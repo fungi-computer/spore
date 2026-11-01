@@ -100,8 +100,6 @@ export function useServiceRecovery(
     if (!recovering) return;
     const cancellation = new AbortController();
     const isCurrent = () => !cancellation.signal.aborted;
-    let shown = false;
-    let stuck = false;
     let lastError: string | undefined;
     let alive: boolean | undefined;
     let terminalMessage: string | undefined;
@@ -109,6 +107,9 @@ export function useServiceRecovery(
       lastReplyAt === undefined || lastReplyAt === 0
         ? clock.now()
         : lastReplyAt;
+    const alreadySilentFor = Math.max(0, clock.now() - lostAt);
+    let shown = alreadySilentFor >= timing.appearAfterMs;
+    let stuck = alreadySilentFor >= timing.stuckAfterMs;
     const publish = () => {
       setView(
         terminalMessage !== undefined
@@ -181,15 +182,21 @@ export function useServiceRecovery(
       }, wait);
     }
     schedule();
-    const cancelAppear = clock.schedule(() => {
-      shown = true;
-      publish();
-    }, timing.appearAfterMs);
-    const cancelGiveUp = clock.schedule(() => {
-      shown = true;
-      stuck = true;
-      publish();
-    }, timing.stuckAfterMs);
+    const cancelAppear = clock.schedule(
+      () => {
+        shown = true;
+        publish();
+      },
+      Math.max(0, timing.appearAfterMs - alreadySilentFor),
+    );
+    const cancelGiveUp = clock.schedule(
+      () => {
+        shown = true;
+        stuck = true;
+        publish();
+      },
+      Math.max(0, timing.stuckAfterMs - alreadySilentFor),
+    );
     const tick = () => {
       if (!isCurrent()) return;
       if (stuck) publish();
@@ -238,9 +245,7 @@ export function ServiceRecoveryOverlay({
             title:
               view.alive === false
                 ? "The service stopped"
-                : view.alive === true
-                  ? `The service is busy (no reply for ${String(view.seconds)}s)`
-                  : "The service is not answering",
+                : `The service is busy (no reply for ${String(view.seconds)}s)`,
             summary:
               view.alive === false
                 ? "Run `fungi resume` in another terminal. This conversation keeps trying and keeps your draft."

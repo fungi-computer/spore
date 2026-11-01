@@ -11,6 +11,7 @@ import { ScrollBoxRenderable, type Renderable } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "@fungi.computer/agar/query";
+import { sessionQueryOptions } from "@fungi.computer/parakeet/headless";
 import { createWhistle } from "@fungi.computer/whistle";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai/providers/faux";
 import { fauxModelSource, memoryHost } from "@fungi.computer/shiitake/testing";
@@ -22,6 +23,7 @@ import { TuiFrame } from "../src/frame.js";
 import { captureFrame } from "./frame-capture.js";
 import { footerRow } from "./footer-row.js";
 import { destroyTestRenderer } from "./native-renderer-cleanup.js";
+import { waitForFrame } from "./native-readiness.js";
 
 const contextWindow = 200_000;
 // Pi never drops a reply away from the question it answered: if one old
@@ -88,6 +90,8 @@ test("the footer shows compacting live with a real window, then the divider's pl
   });
   const session = host.agent.session(sessionId);
   const query = createQueryClient();
+  const observed = () =>
+    query.getQueryData(sessionQueryOptions(session).queryKey)?.snapshot;
   const commands = createWhistle();
   const output = process.env.TUI_CONTEXT_FOOTER_CAPTURE_DIR;
   const setup = await testRender(
@@ -111,15 +115,15 @@ test("the footer shows compacting live with a real window, then the divider's pl
     });
     expect(settledBefore.activity.queue.state).toBe("idle");
     // Host settlement is not acknowledgement by the streamed Query/React
-    // projection. Observe its idle footer before capturing, just as we observe
-    // the later running state; one render can still show idle activity.
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        await setup.renderOnce();
-      });
-      if (footerRow(setup.captureCharFrame(), "idle") !== undefined) break;
-    }
+    // projection. Earlier turns can also be idle: wait for this settled cursor.
+    await waitForFrame(
+      setup,
+      (frame) =>
+        observed()?.cursor === settledBefore.cursor &&
+        footerRow(frame, "idle") !== undefined,
+    );
+    expect(observed()?.cursor).toBe(settledBefore.cursor);
+    expect(observed()?.context).toEqual(settledBefore.context);
     await captureFrame(setup, output, "compaction-capture-idle");
     const idleFrame = setup.captureCharFrame();
     const idleRow = footerRow(idleFrame, "idle");
@@ -131,34 +135,29 @@ test("the footer shows compacting live with a real window, then the divider's pl
 
     await session.command({ type: "compact", requestId: "capture-compact" });
     const running = host.reconcile();
-    let sawCompacting = false;
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        await setup.renderOnce();
-      });
-      if (footerRow(setup.captureCharFrame(), "thinking") !== undefined) {
-        sawCompacting = true;
-        break;
-      }
-    }
-    expect(sawCompacting).toBe(true);
+    const compactingFrame = await waitForFrame(
+      setup,
+      (frame) => footerRow(frame, "thinking") !== undefined,
+    );
+    expect(footerRow(compactingFrame, "thinking")).toBeDefined();
     await captureFrame(setup, output, "compaction-capture-compacting");
     expect(footerRow(setup.captureCharFrame(), "thinking")).toContain("/200K");
 
     releaseHandoff?.();
     await running;
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        await setup.renderOnce();
-      });
-      if (footerRow(setup.captureCharFrame(), "thinking") === undefined) break;
-    }
     const settled = await session.read();
+    await waitForFrame(
+      setup,
+      (frame) =>
+        observed()?.cursor === settled.cursor &&
+        footerRow(frame, "thinking") === undefined,
+    );
+    expect(observed()?.cursor).toBe(settled.cursor);
+    expect(observed()?.context).toEqual(settled.context);
     const marker = settled.compactions?.at(-1);
     expect(marker?.trigger).toBe("manual");
     if (marker === undefined) throw new Error("No compaction marker");
+    expect(observed()?.compactions).toContainEqual(marker);
     // tokensBefore is the whole pre-compaction context (every old turn
     // plus the kept one), not just what survives -- it must match the
     // idle figure just captured, not the small kept tail.

@@ -378,6 +378,10 @@ test("watch shows a 150 KB streaming reply from its own baseline, not the earlie
                     firstAppend.resolve();
                     await continueReply.promise;
                   }
+                  // Model I/O yields between chunks; let the real shared
+                  // producer observe progress before the faux reply finishes.
+                  if (event.type === "text_delta")
+                    await new Promise<void>((resolve) => setImmediate(resolve));
                 }
               },
             };
@@ -409,6 +413,7 @@ test("watch shows a 150 KB streaming reply from its own baseline, not the earlie
                 changes: (async function* () {
                   for await (const frame of watch.changes) {
                     yield frame;
+                    if (frame.kind === "heartbeat") continue;
                     const activity =
                       frame.kind === "reset"
                         ? frame.baseline.activity

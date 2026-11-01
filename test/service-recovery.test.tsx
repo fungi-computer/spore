@@ -105,6 +105,47 @@ type Controls = {
   setUnavailable: (value: boolean) => void;
 };
 
+for (const alive of [true, undefined, false]) {
+  test(`45-second silence is stopped only when the lease is gone (${String(alive)})`, async () => {
+    const timer = testClock();
+    await timer.advance(45_001);
+    const controls: ControlsRef = { current: undefined };
+    const setup = await testRender(
+      <Harness
+        rebind={() =>
+          alive === undefined
+            ? Promise.reject(new Error("Lease check unavailable"))
+            : Promise.resolve({ kind: "unavailable", alive })
+        }
+        reconnect={() => Promise.resolve({ kind: "reconnected" })}
+        controls={controls}
+        clock={timer.clock}
+        lastReplyAt={1}
+      />,
+      { width: 100, height: 24 },
+    );
+    try {
+      await act(async () => {
+        controls.current?.setUnavailable(true);
+        await setup.renderOnce();
+      });
+      await timer.advance(250);
+      await act(() => setup.renderOnce());
+      const frame = setup.captureCharFrame();
+      expect(frame).toContain(
+        alive === false ? "The service stopped" : "The service is busy",
+      );
+      expect(frame).not.toContain(
+        alive === false ? "The service is busy" : "The service stopped",
+      );
+    } finally {
+      act(() => {
+        setup.renderer.destroy();
+      });
+    }
+  });
+}
+
 type ControlsRef = { current: Controls | undefined };
 
 function Harness({
@@ -112,11 +153,13 @@ function Harness({
   reconnect,
   controls,
   clock,
+  lastReplyAt,
 }: Readonly<{
   rebind: (signal: AbortSignal) => Promise<ServiceRebind>;
   reconnect: () => Promise<ParakeetReconnectOutcome>;
   controls: ControlsRef;
   clock: RecoveryClock;
+  lastReplyAt?: number;
 }>) {
   const [unavailable, setUnavailable] = useState(false);
   controls.current = { setUnavailable };
@@ -127,6 +170,7 @@ function Harness({
     onObservationUnavailable: undefined,
     rebindService: rebind,
     clock,
+    lastReplyAt,
   });
   return view === undefined ? (
     <text>connected</text>

@@ -25,9 +25,9 @@ async function runtime() {
   return folder;
 }
 
-async function until(condition: () => boolean) {
+async function until(condition: () => boolean | Promise<boolean>) {
   const deadline = Date.now() + 3_000;
-  while (!condition()) {
+  while (!(await condition())) {
     if (Date.now() > deadline) throw new Error("Condition was not met");
     await Bun.sleep(10);
   }
@@ -108,13 +108,7 @@ test("a link or a pipe in the folder is dropped without stalling later requests"
   );
   await until(() => opened.length === 1);
   expect(opened).toEqual([{ agentId: "a", sessionId: "s" }]);
-  let left: readonly string[] = ["pending"];
-  await until(() => {
-    void readdir(requests.directory).then((names) => {
-      left = names;
-    });
-    return left.length === 0;
-  });
+  await until(async () => (await readdir(requests.directory)).length === 0);
   await requests.close();
 });
 

@@ -1,5 +1,28 @@
 # @fungi.computer/spore
 
+## 0.7.0
+
+### Minor Changes
+
+- Changes since 0.6.2:
+
+  - fix(spore): declare the release build mode on news tasks
+  - fix(tui): never shrink the modal header and resume named sessions directly
+  - feat(shiitake): retain bounded Session feeds on current Integration
+  - fix(shiitake): keep compactions across live feed joins
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/parakeet@0.7.0
+  - @fungi.computer/shiitake-extensions@0.6.1
+  - @fungi.computer/shiitake@0.9.0
+  - @fungi.computer/truffle@0.7.1
+  - @fungi.computer/corral@0.1.7
+
 ## 0.6.2
 
 ### Patch Changes

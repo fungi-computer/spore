@@ -2,8 +2,14 @@
   "$schema": "https://turborepo.com/schema.json",
   "extends": ["//"],
   "tasks": {
+    // News generation reads BOTANICAL_RELEASE_BUILD_MODE: continuous release
+    // rehearsals build before the claimed changelog entry exists. Both tasks
+    // that run the compiler declare it, because a nested clean-checkout build
+    // (scripts/cold-build.test.mjs) sees only this committed config, not the
+    // globalEnv that release-build.mjs stages in the candidate checkout.
     "whats-new": {
       "dependsOn": [],
+      "env": ["BOTANICAL_RELEASE_BUILD_MODE"],
       "inputs": [
         "$TURBO_ROOT$/apps/docs/src/content/docs/changelog.mdx",
         "$TURBO_ROOT$/tooling/release/{whats-new,changelog-gate,changelog-claims,data-impact}.mjs",
@@ -14,7 +20,9 @@
     },
     // TUI's React 19 Parakeet copy lives in pnpm's virtual store. Its files
     // must be synchronized after a fresh build or a restored build artifact.
+    // The build script reruns the news compiler for direct `pnpm run build`.
     "build": {
+      "env": ["BOTANICAL_RELEASE_BUILD_MODE"],
       "dependsOn": [
         "^build",
         "@fungi.computer/parakeet#sync:injected",
