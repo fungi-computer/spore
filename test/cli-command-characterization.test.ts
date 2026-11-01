@@ -18,7 +18,6 @@ const accepted: readonly CommandForm[] = [
   { args: ["new", "extra", "positionals"] },
   { args: ["resume"] },
   { args: ["resume", "session-id"] },
-  { args: ["resume", "extra", "positionals"], last: true },
   { args: ["resume"], last: true },
   { args: ["run"] },
   { args: ["run", "one prompt with spaces"] },
@@ -254,6 +253,12 @@ const refused: readonly (CommandForm & Readonly<{ error: string }>)[] = [
   { args: ["sessions", "list", "id"], error: sessionsError },
   { args: ["sessions", "list"], last: true, error: sessionsError },
   { args: ["sessions", "resume"], error: sessionsError },
+  // A named resume is the sessions resolver: extra positionals are refused.
+  {
+    args: ["resume", "extra", "positionals"],
+    last: true,
+    error: sessionsError,
+  },
   { args: ["sessions", "resume", "id"], last: true, error: sessionsError },
   { args: ["sessions", "resume", "id", "extra"], error: sessionsError },
   { args: ["sessions", "resume", "0"], error: numberError },

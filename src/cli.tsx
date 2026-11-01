@@ -578,7 +578,15 @@ export async function runFungiCli(
     },
     strict: true,
   });
-  const [command, ...positionals] = arguments_.positionals;
+  // 'fungi resume <id|prefix>' is 'fungi sessions resume <id|prefix>': the
+  // sessions resolver owns named selection, so the picker never opens for it.
+  const [firstPositional, ...restPositionals] = arguments_.positionals;
+  const namedResume =
+    firstPositional === "resume" && restPositionals.length > 0;
+  const command = namedResume ? "sessions" : firstPositional;
+  const positionals = namedResume
+    ? ["resume", ...restPositionals]
+    : restPositionals;
   const stdout = io.stdout ?? process.stdout;
   /** This folder's enabled extension clients and programs; never Agent tools. */
   const projectExtensions = async (

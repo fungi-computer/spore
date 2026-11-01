@@ -13,7 +13,7 @@ Start here:
   fungi login                    Sign in to Fungi, a subscription or an API key
 
 Conversations:
-  fungi resume [--last]          Reopen a saved conversation
+  fungi resume [<id>] [--last]   Reopen a saved conversation
   fungi sessions <action>        List, resume or inspect saved conversations
   fungi agents <action>          List, archive or restore this folder's Agents
   fungi run [prompt]             Run one prompt and print the answer
@@ -97,9 +97,11 @@ Start a new conversation in this folder, skipping the conversation list.
       --extension <entry>        Enable an installed client extension
                                  (repeatable)
 `,
-    resume: `Usage: fungi resume [--last] [options]
+    resume: `Usage: fungi resume [<number|session-id|prefix>] [--last] [options]
 
-Pick a saved Session in this project, or reopen the latest with --last.
+Pick a saved Session in this project, reopen one by its listed number,
+Session ID or a unique ID prefix (resolved exactly as fungi sessions
+resume), or reopen the latest with --last.
 
       --last                     Resume the most recent local Session
 ${sessionOptions}

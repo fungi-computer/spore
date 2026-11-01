@@ -156,7 +156,9 @@ export function ModalHeader({
         );
   const hasFacts = (content.facts?.length ?? 0) > 0;
   return (
-    <box flexDirection="column" rowGap={compact ? 0 : 1}>
+    // The header never shrinks: squeezed dialogs would collapse the title and
+    // summary onto one row. Scrollable choices below absorb the pressure.
+    <box flexDirection="column" rowGap={compact ? 0 : 1} flexShrink={0}>
       <box flexDirection="column">
         {marker === undefined ? (
           <text fg={colors.foreground} attributes={1} wrapMode="none">

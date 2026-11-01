@@ -2506,3 +2506,38 @@ test("real Goal control renders one safe committed footer row", async () => {
     { goal: { revision: "test", objective: payload, state: "active" } },
   );
 });
+
+test("fungi resume <id|prefix> opens that session through the sessions resolver, not the picker", async () => {
+  let resumed = 0;
+  const saved = [
+    {
+      ...choice(async () => host),
+      sessionId: "recent",
+      title: "Recent work",
+    },
+    {
+      ...choice(async () => {
+        resumed += 1;
+        return host;
+      }),
+      sessionId: "older",
+      title: "Older work",
+    },
+  ];
+  const manager = {
+    discover: async () => ({ agents: [], sessions: saved, problems: [] }),
+  };
+  const overrides = dependencies(undefined, {
+    createServiceManager: () => manager,
+    renderPicker: () => {
+      throw new Error("resume <id> must not open the picker");
+    },
+  });
+  await runFungiCli(["resume", "older", "-C", "/tmp"], {}, overrides);
+  await runFungiCli(["resume", "old", "-C", "/tmp"], {}, overrides);
+  assert.equal(resumed, 2);
+  await assert.rejects(
+    runFungiCli(["resume", "missing", "-C", "/tmp"], {}, overrides),
+    /No Session matching missing/u,
+  );
+});

@@ -374,3 +374,42 @@ for (const size of sizes) {
     }
   });
 }
+
+// A short terminal squeezes the dialog; the header must keep the title and
+// summary on their own rows instead of collapsing them onto one.
+test("resume picker header keeps the title and summary on different rows when squeezed", async () => {
+  const manySessions: readonly PrivateLocalSessionChoice[] = [
+    ...sessions,
+    session("Fourth", Date.now() - 2 * 86_400_000),
+    session("Fifth", Date.now() - 3 * 86_400_000),
+  ];
+  const setup = await testRender(
+    <SessionPicker
+      sessions={manySessions}
+      onCancel={() => undefined}
+      onSelect={() => undefined}
+    />,
+    { width: 80, height: 14 },
+  );
+  for (let pass = 0; pass < 3; pass += 1)
+    await act(async () => setup.renderOnce());
+  try {
+    const lines = setup
+      .captureCharFrame()
+      .split("\n")
+      .map((line) => line.trimEnd());
+    const titleRow = lines.findIndex((line) =>
+      line.includes("Resume a conversation"),
+    );
+    const summaryRow = lines.findIndex((line) =>
+      line.includes("Pick one to continue where you left off."),
+    );
+    expect(titleRow, lines.join("\n")).toBeGreaterThanOrEqual(0);
+    expect(summaryRow, lines.join("\n")).toBeGreaterThanOrEqual(0);
+    expect(titleRow).not.toBe(summaryRow);
+  } finally {
+    act(() => {
+      setup.renderer.destroy();
+    });
+  }
+});

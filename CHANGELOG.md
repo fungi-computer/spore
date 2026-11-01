@@ -1,5 +1,15 @@
 # @fungi.computer/spore
 
+## 0.6.2
+
+### Patch Changes
+
+- Changes since 0.6.1:
+
+  - fix(tui): never shrink the modal header and resume named sessions directly
+
+- @fungi.computer/parakeet@0.6.2
+
 ## 0.6.1
 
 ### Patch Changes
