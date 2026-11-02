@@ -255,18 +255,29 @@ for (const fungi of baselines) {
     );
     const newService = await service();
     assert.equal(newService.protocol, 5);
-    assert.notEqual(
-      newService.pid,
-      oldService.pid,
-      "The published service owner was not replaced",
-    );
-    assert.equal(
-      alive(oldService.pid),
-      false,
-      "The old service is still alive",
-    );
-    assert.equal(alive(newService.pid), true);
     const candidateBuild = await digest(join(installed, "dist", "cli.js"));
+    // Service identity is the bundle, not the package version. Right after a
+    // release the newest baseline can already run a byte-identical service
+    // build; the updater's restart then correctly keeps that owner.
+    const serviceReplaced = oldService.version !== candidateBuild;
+    if (serviceReplaced) {
+      assert.notEqual(
+        newService.pid,
+        oldService.pid,
+        "The published service owner was not replaced",
+      );
+      assert.equal(
+        alive(oldService.pid),
+        false,
+        "The old service is still alive",
+      );
+    } else
+      assert.equal(
+        newService.pid,
+        oldService.pid,
+        "An identical service build must keep its owner",
+      );
+    assert.equal(alive(newService.pid), true);
     assert.equal(
       newService.version,
       candidateBuild,
@@ -312,6 +323,7 @@ for (const fungi of baselines) {
       release: published,
       candidateVersion: candidate.manifest.version,
       candidateBuild,
+      serviceReplaced,
       sessionId: before.sessionId,
       retainedMessages: before.messages.length,
       oldService,

@@ -167,6 +167,8 @@ try {
           return setup.renderer;
         },
       },
+      // Bun's os.homedir() ignores a changed HOME; keep the CLI in this home.
+      process.env.HOME,
     );
     await Promise.race([ready.promise, clientRun]);
   });
@@ -214,8 +216,9 @@ try {
   }
   if (setup && !setup.renderer.isDestroyed) setup.renderer.destroy();
   await selected?.close();
-  await manager.stop();
-  await Promise.race([serviceRun, delay(3000)]);
+  // fungi stop SIGTERMs the service; this listener shares the proof process.
+  process.emit("SIGTERM", "SIGTERM");
+  await serviceRun;
   await rm(root, { recursive: true, force: true });
   if (previousHome === undefined) delete process.env.HOME;
   else process.env.HOME = previousHome;

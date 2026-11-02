@@ -1,4 +1,5 @@
 import { fixtureClients } from "./fixture.js";
+import { waitForFrame } from "./native-readiness.js";
 // Capture the terminal's dialog surfaces (commands, completion, account) for
 // design review. Run: DESIGN_CAPTURE_DIR=<dir> bun test/dialog-design.proof.tsx
 // Login runs the real account contribution over Local's policy-filtered Pi
@@ -269,20 +270,21 @@ for (const size of sizes) {
         await press(setup, "enter");
         await until(setup, "Keep the footer readable");
         if (confirmed) {
-          await act(async () => {
+          act(() => {
             fixture.confirmLatestPrompt();
-            await setup.waitForFrame(() =>
-              setup
-                .captureSpans()
-                .lines.some((line) =>
-                  line.spans.some(
-                    (span) =>
-                      span.text.includes("Keep the footer readable") &&
-                      !(span.attributes & 2),
-                  ),
-                ),
-            );
           });
+          // Render outside one act scope so the Session update reaches React.
+          await waitForFrame(setup, () =>
+            setup
+              .captureSpans()
+              .lines.some((line) =>
+                line.spans.some(
+                  (span) =>
+                    span.text.includes("Keep the footer readable") &&
+                    !(span.attributes & 2),
+                ),
+              ),
+          );
         }
         const row = setup
           .captureSpans()
@@ -364,8 +366,8 @@ for (const size of sizes) {
   await scene("help", size, scriptedOwner(), async (setup) => {
     await type(setup, "/help");
     await press(setup, "enter");
+    // /help opens the command palette; shortcuts are no longer listed there.
     await until(setup, "Commands");
-    if (size.width >= 80) assert.match(setup.captureCharFrame(), /Ctrl\+O/u);
   });
   await scene("slash", size, scriptedOwner(), async (setup) => {
     await type(setup, "/");
@@ -503,7 +505,9 @@ for (const size of sizes) {
       await press(setup, "down");
       await press(setup, "down");
       await press(setup, "enter");
-      await until(setup, "OpenAI · GPT-6 Sol");
+      // The provider step names its source once; rows list only models.
+      await until(setup, "Models from OpenAI.");
+      await until(setup, "GPT-6 Sol");
     },
   );
   await scene(
@@ -518,7 +522,8 @@ for (const size of sizes) {
       await until(setup, "SIGNED IN");
       await press(setup, "down");
       await press(setup, "enter");
-      await until(setup, "Fungi · Luna");
+      await until(setup, "Models from Fungi.");
+      await until(setup, "Luna");
     },
   );
   await scene("model-sign-in", size, scriptedOwner(), async (setup) => {

@@ -1,5 +1,26 @@
 # @fungi.computer/spore
 
+## 0.7.1
+
+### Patch Changes
+
+- Changes since 0.7.0:
+
+  - fix(hub): keep a queued Computer start until it runs or visibly fails
+  - perf(tui): run the cold-checkout regression only when its inputs change
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/agar@0.7.0
+  - @fungi.computer/nacre@0.1.3
+  - @fungi.computer/shiitake@0.9.1
+  - @fungi.computer/truffle@0.7.2
+  - @fungi.computer/parakeet@0.7.1
+  - @fungi.computer/corral@0.1.8
+  - @fungi.computer/shiitake-extensions@0.6.2
+
 ## 0.7.0
 
 ### Minor Changes

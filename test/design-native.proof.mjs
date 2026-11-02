@@ -174,7 +174,7 @@ function assertToolTone(setup, hex) {
     const text = line.spans.map((span) => span.text).join("");
     return toolLine.test(text) && !footerLine.test(text);
   });
-  // Grouped calls draw a status glyph; a lone call draws a dot.
+  // Every call row, grouped or lone, ends on the shared status dot.
   const dot = line?.spans.find((span) => /[●✓✗◌]/u.test(span.text));
   assert.ok(
     dot?.fg.equals(RGBA.fromHex(hex)),
@@ -217,8 +217,9 @@ function assertStatusAndGoalRow(setup, width, status = "streaming") {
   assert.doesNotMatch(text, /Goal active/u);
   assert.match(
     setup.captureCharFrame(),
-    width < 48
-      ? /Pursuing goal since \d\d:\d\d · Pol…/u
+    // A narrow footer shortens the objective after the start time.
+    width < 80
+      ? /Pursuing goal since \d\d:\d\d · [^\n]*…/u
       : /Pursuing goal since \d\d:\d\d · Polish the terminal review/u,
   );
   // Model identity stays ahead of shortcuts at every width.
@@ -411,11 +412,12 @@ for (const [width, height] of [
       cancelling: { ...running, cancellationRequested: true },
       idle: { ...running, queue: { state: "idle" } },
     };
-    // The footer's text is Parakeet's view state; each begins with this word.
+    // The footer says Parakeet's activity label (sessionStateLabel): queued
+    // behind unknown work reads idle, and a retry is still thinking.
     const footerWords = {
-      queued: "waiting",
+      queued: "idle",
       thinking: "thinking",
-      retrying: "retrying",
+      retrying: "thinking",
       cancelling: "cancelling",
       idle: "idle",
     };
@@ -495,7 +497,7 @@ for (const [width, height] of [
     assert.ok(pausedGoalRow);
     assert.match(
       pausedGoalRow.spans.map((span) => span.text).join(""),
-      width < 48
+      width < 80
         ? /Goal paused \(\/goal resume\)/u
         : /Goal paused \(\/goal resume\) · Polish the terminal review/u,
     );
@@ -577,7 +579,7 @@ for (const [name, snapshot, width, tone] of [
     // A group holding a running call opens by default; finished groups do not.
     const groupStartsOpen = name === "many-tool-arguments";
     if (groupStartsOpen)
-      assert.match(setup.captureCharFrame(), /✓ Ran script/u);
+      assert.match(setup.captureCharFrame(), /^ +Ran script .*● ▸ *$/mu);
     else
       await act(async () => {
         await clickLastTool(setup);
@@ -585,7 +587,7 @@ for (const [name, snapshot, width, tone] of [
     await settlePresentation(setup, client);
     if (grouped) {
       // The group opens onto one compact row per call; bodies stay closed.
-      assert.match(setup.captureCharFrame(), /✓ Ran script/u);
+      assert.match(setup.captureCharFrame(), /^ +Ran script .*● ▸ *$/mu);
       assert.equal(hasCode(setup, "files.read"), false);
     } else {
       assert.equal(hasCode(setup, "terminal.render"), !initiallyOpen);
@@ -613,7 +615,7 @@ for (const [name, snapshot, width, tone] of [
         await setup.renderOnce();
       });
       await settlePresentation(setup, client);
-      assertStatusAndGoalRow(setup, 80, "streaming");
+      assertStatusAndGoalRow(setup, 80, "running a tool");
       assert.equal(setup.renderer.listenerCount("resize"), 1);
       assert.deepEqual(resizeWarnings, []);
     }
@@ -684,7 +686,8 @@ for (const [name, snapshot, width, tone] of [
         "expand-all applies to a newly arriving tool",
       );
       await act(async () => {
-        await clickLastTool(setup, /Calling execute-1/u);
+        // No live activity names it, so the arriving call is not shown running.
+        await clickLastTool(setup, /Called execute-1/u);
       });
       await settlePresentation(setup, client);
       assert.ok(

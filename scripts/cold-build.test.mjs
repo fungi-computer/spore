@@ -96,9 +96,9 @@ test("TUI builds and checks in a clean checkout after Parakeet cache restoration
     );
     assert.equal(existsSync(join(injected, "dist/headless.d.ts")), false);
 
-    // Compile rather than restore Parakeet once, exercising pnpm's normal
-    // post-build injection. Keep the ordinary artifact cache for unrelated
-    // native prerequisites; each checkout still starts without build outputs.
+    // Compile rather than restore Parakeet once (write-only cache), exercising
+    // pnpm's normal post-build injection. The private TURBO_CACHE_DIR starts
+    // empty, so every prerequisite, native ones included, also builds cold.
     turbo("cold-parakeet", ["build"], "@fungi.computer/parakeet", "local:w");
     assert.ok(existsSync(join(injected, "dist/headless.d.ts")));
     rmSync(join(owner, "dist"), { recursive: true });

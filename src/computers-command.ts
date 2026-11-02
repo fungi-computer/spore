@@ -23,8 +23,9 @@ type ComputerState = Parameters<
   Parameters<typeof startPrivateTeamComputer>[2]["onState"]
 >[0];
 function label(state: ComputerState): string {
-  return state.state === "queued"
-    ? `queued #${String(state.position)}`
+  if (state.state === "queued") return `queued #${String(state.position)}`;
+  return state.state === "start_failed"
+    ? "couldn't start, try again"
     : state.state;
 }
 export async function runComputersCommand(

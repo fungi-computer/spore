@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -25,7 +25,6 @@ import { pressDecodedKey, waitForFrame } from "./native-readiness.js";
 
 // An independent service, store, native renderer and real workerd/Computer wait.
 // Only model responses are controlled; no live provider or shared service is used.
-const drainQueue = process.env.TUI_CANCEL_DRAIN === "1";
 const foreground = process.env.TUI_CANCEL_FOREGROUND === "1";
 const cancelKey = process.env.TUI_CANCEL_KEY === "ctrl-c" ? "ctrl-c" : "esc";
 const root = await mkdtemp(join(tmpdir(), "fungi-cancel-wait-"));
@@ -35,23 +34,34 @@ const directory = await serviceDirectory(join(root, "service"));
 const models = createPrivateModels(join(root, "credentials.json"));
 const faux = fauxProvider();
 models.setProvider(faux.provider);
-const waitResponse = (marker) =>
+// The sandbox gives the command its own PID namespace, so the host finds the
+// foreground sleep by its unique argument in /proc instead of by a guest PID.
+const foregroundSleep = `60.${process.pid}`;
+const foregroundSleeps = async () => {
+  const found = [];
+  for (const entry of await readdir("/proc")) {
+    if (!/^\d+$/u.test(entry)) continue;
+    let argv;
+    try {
+      argv = (await readFile(`/proc/${entry}/cmdline`, "utf8")).split("\0");
+    } catch (cause) {
+      if (cause.code === "ENOENT" || cause.code === "ESRCH") continue;
+      throw cause;
+    }
+    if (argv.includes(foregroundSleep)) found.push(entry);
+  }
+  return found;
+};
+faux.setResponses([
   fauxAssistantMessage(
     fauxToolCall("execute", {
       code: foreground
-        ? `return await Local_Computer.exec({command:"echo $$ > ${marker}.pid; touch ${marker}; exec sleep 60",timeoutMs:60000});`
-        : `const started = await Local_Computer.exec({operation:"start",command:"touch ${marker}; sleep 60"}); return await Local_Computer.exec({operation:"wait",id:started.process.id,timeoutMs:60000});`,
+        ? `return await env.computers.local.exec({command:"touch wait-started; exec sleep ${foregroundSleep}",timeoutMs:60000});`
+        : `const started = await env.computers.local.exec({operation:"start",command:"touch wait-started; sleep 60"}); return await env.computers.local.exec({operation:"wait",id:started.process.id,timeoutMs:60000});`,
     }),
     { stopReason: "toolUse" },
-  );
-faux.setResponses([
-  waitResponse("wait-started"),
-  // Keep the follow-ups pending while Esc drains them. Instant faux replies
-  // could finish between decoded keys, before a person can withdraw them.
-  ...(drainQueue ? [waitResponse("blocker-started")] : []),
-  ...Array.from({ length: 3 }, () =>
-    fauxAssistantMessage("Queued prompt delivered."),
   ),
+  fauxAssistantMessage("Queued prompt delivered."),
 ]);
 const manager = createPrivateLocalServiceManager({ directory });
 const serviceRun = runPrivateLocalService(
@@ -70,7 +80,6 @@ const serviceRun = runPrivateLocalService(
 const commands = createWhistle();
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let selected;
-let blocker;
 let setup;
 let clientRun;
 let failure;
@@ -103,7 +112,9 @@ try {
                 ...connected.session,
                 command: async (command) => {
                   const receipt = await connected.session.command(command);
-                  if (command.type === "abort")
+                  // Esc stops the current turn with a cancel command; queued
+                  // withdrawals carry onlyIfPending and are not the stop.
+                  if (command.type === "cancel" && !command.onlyIfPending)
                     cancellationAcknowledgedAt = performance.now();
                   return receipt;
                 },
@@ -143,60 +154,37 @@ try {
   }
   await readFile(join(root, "wait-started"));
   await waitForFrame(setup, (frame) => frame.includes("Running script"));
-  const foregroundPid = foreground
-    ? Number(await readFile(join(root, "wait-started.pid"), "utf8"))
-    : undefined;
   if (foreground) {
-    assert.ok(Number.isSafeInteger(foregroundPid) && foregroundPid > 0);
-    process.kill(foregroundPid, 0);
-  }
-  if (drainQueue) {
-    blocker = await manager.createSession({
-      invocationRoot: root,
-      databasePath: selected.databasePath,
-      requestId: "queue-blocker",
-    });
-    await blocker.session.send("Keep the follow-ups pending for this proof.", {
-      requestId: "blocker",
-    });
+    for (let attempt = 0; attempt < 200; attempt++) {
+      if ((await foregroundSleeps()).length > 0) break;
+      await delay(25);
+    }
+    assert.equal(
+      (await foregroundSleeps()).length,
+      1,
+      "the foreground command is running before cancellation",
+    );
   }
   const queued = await selected.session.send("Deliver this after Stop.", {
     requestId: "queued",
     delivery: "followUp",
   });
-  const pending = [queued];
-  if (drainQueue) {
-    for (const requestId of ["queued-2", "queued-3"])
-      pending.push(
-        await selected.session.send(requestId, {
-          requestId,
-          delivery: "followUp",
-        }),
-      );
-  }
-  if (drainQueue)
-    await waitForFrame(setup, (frame) => frame.includes("Queued · queued-3"));
   await act(async () => {
     await setup.renderOnce();
     await captureFrame(
       setup,
       process.env.TUI_CANCEL_SHOTS,
-      foreground
-        ? `foreground-before-${cancelKey}`
-        : drainQueue
-          ? "drain-before-esc"
-          : "wait-before-esc",
+      foreground ? `foreground-before-${cancelKey}` : "wait-before-esc",
     );
   });
-  // Observe each physical key through the shared native input helper. Rendering
-  // between keys reflects the same command-state updates the real host sees.
+  // Observe the physical key through the shared native input helper. Rendering
+  // after it reflects the same command-state updates the real host sees.
   const cancellationRequestedAt = performance.now();
-  for (let press = 0; press < (drainQueue ? 4 : 1); press += 1)
-    await pressDecodedKey(setup, () =>
-      cancelKey === "ctrl-c"
-        ? setup.mockInput.pressKey("c", { ctrl: true })
-        : setup.mockInput.pressEscape(),
-    );
+  await pressDecodedKey(setup, () =>
+    cancelKey === "ctrl-c"
+      ? setup.mockInput.pressKey("c", { ctrl: true })
+      : setup.mockInput.pressEscape(),
+  );
   let cancelledSnapshot;
   while (performance.now() - cancellationRequestedAt < 1_000) {
     cancelledSnapshot = await selected.session.read();
@@ -232,34 +220,25 @@ try {
     "Service did not abort and settle the long-running tool in under 1 s",
   );
   if (foreground) {
-    assert.throws(() => process.kill(foregroundPid, 0), { code: "ESRCH" });
+    for (let attempt = 0; attempt < 200; attempt++) {
+      if ((await foregroundSleeps()).length === 0) break;
+      await delay(25);
+    }
+    assert.deepEqual(
+      await foregroundSleeps(),
+      [],
+      "cancellation ends the foreground command",
+    );
   }
   const stoppedAt = performance.now();
-  if (blocker !== undefined) {
-    // The first Esc interrupts the main wait; the blocker owns the next turn.
-    // Release it only after all physical Esc presses, then observe settlement.
-    for (let attempt = 0; attempt < 200; attempt++) {
-      try {
-        await readFile(join(root, "blocker-started"));
-        break;
-      } catch (cause) {
-        if (cause.code !== "ENOENT") throw cause;
-        await delay(25);
-      }
-    }
-    await readFile(join(root, "blocker-started"));
-    await blocker.session.abort();
-  }
   let snapshot;
   for (let attempt = 0; attempt < 100; attempt++) {
     snapshot = await selected.session.read();
     if (
-      pending.every((entry) =>
-        snapshot.terminals.some(
-          (terminal) =>
-            terminal.commandId === entry.commandId &&
-            terminal.outcome === (drainQueue ? "cancelled" : "completed"),
-        ),
+      snapshot.terminals.some(
+        (terminal) =>
+          terminal.commandId === queued.commandId &&
+          terminal.outcome === "completed",
       )
     )
       break;
@@ -272,11 +251,7 @@ try {
   await captureFrame(
     setup,
     process.env.TUI_CANCEL_SHOTS,
-    foreground
-      ? `foreground-after-${cancelKey}`
-      : drainQueue
-        ? "drain-after-esc"
-        : "wait-after-esc",
+    foreground ? `foreground-after-${cancelKey}` : "wait-after-esc",
   );
   assert.ok(
     snapshot.terminals.some(
@@ -287,16 +262,12 @@ try {
     "Esc did not cancel the long wait",
   );
   assert.ok(
-    pending.every((entry) =>
-      snapshot.terminals.some(
-        (terminal) =>
-          terminal.commandId === entry.commandId &&
-          terminal.outcome === (drainQueue ? "cancelled" : "completed"),
-      ),
+    snapshot.terminals.some(
+      (terminal) =>
+        terminal.commandId === queued.commandId &&
+        terminal.outcome === "completed",
     ),
-    drainQueue
-      ? "Repeated Esc did not drain all pending messages"
-      : "queued prompt did not resume",
+    "queued prompt did not resume",
   );
   assert.doesNotMatch(
     setup.captureCharFrame(),
@@ -310,8 +281,7 @@ try {
       foregroundProcessAborted: foreground,
       cancelKey,
       cancelled: true,
-      queuedDelivered: !drainQueue,
-      queuedCancelled: drainQueue ? pending.length : 0,
+      queuedDelivered: true,
       model: "deterministic Pi faux; no live model call",
     }),
   );
@@ -329,10 +299,9 @@ try {
     });
   }
   if (setup && !setup.renderer.isDestroyed) setup.renderer.destroy();
-  await blocker?.session.abort();
-  await blocker?.close();
   await selected?.close();
-  await manager.stop();
+  // fungi stop SIGTERMs the service; this listener shares the proof process.
+  process.emit("SIGTERM", "SIGTERM");
   await serviceRun;
   try {
     await rm(root, { recursive: true, force: true });

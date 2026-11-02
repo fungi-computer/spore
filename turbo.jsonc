@@ -35,11 +35,33 @@
     "typecheck": {
       "dependsOn": ["^build", "@fungi.computer/parakeet#sync:injected"],
     },
-    // The regression builds only its disposable checkout, not this workspace.
+    // Runs the cached clean-checkout regression beside the host proof.
     "test:merge": {
-      "dependsOn": [],
+      "dependsOn": ["test:cold-build"],
       "cache": false,
       "outputs": [],
+    },
+    // The clean-checkout regression builds only its disposable clone of HEAD,
+    // not this workspace, so it needs no build here. It proves pnpm's injected
+    // Parakeet sync after a Turbo restore and the closure's cache-key
+    // stability; TUI and dependency source breakage is the gate's own build
+    // and typecheck. Cache it on what the proof exercises: install inputs,
+    // the Turbo wrapper and every workspace task config, and the Parakeet/TUI
+    // manifests and compiler configs.
+    "test:cold-build": {
+      "dependsOn": [],
+      "env": ["BOTANICAL_RELEASE_BUILD_MODE"],
+      "outputs": [],
+      "inputs": [
+        "package.json",
+        "turbo.jsonc",
+        "tsconfig*.json",
+        "scripts/cold-build.test.mjs",
+        "$TURBO_ROOT$/packages/parakeet/{package.json,turbo.jsonc,tsconfig*.json}",
+        "$TURBO_ROOT$/{package.json,turbo.jsonc,pnpm-workspace.yaml,pnpm-lock.yaml}",
+        "$TURBO_ROOT$/tooling/repository/scripts/turbo.mjs",
+        "$TURBO_ROOT$/*/*/turbo.{json,jsonc}",
+      ],
     },
   },
 }

@@ -323,7 +323,11 @@ export const longHistoryDesignSnapshot: SessionSnapshot = {
     activeToolMessage,
   ],
   terminals: [],
-  activity: runningActivity({ activeTool: "execute" }),
+  // Only the running command's own call borrows live tool activity.
+  activity: runningActivity({
+    queue: { state: "running", commandId: "design-request-narrow" },
+    activeTool: "execute",
+  }),
   toolOutput: [],
   progress: null,
   extensions: designGoalSlots,
@@ -365,12 +369,22 @@ export const failedToolDesignSnapshot: SessionSnapshot = {
   ],
 };
 
-/** The existing two tool calls without intervening prose, for disclosure input. */
+/**
+ * The existing two tool calls without intervening prose, for disclosure input.
+ * One prompt opens both calls, so the running command's last call borrows
+ * live tool activity.
+ */
 export const toolDisclosuresDesignSnapshot: SessionSnapshot = {
   ...longHistoryDesignSnapshot,
+  activity: runningActivity({
+    queue: { state: "running", commandId: "design-request-layout" },
+    activeTool: "execute",
+  }),
   messages: longHistoryDesignSnapshot.messages.flatMap(
     (message): SessionMessage[] => {
       if (message.value.role === "toolResult") return [message];
+      if (message.value.role === "user")
+        return message.commandId === "design-request-layout" ? [message] : [];
       if (message.value.role !== "assistant") return [];
       const content = message.value.content.filter(
         (part) => part.type === "toolCall",
