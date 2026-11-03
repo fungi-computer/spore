@@ -38,6 +38,10 @@ test("TUI builds and checks in a clean checkout after Parakeet cache restoration
           // Keep this proof independent from warmed machine-wide task entries;
           // its first TUI build must be a real cold miss.
           TURBO_CACHE_DIR: join(work, "turbo-cache"),
+          // pnpm's metadata and supply-chain verdict cache is this run's own:
+          // other checkouts prune and rewrite the shared one between the fetch
+          // and the offline install. The content-addressed store stays shared.
+          pnpm_config_cache_dir: join(work, "pnpm-cache"),
           CARGO_BUILD_JOBS: "1",
           RAYON_NUM_THREADS: "1",
           GOMAXPROCS: "1",
@@ -80,8 +84,8 @@ test("TUI builds and checks in a clean checkout after Parakeet cache restoration
     );
     run("checkout", "git", ["checkout", "--detach", revision]);
     assert.equal(existsSync(join(checkout, "packages/parakeet/dist")), false);
-    // Prepare the locked store and supply-chain verdict before proving the
-    // offline install. Other checkouts can evict the shared verdict cache.
+    // Prepare the locked store and this run's private verdict cache before
+    // proving the offline install.
     run("fetch", "pnpm", ["fetch", "--ignore-scripts"]);
     run("install", "pnpm", ["install", "--offline", "--frozen-lockfile"]);
 

@@ -235,8 +235,9 @@ try {
     setup.captureCharFrame().includes("synthetic-provider-detail"),
     false,
   );
-  await bounded(loginRun, "failed login completion");
+  // The failure dialog holds the command until the member dismisses it.
   await closeDialog();
+  await bounded(loginRun, "failed login completion");
   assert.ok(setup.captureCharFrame().includes("keep this draft"));
 
   behavior = "cancel";

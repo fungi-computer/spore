@@ -79,6 +79,11 @@ const usage = {
 // OpenTUI, Bun's allocator, and a visible history page while rejecting the
 // sustained rise seen when every result stays in the client.
 const RSS_CAP_MIB = 600;
+/** Resident memory the TUI still holds: uncollected garbage is not retention. */
+const retainedRss = () => {
+  globalThis.Bun.gc(true);
+  return process.memoryUsage().rss;
+};
 const idle = {
   queue: { state: "idle" },
   cancellationRequested: false,
@@ -159,8 +164,7 @@ try {
       await sleep(10);
       await setup.renderOnce();
     });
-    const rss = process.memoryUsage().rss;
-    peakRss = Math.max(peakRss, rss);
+    peakRss = Math.max(peakRss, retainedRss());
     const snapshot = client.getQueryData([
       "shiitake-session",
       fixture.session.address,
@@ -191,7 +195,7 @@ try {
     setup.captureCharFrame().includes(latestText),
     "the live TUI did not render the newest call group",
   );
-  peakRss = Math.max(peakRss, process.memoryUsage().rss);
+  peakRss = Math.max(peakRss, retainedRss());
   const beforeBackscroll = readCount;
   for (let page = 0; page < 12 && readCount === beforeBackscroll; page++) {
     await act(async () => {
@@ -213,7 +217,7 @@ try {
   const olderRuns = [...setup.captureCharFrame().matchAll(/Run (\d+)\./g)].map(
     ([, index]) => Number(index),
   );
-  peakRss = Math.max(peakRss, process.memoryUsage().rss);
+  peakRss = Math.max(peakRss, retainedRss());
   assert.ok(
     readCount > beforeBackscroll,
     "backscroll did not refetch older history",

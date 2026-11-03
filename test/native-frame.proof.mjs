@@ -30,11 +30,17 @@ import { terminalPalette } from "@fungi.computer/stipe";
 
 import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 import { TuiFrame } from "@fungi.computer/spore/frame";
+import { formatWhen } from "@fungi.computer/parakeet/headless";
 import { createTuiFixture } from "./fixture.js";
 import { runThemeProof } from "./theme-native.proof.mjs";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 
 const require = createRequire(import.meta.url);
+// Pickers list a past time with the shared formatter, not the host's locale.
+// Cells report colors as bytes; compare those, not the float buffers behind them.
+const sameColor = (left, right) =>
+  left.toInts().join() === right.toInts().join();
+const whenListed = (at) => formatWhen(at, Date.now());
 function renderedNodes(node) {
   return [node, ...node.getChildren().flatMap(renderedNodes)];
 }
@@ -64,6 +70,14 @@ assert.equal(
 );
 
 const localRoot = await mkdtemp(join(tmpdir(), "fungi-tui-local-host-"));
+// The composer persists drafts under the member's home; a draft left there by
+// an earlier run lands in this run's composer. Give the proof its own home.
+const previousHome = process.env.HOME;
+process.env.HOME = join(localRoot, "home");
+const restoreHome = () => {
+  if (previousHome === undefined) Reflect.deleteProperty(process.env, "HOME");
+  else process.env.HOME = previousHome;
+};
 
 // Focus the real CLI/renderer proof without running unrelated frame scenarios.
 if (process.argv.includes("--session-picker")) {
@@ -73,6 +87,7 @@ if (process.argv.includes("--session-picker")) {
       "native resume-picker proof PASS (120 and 32 columns)\n",
     );
   } finally {
+    restoreHome();
     await rm(localRoot, { recursive: true, force: true });
   }
   process.exit(0);
@@ -541,7 +556,17 @@ try {
     (frame) =>
       frame.includes("Native prompt") &&
       frame.includes("● idle") &&
-      frame.includes("spaced text"),
+      frame.includes("spaced text") &&
+      // Wait for the pending style itself: a frame can show the text before it.
+      setup
+        .captureSpans()
+        .lines.some((line) =>
+          line.spans.some(
+            (span) =>
+              span.text.includes("Native prompt") &&
+              sameColor(span.fg, RGBA.fromHex(terminalPalette("mocha").accent)),
+          ),
+        ),
   );
   assert.equal(
     admittedDelivery,
@@ -561,7 +586,10 @@ try {
   );
   assert.ok(pendingUserText !== undefined);
   assert.ok(
-    pendingUserText.fg.equals(RGBA.fromHex(terminalPalette("mocha").accent)),
+    sameColor(
+      pendingUserText.fg,
+      RGBA.fromHex(terminalPalette("mocha").accent),
+    ),
   );
   fixture.pushFrame({
     pending: { total: 0, prompts: [], hasMore: false },
@@ -618,21 +646,21 @@ try {
     span.text.includes("Native prompt"),
   );
   assert.ok(confirmedUserText !== undefined);
-  assert.ok(confirmedUserText.fg.equals(RGBA.fromHex("#cdd6f4")));
+  assert.ok(sameColor(confirmedUserText.fg, RGBA.fromHex("#cdd6f4")));
   const mutedUserSurface = RGBA.fromHex("#282839");
   assert.ok(
-    confirmedUserText.bg.equals(mutedUserSurface),
+    sameColor(confirmedUserText.bg, mutedUserSurface),
     "confirmed user text shares the muted user surface",
   );
   assert.ok(
     confirmedUserLine.spans.every(
       (span, index) =>
-        span.bg.equals(mutedUserSurface) ||
+        sameColor(span.bg, mutedUserSurface) ||
         // The native scroll viewport reserves its rightmost cell for the scrollbar.
         (index === confirmedUserLine.spans.length - 1 &&
           span.width === 1 &&
           /^[ ▄█]$/u.test(span.text) &&
-          span.bg.equals(RGBA.fromHex("#1e1e2e"))),
+          sameColor(span.bg, RGBA.fromHex("#1e1e2e"))),
     ),
     "confirmed user surface is uniform outside its right scrollbar gutter",
   );
@@ -670,7 +698,7 @@ try {
     span.text.includes("●"),
   );
   assert.ok(streamingAssistantDot !== undefined);
-  assert.ok(streamingAssistantDot.fg.equals(RGBA.fromHex("#89b4fa")));
+  assert.ok(sameColor(streamingAssistantDot.fg, RGBA.fromHex("#89b4fa")));
   assert.doesNotMatch(
     setup.captureCharFrame(),
     /(?:you|assistant|tool) \((?:pending|confirmed|streaming|complete)\)|Session:/u,
@@ -872,6 +900,7 @@ try {
   toolProofCommands.close();
 }
 
+restoreHome();
 await rm(localRoot, { recursive: true, force: true });
 await runThemeProof();
 process.stdout.write(
@@ -983,9 +1012,7 @@ async function runSessionPickerProof() {
         const saved = frame.split("\n").find((line) => line.includes("Saved"));
         return (
           saved?.includes("…") === true &&
-          saved.includes(
-            new Date(pickerChoice.updatedAt).toLocaleDateString(),
-          ) &&
+          saved.includes(whenListed(pickerChoice.updatedAt)) &&
           frame.includes("Untitled")
         );
       });
@@ -1018,7 +1045,7 @@ async function runSessionPickerProof() {
         savedLine?.includes("…"),
         "long session title is one line with an ellipsis",
       );
-      const date = new Date(pickerChoice.updatedAt).toLocaleDateString();
+      const date = whenListed(pickerChoice.updatedAt);
       assert.ok(
         savedLine?.includes(date),
         "date stays on the title row without overlap",
@@ -1043,7 +1070,7 @@ async function runSessionPickerProof() {
       assert.ok(untitled, "empty session titles remain identifiable");
       assert.equal(
         savedLine.indexOf(date),
-        untitled.indexOf(new Date(3).toLocaleDateString()),
+        untitled.indexOf(whenListed(3)),
         "dates share a fixed right-aligned column",
       );
     }

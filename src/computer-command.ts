@@ -18,14 +18,16 @@ export const computerCommandHelp = `Usage: fungi computer attach <computer> <fol
        fungi computer status
        fungi computer detach <computer> --fungi-mcp <url>
 
-Attach a folder on this machine to a Team Computer as one of its execution
+Attach a folder on this machine to a Computer as one of its execution
 backends, then keep it connected until you stop it (Ctrl-C). The Computer's
 files and the folder sync both ways; commands routed to this machine run here,
-as you, in the folder. Re-run attach to reconnect. Run
-fungi login --fungi-mcp <url> first.
+as you, in the folder. Re-run attach to reconnect. For a Hub Team run
+fungi login --fungi-mcp <url> first; for your own Oyster run
+fungi mcp use <url> --from-file - with its key first.
 
       --fungi-mcp <url>          Team MCP endpoint, e.g.
-                                 https://<hub>/api/teams/<team>/mcp
+                                 https://<hub>/api/teams/<team>/mcp, or your
+                                 Oyster's, e.g. https://<oyster>/mcp
       --host-label <label>
                                  Name for this machine (default: hostname)
       --yes                      Accept the access notice without asking
@@ -115,7 +117,7 @@ export async function runComputerCommand(
   if (attached.kind !== "attached") {
     stdout.write(
       attached.kind === "not-found"
-        ? `No Computer named ${computer} in this Team.\n`
+        ? `No Computer named ${computer} on that host.\n`
         : `Attach ${attached.kind}; re-run the same command to retry.\n`,
     );
     return;

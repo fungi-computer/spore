@@ -316,19 +316,9 @@ export async function proveServiceRecovery({
       failedObservation,
       new Error("Controlled observation failure"),
     );
-    // Read the full cause at a width that fits the owner-resolved model label,
-    // then restore the ordinary terminal width for reconnect checks.
-    await act(async () => {
-      setup.resize(140, 22);
-      await setup.renderOnce();
-    });
-    await setup.waitForFrame((frame) =>
-      frame.includes("disconnected: Controlled observation"),
-    );
-    await act(async () => {
-      setup.resize(90, 22);
-      await setup.renderOnce();
-    });
+    // The status line has one vocabulary: a lost observation reads "failed";
+    // its cause belongs to inspection, not the footer.
+    await setup.waitForFrame((frame) => frame.includes("● failed"));
     await act(async () => {
       assert.deepEqual(
         (
@@ -346,22 +336,12 @@ export async function proveServiceRecovery({
       ["Session history is already connected."],
       "successful reconnect is visible in history without a success echo",
     );
-    await act(async () => {
-      setup.resize(140, 22);
-      await setup.renderOnce();
-    });
     await setup.waitForFrame((frame) => frame.includes("● idle"));
     await failObservation(
       secondFailure,
       new Error("Controlled second observation failure"),
     );
-    await setup.waitForFrame((frame) =>
-      frame.includes("disconnected: Controlled second"),
-    );
-    await act(async () => {
-      setup.resize(90, 22);
-      await setup.renderOnce();
-    });
+    await setup.waitForFrame((frame) => frame.includes("● failed"));
     await act(async () => {
       const failedReconnect = await executeAlias(commands, "reconnect", {
         origin: "slash",

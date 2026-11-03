@@ -1,5 +1,37 @@
 # @fungi.computer/spore
 
+## 0.8.0
+
+### Minor Changes
+
+- Changes since 0.7.1:
+
+  - fix(spore): measure the TUI's retained memory after collection
+  - fix(spore): isolate the native frame proof's home and host-independent
+    expectations
+  - fix(spore): dismiss the failed-sign-in dialog before awaiting the login
+    command
+  - fix(spore): seed the live Session observation in the Herdr host proof
+  - fix(spore): give the cold-build proof its own pnpm metadata cache
+  - feat(oyster): attach a local folder to a standalone Oyster Computer
+  - fix(tests): keep proof evidence and logs out of the operator's home
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/gills@0.2.1
+  - @fungi.computer/parakeet@0.7.2
+  - @fungi.computer/truffle@0.8.0
+  - @fungi.computer/veil@0.4.0
+  - @fungi.computer/shiitake-extensions@0.6.3
+  - @fungi.computer/agar@0.7.1
+  - @fungi.computer/nacre@0.1.4
+  - @fungi.computer/shiitake@0.9.2
+  - @fungi.computer/corral@0.1.9
+
 ## 0.7.1
 
 ### Patch Changes

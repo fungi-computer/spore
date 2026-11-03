@@ -1,6 +1,6 @@
 {
   "name": "@fungi.computer/spore",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "private": false,
   "type": "module",
   "bin": {
@@ -14,9 +14,9 @@
     "build": "pnpm run whats-new && pnpm run clean && tsc -p tsconfig.build.json && node scripts/build-tool-sigils.mjs && cp .botanical/whats-new.json dist/whats-new.json",
     "whats-new": "node ../../tooling/release/whats-new.mjs --write",
     "test": "pnpm run test:unit && pnpm run test:merge",
-    "test:unit": "node scripts/test-unit.mjs",
+    "test:unit": "bash ../../tooling/proof-runner/hermetic-host.sh -- node scripts/test-unit.mjs",
     "proof:streamed-render": "node scripts/test-unit.mjs ./test/streamed-render.proof.tsx",
-    "test:merge": "node --test test/host-autoload.proof.mjs",
+    "test:merge": "bash ../../tooling/proof-runner/hermetic-host.sh -- node --test test/host-autoload.proof.mjs",
     "test:cold-build": "node --test scripts/cold-build.test.mjs",
     "test:nightly": "pnpm run proof:streamed-render && bun test/live-tool-output.proof.mjs && bun test/cancel-local-wait.proof.mjs && TUI_CANCEL_FOREGROUND=1 bun test/cancel-local-wait.proof.mjs && TUI_CANCEL_FOREGROUND=1 TUI_CANCEL_KEY=ctrl-c bun test/cancel-local-wait.proof.mjs && bun test/design-native.proof.mjs && pnpm run test:goal-loop-rows && bun test/dialog-design.proof.tsx && bun test/files-edit-error-native.proof.mjs && bun test/memory-repro.proof.mjs && bun test/patch-mismatch-native.proof.mjs && pnpm run test:native-extensions && bun test/auth-native.proof.mjs && pnpm run test:native-frame && node --import tsx scripts/packed-proof.mjs",
     "test:native-extensions": "bun test/client-extension-host.proof.mjs && bun test/client-extension-lifetime.proof.mjs",

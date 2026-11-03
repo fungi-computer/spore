@@ -15,7 +15,7 @@ import { QueryClient } from "@tanstack/query-core";
 import { createWhistle } from "@fungi.computer/whistle";
 import {
   createParakeetInteractions,
-  seedSessionQuery,
+  sessionQueryOptions,
 } from "@fungi.computer/parakeet/headless";
 import { prepareClientExtensions } from "@fungi.computer/spore/client-extensions";
 
@@ -107,6 +107,15 @@ const errors = [];
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false } },
 });
+// Activity is borrowed from the chat's live observation; a connecting read
+// reports "unknown" until the watch is live.
+const seedLive = (target, state) =>
+  queryClient.setQueryData(sessionQueryOptions(target).queryKey, {
+    observation: "live",
+    snapshot: snapshot(state),
+    lastReplyAt: undefined,
+    latestPrompt: undefined,
+  });
 const commands = createWhistle();
 const interactions = createParakeetInteractions();
 const unpresent = interactions.attach(commands.present);
@@ -150,13 +159,13 @@ try {
     }).pipe(Scope.provide(scope)),
   );
   const first = session("fixture://first");
-  seedSessionQuery(queryClient, first, snapshot("idle"));
+  seedLive(first, "idle");
   const firstScope = await Effect.runPromise(Scope.fork(scope, "sequential"));
   await Effect.runPromise(
     extensions.attach(first, interactions).pipe(Scope.provide(firstScope)),
   );
   await reported("idle");
-  seedSessionQuery(queryClient, first, snapshot("working"));
+  seedLive(first, "working");
   await reported("working");
   const question = commands.execute(
     { namespace: "host-proof", id: "question" },
@@ -171,13 +180,13 @@ try {
   await reported("working", afterBlock);
   answer.resolve();
   assert.equal((await question).status, "handled");
-  seedSessionQuery(queryClient, first, snapshot("idle"));
+  seedLive(first, "idle");
   await reported("idle", afterBlock);
   await Effect.runPromise(Scope.close(firstScope, Exit.void));
   await reported(undefined, 0, "pane.release_agent");
   const beforeSecond = requests.length;
   const second = session("fixture://second");
-  seedSessionQuery(queryClient, second, snapshot("working"));
+  seedLive(second, "working");
   const secondScope = await Effect.runPromise(Scope.fork(scope, "sequential"));
   await Effect.runPromise(
     extensions.attach(second, interactions).pipe(Scope.provide(secondScope)),
@@ -192,7 +201,7 @@ try {
   );
   assert.deepEqual(errors, []);
   for (const [index, request] of requests.entries()) {
-    assert.equal(request.params.agent, "shiitake");
+    assert.equal(request.params.agent, "fungi");
     assert.equal(request.params.pane_id, "proof-pane");
     if (index > 0)
       assert.ok(request.params.seq > requests[index - 1].params.seq);

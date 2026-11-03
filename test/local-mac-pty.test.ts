@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { EmbeddedTerminalRenderable, PasteEvent } from "@opentui/core";
@@ -202,7 +202,7 @@ test.skipIf(process.platform !== "darwin")(
         );
         expect(child.live).toBe(true);
         const report = await readFile(
-          join(homedir(), ".fungi/logs/tui.jsonl"),
+          join(home, ".fungi/logs/tui.jsonl"),
           "utf8",
         );
         expect(report).toContain("mac-terminal-input-refused");
