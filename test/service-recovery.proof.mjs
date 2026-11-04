@@ -33,6 +33,38 @@ export async function proveServiceRecovery({
   const queryClient = createQueryClient();
   let setup;
   let watchCloses = 0;
+  // Wait for automatic recovery to have reopened the observation `attempts`
+  // times in all and for the footer to be live again.
+  const recovered = async (attempts) => {
+    for (
+      let attempt = 0;
+      attempt < 400 && watchAttempts < attempts;
+      attempt += 1
+    )
+      await act(async () => {
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 25));
+        await setup.renderOnce();
+      });
+    assert.ok(watchAttempts >= attempts, "recovery reopened the observation");
+    // Live again: the shared Session query reports a live observation and the
+    // footer has left "failed". Recovery runs on the product's own clock, so poll.
+    for (let attempt = 0; attempt < 400; attempt += 1) {
+      const live = queryClient
+        .getQueryCache()
+        .getAll()
+        .some(
+          (query) =>
+            query.state.status !== "error" &&
+            query.state.data?.observation === "live",
+        );
+      if (live && !setup.captureCharFrame().includes("● failed")) return;
+      await act(async () => {
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 25));
+        await setup.renderOnce();
+      });
+    }
+    assert.fail("the recovered observation never went live");
+  };
   let watchAttempts = 0;
   let running;
   let selected;
@@ -119,7 +151,9 @@ export async function proveServiceRecovery({
               next: () =>
                 attempt === 1
                   ? Promise.race([iterator.next(), failedObservation.promise])
-                  : Promise.race([iterator.next(), secondFailure.promise]),
+                  : attempt === 2
+                    ? Promise.race([iterator.next(), secondFailure.promise])
+                    : iterator.next(),
               return: () =>
                 iterator.return?.() ??
                 Promise.resolve({ done: true, value: undefined }),
@@ -175,6 +209,21 @@ export async function proveServiceRecovery({
       ]);
       await setup.renderOnce();
     });
+    // The retained history arrives with the first live observation, however
+    // long the owner takes to answer a loaded host; wait on that event.
+    for (
+      let attempt = 0;
+      attempt < 400 &&
+      !(
+        setup.captureCharFrame().includes("Prove the installed client.") &&
+        setup.captureCharFrame().includes("Hold recovery work")
+      );
+      attempt += 1
+    )
+      await act(async () => {
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 25));
+        await setup.renderOnce();
+      });
     await act(async () => {
       await setup.waitForFrame(
         (frame) =>
@@ -319,47 +368,17 @@ export async function proveServiceRecovery({
     // The status line has one vocabulary: a lost observation reads "failed";
     // its cause belongs to inspection, not the footer.
     await setup.waitForFrame((frame) => frame.includes("● failed"));
-    await act(async () => {
-      assert.deepEqual(
-        (
-          await executeAlias(commands, "reconnect", {
-            origin: "slash",
-            interaction: reconnectInteraction,
-          })
-        ).result,
-        { kind: "reconnected" },
-      );
-    });
-    assert.equal(watchAttempts, 2);
-    assert.deepEqual(
-      reconnectNotices,
-      ["Session history is already connected."],
-      "successful reconnect is visible in history without a success echo",
-    );
-    await setup.waitForFrame((frame) => frame.includes("● idle"));
+    // A TUI route lives only as long as its watch, so recovery rebinds the
+    // service and then reopens the observation by itself; wait for that.
+    await recovered(2);
     await failObservation(
       secondFailure,
       new Error("Controlled second observation failure"),
     );
     await setup.waitForFrame((frame) => frame.includes("● failed"));
-    await act(async () => {
-      const failedReconnect = await executeAlias(commands, "reconnect", {
-        origin: "slash",
-        interaction: reconnectInteraction,
-      });
-      assert.equal(failedReconnect.status, "failed");
-      assert.deepEqual(failedReconnect.error, {
-        code: "reconnect_failed",
-        message:
-          "Reconnect failed: Controlled reconnect failure. Check the connection, then try /reconnect again.",
-      });
-    });
-    assert.equal(watchAttempts, 3);
-    assert.deepEqual(
-      reconnectNotices,
-      ["Session history is already connected."],
-      "a failed reconnect returns its Whistle error rather than an info notice",
-    );
+    // The first recovery attempt's reopen is refused (the third watch); the
+    // next one succeeds.
+    await recovered(4);
     await setup.waitForFrame(
       (frame) =>
         frame.includes("Prove the installed client.") &&
@@ -381,7 +400,7 @@ export async function proveServiceRecovery({
       await running;
     });
     assert.equal(setup.renderer.isDestroyed, true);
-    assert.equal(watchCloses, 2);
+    assert.equal(watchCloses, 3);
     assert.ok(await manager.status(), "client exit preserves the real service");
     assert.equal(
       (await owner.session.read()).activity.queue.state,
