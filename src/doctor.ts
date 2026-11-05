@@ -36,14 +36,20 @@ export async function runDoctor(options: {
     if (!ok) passed = false;
     check(label, ok, detail);
   };
+  // Setup the person has not done yet is not a failure: it is listed as SETUP
+  // and does not fail the run.
+  const unfinished: string[] = [];
+  const setup = (label: string, detail: string) => {
+    unfinished.push(label);
+    options.write(`SETUP ${label}: ${detail}\n`);
+  };
   options.write("fungi doctor\n");
   try {
     const service = await options.localServiceStatus();
     if (service === undefined) {
-      report(
+      setup(
         "Local service",
-        false,
-        "No readable live status (not started by doctor)",
+        "Not running yet. It starts the first time you run fungi.",
       );
     } else {
       const diagnostics = service.diagnostics;
@@ -70,15 +76,16 @@ export async function runDoctor(options: {
   );
   try {
     const account = await options.fungiAccount();
-    report(
-      "sign-in",
-      account !== undefined,
-      account?.team !== undefined
-        ? `Saved Fungi login · ${account.team.name}`
-        : account === undefined
-          ? "Not signed in. Run fungi login --provider fungi"
+    if (account === undefined)
+      setup("Fungi sign-in", "Not signed in to Fungi. Optional.");
+    else
+      report(
+        "sign-in",
+        true,
+        account.team !== undefined
+          ? `Saved Fungi login · ${account.team.name}`
           : "Saved Fungi login; select a Team with fungi login --provider fungi",
-    );
+      );
   } catch (cause) {
     reportFailure("doctor-team-auth-check", cause);
     report("sign-in", false, "Could not read saved login");
@@ -88,13 +95,15 @@ export async function runDoctor(options: {
     const configured =
       account?.team !== undefined &&
       (await options.models.checkAuth("fungi")) !== undefined;
-    report(
-      "Fungi models",
-      configured,
-      configured
-        ? "selected Team ready"
-        : "Sign in to Fungi with fungi login --provider fungi",
-    );
+    if (configured) report("Fungi models", true, "selected Team ready");
+    else if (account === undefined)
+      setup("Fungi models", "Not set up. Optional.");
+    else
+      report(
+        "Fungi models",
+        false,
+        "Sign in to Fungi with fungi login --provider fungi",
+      );
   } catch (cause) {
     reportFailure("doctor-model-check", cause);
     report("Fungi models", false, "Could not check provider configuration");
@@ -125,5 +134,9 @@ export async function runDoctor(options: {
     report("connectivity", false, "Check your network connection");
   }
   report("version", true, options.version + " (installed)");
+  if (unfinished.length > 0)
+    options.write(
+      "Next: run fungi login to use your Claude or ChatGPT subscription, an API key or Fungi models, then run fungi.\n",
+    );
   return passed;
 }

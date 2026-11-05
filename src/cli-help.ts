@@ -134,8 +134,8 @@ stdin when it is omitted.
     login: `Usage: fungi login
        fungi login --provider <id> [--auth-type oauth|api_key] [--method <id>]
 
-In a terminal, fungi login asks how Shiitake should reach a model: your Fungi
-account (recommended), your Claude or ChatGPT subscription, or an API key.
+In a terminal, fungi login asks how Shiitake should reach a model: your Claude
+or ChatGPT subscription (recommended), your Fungi account, or an API key.
 Without a terminal it starts the Fungi browser sign-in.
 
 Signing in to Fungi opens your browser once and asks which Team pays for

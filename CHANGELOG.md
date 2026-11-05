@@ -1,5 +1,27 @@
 # @fungi.computer/spore
 
+## 0.8.2
+
+### Patch Changes
+
+- Changes since 0.8.1:
+
+  - fix(docs,hub,spore): first-time-user fixes for the invite-only path and
+    versions
+  - fix(truffle): keep sandbox-hidden records out of host skill reads
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/lantern@0.4.0
+  - @fungi.computer/shiitake@0.11.0
+  - @fungi.computer/truffle@0.8.2
+  - @fungi.computer/veil@0.6.0
+  - @fungi.computer/corral@0.1.11
+  - @fungi.computer/parakeet@0.8.1
+  - @fungi.computer/shiitake-extensions@0.6.5
+
 ## 0.8.1
 
 ### Patch Changes

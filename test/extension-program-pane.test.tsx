@@ -119,9 +119,11 @@ async function executeAs(store: string, code: string) {
 }
 
 test("the fixture project does not inherit parent-directory skills", async () => {
-  const catalog = await createLocalSkillSource({ cwd: project, home }).catalog(
-    new AbortController().signal,
-  );
+  const catalog = await createLocalSkillSource({
+    cwd: project,
+    home,
+    hidden: () => [],
+  }).catalog(new AbortController().signal);
   expect(catalog.skills).toEqual([]);
 });
 

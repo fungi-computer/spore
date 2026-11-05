@@ -176,18 +176,39 @@ test("doctor reports actual failed checks without exposing credentials or blocki
     },
   });
   expect(result).toBe(false);
+  expect(output).toContain("SETUP Local service: Not running yet.");
+  expect(output).toContain("SETUP Fungi sign-in: Not signed in to Fungi.");
+  expect(output).toContain("SETUP Fungi models: Not set up.");
   expect(output).toContain(
-    "FAIL sign-in: Not signed in. Run fungi login --provider fungi",
+    "Next: run fungi login to use your Claude or ChatGPT subscription",
   );
-  expect(output).toContain(
-    "FAIL Fungi models: Sign in to Fungi with fungi login --provider fungi",
-  );
-  expect(output).not.toContain("Use your own Claude or ChatGPT subscription");
+  expect(output).not.toContain("FAIL sign-in");
   expect(output).toContain(`Platform: ${process.platform} ${process.arch}`);
   expect(output).toContain("glibc:");
-  expect(output).toContain("FAIL Fungi models");
   expect(output).toContain("FAIL connectivity");
   expect(output).toContain("PASS version: 0.1.0");
+});
+
+test("doctor treats an untouched install as unfinished setup, not failure", async () => {
+  let output = "";
+  const passed = await runDoctor({
+    localServiceStatus: () => Promise.resolve(undefined),
+    models: {
+      getProviders: () => [],
+      checkAuth: () => Promise.resolve(undefined),
+      login: () => Promise.reject(new Error("unused")),
+      logout: () => Promise.resolve(),
+    },
+    fungiAccount: () => Promise.resolve(undefined),
+    version: "0.1.0",
+    connect: () => Promise.resolve(true),
+    write: (text) => {
+      output += text;
+    },
+  });
+  expect(passed).toBe(true);
+  expect(output).not.toContain("FAIL");
+  expect(output).toContain("Next: run fungi login");
 });
 
 test("doctor checks Fungi readiness rather than accepting another provider's login", async () => {
