@@ -1,5 +1,9 @@
 import { captureFrame } from "./frame-capture.js";
-import { waitForFrame, pressDecodedKey } from "./native-readiness.js";
+import {
+  waitForFrame,
+  pressDecodedKey,
+  boundedCompletion,
+} from "./native-readiness.js";
 import { destroyTestRenderer } from "./native-renderer-cleanup.js";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
@@ -8,7 +12,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { setImmediate as immediate } from "node:timers";
-import { setTimeout as wait } from "node:timers/promises";
 import { QueryClient } from "@tanstack/query-core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createTestRenderer } from "@opentui/core/testing";
@@ -43,15 +46,6 @@ const sameColor = (left, right) =>
 const whenListed = (at) => formatWhen(at, Date.now());
 function renderedNodes(node) {
   return [node, ...node.getChildren().flatMap(renderedNodes)];
-}
-
-function boundedCompletion(promise, label) {
-  return Promise.race([
-    promise,
-    wait(2000).then(() => {
-      throw new Error(`${label} did not settle within 2s`);
-    }),
-  ]);
 }
 
 const reactPaths = [

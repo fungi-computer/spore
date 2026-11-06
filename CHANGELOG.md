@@ -1,5 +1,29 @@
 # @fungi.computer/spore
 
+## 0.8.3
+
+### Patch Changes
+
+- Changes since 0.8.2:
+
+  - fix(tui): bound installed CLI proof and collect exits safely
+  - fix(local): preserve evidence and exit when service loop stalls
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/lantern@0.4.1
+  - @fungi.computer/maosaico@0.1.1
+  - @fungi.computer/parakeet@0.8.2
+  - @fungi.computer/shiitake@0.11.1
+  - @fungi.computer/truffle@0.8.3
+  - @fungi.computer/veil@0.6.1
+  - @fungi.computer/corral@0.1.12
+  - @fungi.computer/shiitake-extensions@0.6.6
+
 ## 0.8.2
 
 ### Patch Changes

@@ -255,8 +255,8 @@ test("an unfocused conversation does not take keys typed into another pane", asy
     await act(async () => {
       await panes.open({
         kind: "conversation",
-        agentId: "agent-fixture",
-        sessionId: "main",
+        agentId: fixture.identity.agentId,
+        sessionId: fixture.identity.sessionId,
       });
     });
     await waitForFrame(view.setup, (text) => text.includes("Ask anything"));

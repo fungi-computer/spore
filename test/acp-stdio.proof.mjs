@@ -26,7 +26,7 @@ import {
 } from "@earendil-works/pi-ai/providers/faux";
 import { openPrivateLocalRuntimeHost } from "@fungi.computer/truffle";
 import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
-import { runPrivateLocalService } from "@fungi.computer/truffle/service-process";
+import { runPrivateLocalService } from "../../../runtimes/local/dist/private-local-service-listener.js";
 import { createIsolatedCliEnvironment } from "./cli-test-isolation.ts";
 
 // The actual CLI bundle talks to a real persistent Local owner. Only inference

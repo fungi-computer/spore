@@ -66,6 +66,10 @@ export async function writeCliNotices({
             "runtimes/local/dist/internal/image-fit-metafile.json",
             "runtimes/local",
           ],
+          [
+            "runtimes/local/dist/internal/service-worker-metafile.json",
+            "runtimes/local",
+          ],
           ["packages/cordyceps/dist/metafile.json", "packages/cordyceps"],
         ];
   for (const [file, cwd] of graphs) {

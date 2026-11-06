@@ -1,3 +1,4 @@
+import { pressDecodedKey, boundedCompletion } from "./native-readiness.js";
 import { executeAlias } from "./command-selection.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -395,10 +396,13 @@ export async function proveServiceRecovery({
       "assistant remains visible after observation fails",
     );
     await capture("unavailable");
-    await act(async () => {
+    // Decoding and React's exit update must flush before joining the lifetime.
+    // Awaiting running inside act can hold the very update that closes it.
+    process.stderr.write("Installed CLI proof: decode Ctrl+C after recovery\n");
+    await pressDecodedKey(setup, () => {
       setup.mockInput.pressKey("c", { ctrl: true });
-      await running;
     });
+    await boundedCompletion(running, "Ctrl+C service recovery exit");
     assert.equal(setup.renderer.isDestroyed, true);
     assert.equal(watchCloses, 3);
     assert.ok(await manager.status(), "client exit preserves the real service");
@@ -447,9 +451,11 @@ export async function proveServiceRecovery({
               { namespace: "tui", id: "exit" },
               { origin: "slash" },
             );
-          await running;
-        } else await selected?.close();
+        }
       });
+      if (running !== undefined)
+        await boundedCompletion(running, "service recovery cleanup");
+      else await selected?.close();
     } finally {
       globalThis.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
     }

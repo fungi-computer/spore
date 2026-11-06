@@ -1706,12 +1706,12 @@ if (import.meta.main) {
       const { restartUpdatedFungiService } = await import("./update.js");
       await restartUpdatedFungiService(createPrivateLocalServiceManager());
     } else if (process.argv[2] === "--internal-service") {
-      const { runPrivateLocalService } =
+      const { runPrivateLocalServiceProcess } =
         await import("@fungi.computer/truffle/service-process");
       const directory = process.argv[3];
       if (directory === undefined)
         throw new Error("Local service requires its private directory");
-      await runPrivateLocalService(directory);
+      await runPrivateLocalServiceProcess(directory);
     } else {
       await runFungiCli(process.argv.slice(2), { cwd: process.cwd() });
     }

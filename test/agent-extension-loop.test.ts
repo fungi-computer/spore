@@ -21,7 +21,7 @@ import {
   createPrivateLocalServiceManager,
   type PrivateLocalServiceConnection,
 } from "@fungi.computer/truffle/service";
-import { runPrivateLocalService } from "@fungi.computer/truffle/service-process";
+import { runPrivateLocalService } from "../../../runtimes/local/dist/private-local-service-listener.js";
 import { waitForAgentSettlement } from "@fungi.computer/shiitake/agent-control";
 import { bindSessionExtension } from "@fungi.computer/shiitake/client";
 import type { ShiitakeSession } from "@fungi.computer/shiitake";

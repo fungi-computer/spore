@@ -1,6 +1,6 @@
 {
   "name": "@fungi.computer/spore",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "private": false,
   "type": "module",
   "bin": {
@@ -20,7 +20,7 @@
     "test:cold-build": "node --test scripts/cold-build.test.mjs",
     "test:nightly": "pnpm run proof:streamed-render && bun test/live-tool-output.proof.mjs && bun test/cancel-local-wait.proof.mjs && TUI_CANCEL_FOREGROUND=1 bun test/cancel-local-wait.proof.mjs && TUI_CANCEL_FOREGROUND=1 TUI_CANCEL_KEY=ctrl-c bun test/cancel-local-wait.proof.mjs && bun test/design-native.proof.mjs && pnpm run test:goal-loop-rows && bun test/dialog-design.proof.tsx && bun test/files-edit-error-native.proof.mjs && bun test/memory-repro.proof.mjs && bun test/patch-mismatch-native.proof.mjs && pnpm run test:native-extensions && bun test/auth-native.proof.mjs && pnpm run test:native-frame && node --import tsx scripts/packed-proof.mjs",
     "test:native-extensions": "bun test/client-extension-host.proof.mjs && bun test/client-extension-lifetime.proof.mjs",
-    "test:native-frame": "BUN_BIN=\"$PWD/node_modules/.bin/bun\" && node --input-type=module --eval \"import { rm } from 'node:fs/promises'; await rm('../../.botanical/tui-first-frame/package-native-proof', { recursive: true, force: true });\" && pnpm --filter @fungi.computer/spore deploy --config.inject-workspace-packages=true ../../.botanical/tui-first-frame/package-native-proof && cd ../../.botanical/tui-first-frame/package-native-proof && \"$BUN_BIN\" test/deployed-react.proof.mjs && \"$BUN_BIN\" test/tool-progress-native.proof.mjs && \"$BUN_BIN\" test/native-frame.proof.mjs && \"$BUN_BIN\" test/installed-cli.proof.mjs",
+    "test:native-frame": "BUN_BIN=\"$PWD/node_modules/.bin/bun\" && node --input-type=module --eval \"import { rm } from 'node:fs/promises'; await rm('../../.botanical/tui-first-frame/package-native-proof', { recursive: true, force: true });\" && pnpm --filter @fungi.computer/spore deploy --config.inject-workspace-packages=true ../../.botanical/tui-first-frame/package-native-proof && cd ../../.botanical/tui-first-frame/package-native-proof && \"$BUN_BIN\" test/deployed-react.proof.mjs && \"$BUN_BIN\" test/tool-progress-native.proof.mjs && \"$BUN_BIN\" test/native-frame.proof.mjs && node --test test/installed-cli-lifecycle.proof.mjs",
     "package:local": "node scripts/package-local.mjs",
     "bundle:cli": "node scripts/bundle-cli.mjs",
     "build:binaries": "node scripts/build-binaries.mjs",

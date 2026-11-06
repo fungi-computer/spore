@@ -10,6 +10,7 @@ import {
 import { resolve } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import console from "node:console";
+import { createHash } from "node:crypto";
 import { transform } from "esbuild";
 import { writeCliNotices } from "./package-notices.mjs";
 import { assertWhatsNewArtifact } from "../../../tooling/release/whats-new.mjs";
@@ -47,12 +48,34 @@ await copyFile(
   resolve(repository, "runtimes/local/src/private-local-native-digests.js"),
   resolve(repository, "runtimes/local/dist/private-local-native-digests.js"),
 );
+// The separately bundled listener must see these refreshed cross-platform anchors too.
+const serviceWorkerBuild = spawnSync(
+  "pnpm",
+  ["--dir", "runtimes/local", "run", "build:service-worker"],
+  {
+    cwd: repository,
+    stdio: "inherit",
+  },
+);
+if (serviceWorkerBuild.error !== undefined) throw serviceWorkerBuild.error;
+if (serviceWorkerBuild.status !== 0)
+  throw new Error("Service worker bundle failed");
 const output = resolve(repository, ".botanical/fungi-cli-package");
 const metafile = resolve(repository, ".botanical/fungi-cli-metafile.json");
 await rm(output, { recursive: true, force: true });
 await mkdir(resolve(output, "dist/internal"), { recursive: true });
 await mkdir(resolve(output, "dist/seatbelt"), { recursive: true });
 await mkdir(resolve(output, "native/apply-patch"), { recursive: true });
+// Keep this worker beside cli.js: its existing native/worker URLs use that base.
+await transformFile(
+  resolve(repository, "runtimes/local/dist/private-local-service-worker.mjs"),
+  resolve(output, "dist/private-local-service-worker.mjs"),
+);
+const serviceWorkerDigest = createHash("sha256")
+  .update(
+    await readFile(resolve(output, "dist/private-local-service-worker.mjs")),
+  )
+  .digest("hex");
 const build = spawnSync(
   "bun",
   [
@@ -65,6 +88,8 @@ const build = spawnSync(
     // Minification alone leaves React DEV performance timing tracks enabled.
     "--define",
     'process.env.NODE_ENV="production"',
+    "--define",
+    `process.env.FUNGI_SERVICE_WORKER_DIGEST=${JSON.stringify(serviceWorkerDigest)}`,
     "--sourcemap=none",
     "--outfile",
     resolve(output, "dist/cli.js"),
@@ -150,6 +175,7 @@ await writeFile(
         "README.md",
         "THIRD_PARTY_NOTICES",
         "dist/cli.js",
+        "dist/private-local-service-worker.mjs",
         "dist/seatbelt/safe-base.sbpl",
         "dist/tool-sigil-images.json",
         "dist/whats-new.json",
@@ -197,6 +223,7 @@ await writeFile(
 // Bun inlines a CommonJS module's absolute `__filename`; write-file-atomic
 // uses it only to seed temporary file names. Keep it package-relative.
 for (const file of [
+  "dist/private-local-service-worker.mjs",
   "dist/internal/private-workerd-sandbox-worker.mjs",
   "dist/internal/local-image-fit-worker.mjs",
 ]) {
@@ -235,6 +262,7 @@ async function writeSizeReport(packageRoot, metafilePath) {
   const files = {};
   for (const file of [
     "dist/cli.js",
+    "dist/private-local-service-worker.mjs",
     "dist/fungi.cjs",
     "dist/tool-sigil-images.json",
     "dist/internal/private-workerd-sandbox-worker.mjs",

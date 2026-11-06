@@ -466,5 +466,18 @@
         "sha256": "b569f629d00f2626a8100df2a1798210535621e42164dfd426a6fe5aac7b0ccd"
       }
     ]
+  },
+  {
+    "packages": ["data-uri-to-buffer@4.0.1"],
+    "sourceRevision": "85cd8c854aefbf1bb636789d80364cfac8ea1583",
+    "revisionEvidence": "npm data-uri-to-buffer@4.0.1 gitHead",
+    "noticeEvidence": "MIT license and copyright text in upstream README; absent from npm tarball",
+    "notices": [
+      {
+        "file": "NOTICE.data-uri-to-buffer-4.0.1",
+        "source": "https://raw.githubusercontent.com/TooTallNate/node-data-uri-to-buffer/85cd8c854aefbf1bb636789d80364cfac8ea1583/README.md",
+        "sha256": "a7cc4332acfa1f9b6530e01aac77fefe74f2efa32579215fddaa473013f9a25c"
+      }
+    ]
   }
 ]

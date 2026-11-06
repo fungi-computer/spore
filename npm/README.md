@@ -26,16 +26,25 @@ reinstall the CLI with optional dependencies enabled.
 ## Start in your project
 
 ```sh
-fungi login --provider fungi
 fungi
 ```
 
-Approve browser sign-in and choose the Team that pays for models. Hosted models
-need Team credit. Use `/model` in the terminal to select a model such as Luna.
-Use `fungi login --help` for other provider options.
+On first run, choose **Use my Claude or ChatGPT subscription**. Finish the
+provider's browser sign-in, then return to your terminal and send a prompt. You
+can also choose an API key or Fungi models. A Fungi account is optional when you
+use your own subscription.
 
-Bare `fungi login` defaults to Fungi; use `--provider <id>` to choose another
-provider. Login does not change an existing Session's model.
+To change your sign-in later, run `fungi login`. It opens the same
+model-provider chooser. Use `fungi login --help` for direct provider options.
+Login does not change an existing Session's model; use `/model` to choose one.
+
+For hosted Fungi models, run `fungi login --provider fungi`, approve browser
+sign-in and choose the Team that pays for models. Hosted models need Team
+credit.
+
+Hand your agent the
+[local subscription recipe](https://docs.fungi.computer/agents/local-subscription.md)
+for the install commands, checks and sign-in handoff.
 
 ## Connect Zed
 

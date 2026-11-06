@@ -77,3 +77,23 @@ export async function pressDecodedKey(
     setup.renderer.keyInput.off("keypress", handler);
   }
 }
+
+/** Bound a terminal lifetime without leaving a timer alive after it settles. */
+export async function boundedCompletion<Value>(
+  promise: Promise<Value>,
+  label: string,
+): Promise<Value> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`${label} did not settle within 2s`));
+        }, 2000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}

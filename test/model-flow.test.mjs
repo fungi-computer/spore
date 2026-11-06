@@ -151,9 +151,10 @@ async function withModels(
               connect: async () => {
                 opened.push({ modelId: "sol", reasoning: "high" });
                 return {
-                  agentId: "agent-fixture",
+                  // Drafts persist across CLI lifetimes; each fixture owns its identity.
+                  agentId: fixture.identity.agentId,
                   databasePath: "/fixture/main.sqlite",
-                  sessionId: "main",
+                  sessionId: fixture.identity.sessionId,
                   sandboxStatus: async () => ({
                     mode: "full-access",
                     available: true,
@@ -403,6 +404,21 @@ test("cancelled /model consumes only its command", async () => {
     await press(setup, "escape");
     await choosing.settled();
     assert.match(setup.captureCharFrame(), /next prompt/u);
+  });
+});
+
+test("independent CLI fixtures do not restore another fixture's draft", async () => {
+  await withModels(async ({ setups }) => {
+    await act(async () =>
+      setups[0].mockInput.typeText("private fixture draft"),
+    );
+    await waitForFrame(setups[0], (frame) =>
+      frame.includes("private fixture draft"),
+    );
+  });
+  await withModels(async ({ setups }) => {
+    await waitForFrame(setups[0], (frame) => frame.includes("Ask anything"));
+    assert.doesNotMatch(setups[0].captureCharFrame(), /private fixture draft/u);
   });
 });
 

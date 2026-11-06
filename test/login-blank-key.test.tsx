@@ -13,7 +13,7 @@ import { contributeAccountCommands } from "@fungi.computer/parakeet/headless";
 import { createPrivateModels } from "@fungi.computer/truffle";
 import { localAccountOwner } from "@fungi.computer/truffle/login";
 import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
-import { runPrivateLocalService } from "@fungi.computer/truffle/service-process";
+import { runPrivateLocalService } from "../../../runtimes/local/dist/private-local-service-listener.js";
 import { loginAllowed } from "@fungi.computer/veil/model-credentials";
 import { InteractionView } from "../src/button/interaction-dialog.js";
 import { useTerminalTheme } from "../src/button/terminal-theme.js";

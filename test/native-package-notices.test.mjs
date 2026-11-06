@@ -24,6 +24,7 @@ async function prepareNotices(root) {
   for (const file of [
     "runtimes/local/dist/internal/sandbox-metafile.json",
     "runtimes/local/dist/internal/image-fit-metafile.json",
+    "runtimes/local/dist/internal/service-worker-metafile.json",
     "packages/cordyceps/dist/metafile.json",
   ]) {
     await mkdir(dirname(join(root, file)), { recursive: true });

@@ -71,6 +71,12 @@ try {
   await access(
     join(
       install,
+      "node_modules/@fungi.computer/spore/dist/private-local-service-worker.mjs",
+    ),
+  );
+  await access(
+    join(
+      install,
       "node_modules/@fungi.computer/spore/dist/internal/computerd.cjs",
     ),
   );
@@ -81,6 +87,17 @@ try {
     ),
   );
   const cliBundle = await readFile(installedCli, "utf8");
+  const serviceWorkerDigest = createHash("sha256")
+    .update(
+      await readFile(
+        join(dirname(installedCli), "private-local-service-worker.mjs"),
+      ),
+    )
+    .digest("hex");
+  assert.ok(
+    cliBundle.includes(serviceWorkerDigest),
+    "The CLI build identity must include its service worker",
+  );
   // Tripwire for the known React DEV signature, not semantic call-site analysis
   // or proof that all user timing is absent.
   assert.equal(

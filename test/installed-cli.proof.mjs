@@ -35,6 +35,7 @@ const root = await mkdtemp(join(tmpdir(), "fungi-installed-cli-"));
 const serviceDirectory = join(isolated.home, ".fungi", "service");
 const measurements = [];
 async function invoke(args, extraEnv = {}) {
+  process.stderr.write(`Installed CLI proof: ${JSON.stringify(args)}\n`);
   const started = globalThis.performance.now();
   const child = spawn([process.execPath, cli, ...args], {
     cwd: root,
@@ -73,6 +74,7 @@ let hookModelCalls = 0;
 let homeModelCalls = 0;
 await mkdir(serviceDirectory, { recursive: true });
 let serviceRun;
+let serviceSettled = false;
 let owner;
 let reopened;
 let failure;
@@ -244,13 +246,16 @@ try {
   const { openPrivateLocalRuntimeHost } = await import(
     new URL("./private-local-runtime-host.js", localEntry).href
   );
+  process.stderr.write("Installed CLI proof: start Local service\n");
   serviceRun = runPrivateLocalService(serviceDirectory, (options) =>
     openPrivateLocalRuntimeHost({
       ...options,
       providerId: model.provider,
       modelId: model.id,
     }),
-  );
+  ).finally(() => {
+    serviceSettled = true;
+  });
   await Promise.race([
     (async () => {
       for (
@@ -293,6 +298,7 @@ try {
   assert.equal(reopened.sessionId, owner.sessionId);
   assert.equal((await reopened.session.read()).activity.queue.state, "idle");
   const { proveServiceRecovery } = await import("./service-recovery.proof.mjs");
+  process.stderr.write("Installed CLI proof: service recovery\n");
   await proveServiceRecovery({
     manager,
     root,
@@ -400,9 +406,12 @@ for (const close of [
   () => owner?.close(),
   async () => {
     if (serviceRun === undefined) return;
-    // This listener shares our PID; deliver its ordinary shutdown signal to
-    // the handler, as Local's listener proofs do, rather than terminating us.
-    assert.equal(process.emit("SIGTERM", "SIGTERM"), true);
+    // A rejected listener has already removed its signal handler. Emitting then
+    // reaches signal-exit instead, re-signals this proof and hides the failure.
+    process.stderr.write(
+      "Installed CLI proof: collect Local service shutdown\n",
+    );
+    if (!serviceSettled) assert.equal(process.emit("SIGTERM", "SIGTERM"), true);
     await serviceRun;
     assert.equal(
       await manager.status(),
