@@ -40,9 +40,6 @@ import type { LocalAuthCliOptions } from "@fungi.computer/truffle/auth";
 import {
   createPrivateModels,
   resolveDefaultCredentialPath,
-  activateSubscriptionCredential,
-  CredentialActivationError,
-  prepareSubscriptionIdentity,
   registerPrivateBundledModelOAuthFlows,
   listPrivateTeamComputers,
   startPrivateTeamComputer,
@@ -682,56 +679,11 @@ export async function runFungiCli(
   }
   if (arguments_.values.team !== undefined)
     throw new Error("--team is only valid with git-credential");
-  if (command === "account" && positionals[0] === "prepare-credential") {
-    if (
-      positionals.length !== 1 ||
-      arguments_.values.provider === undefined ||
-      Object.keys(arguments_.values).some((name) => name !== "provider")
-    )
-      throw new Error(
-        "Usage: fungi account prepare-credential --provider anthropic|openai",
-      );
-    await prepareSubscriptionIdentity(arguments_.values.provider, {
-      credentialPath,
-    });
-    stdout.write('{"ok":true}\n');
-    return;
-  }
-  if (command === "account" && positionals[0] === "use-credential") {
-    if (
-      positionals.length !== 1 ||
-      arguments_.values.provider === undefined ||
-      arguments_.values["from-file"] !== "-" ||
-      Object.keys(arguments_.values).some(
-        (name) => name !== "provider" && name !== "from-file",
-      )
-    )
-      throw new Error(
-        "Usage: fungi account use-credential --provider anthropic|openai --from-file -",
-      );
-    try {
-      await activateSubscriptionCredential(
-        arguments_.values.provider,
-        gitCredentialBytes(io.stdin ?? process.stdin),
-        { credentialPath },
-      );
-    } catch (error) {
-      if (error instanceof CredentialActivationError)
-        stdout.write(
-          `${JSON.stringify({ ok: false, error: { category: error.category } })}\n`,
-        );
-      throw error;
-    }
-    stdout.write('{"ok":true}\n');
-    return;
-  }
   if (
     arguments_.values["from-file"] !== undefined &&
     !(command === "mcp" && positionals[0] === "use")
   )
-    throw new Error(
-      "--from-file is only valid with account use-credential or mcp use",
-    );
+    throw new Error("--from-file is only valid with mcp use");
   validateFungiCommand(command, positionals, arguments_.values.last);
   if (
     command !== "extension" &&
@@ -822,7 +774,7 @@ export async function runFungiCli(
   ) {
     const door = await chooseSignInDoor(linearCli, { allowSkip: false });
     if (door === undefined || door === "later")
-      throw new Error("Login cancelled.");
+      throw new Error("Login cancelled. Run fungi login to try again.");
     await runFungiCli(
       await signInArguments(door, linearCli),
       { ...io, quiet: true },
@@ -950,9 +902,23 @@ export async function runFungiCli(
   if (command === "board") {
     if (
       positionals.length > 0 ||
-      Object.keys(arguments_.values).some((key) => key !== "cd")
+      Object.keys(arguments_.values).some(
+        (key) => key !== "cd" && key !== "json",
+      )
     )
-      throw new Error("fungi board accepts only -C <directory>");
+      throw new Error("fungi board accepts only -C <directory> and --json");
+    if (arguments_.values.json === true) {
+      const { renderBoardJson } = await import("./board/json.js");
+      const { readBoardRows } = await import("./board/controller.js");
+      const root = resolve(
+        io.cwd ?? process.cwd(),
+        arguments_.values.cd ?? ".",
+      );
+      const rows = await readBoardRows(root, Date.now());
+      stdout.write(`${renderBoardJson(rows, root)}\n`);
+      if (rows.failure !== undefined) throw new Error(rows.failure);
+      return;
+    }
     const { runBoardProgram } = await import("./board/program.js");
     await runBoardProgram({
       root: resolve(io.cwd ?? process.cwd(), arguments_.values.cd ?? "."),
@@ -1421,7 +1387,22 @@ export async function runFungiCli(
               description: team.handle,
             })),
           });
-      await signInFungi(signInEndpoint, loginOptions);
+      try {
+        await signInFungi(signInEndpoint, loginOptions);
+      } catch (cause) {
+        const retryOption =
+          endpoint !== undefined
+            ? "--fungi-mcp"
+            : hub !== undefined
+              ? "--hub"
+              : undefined;
+        linearCli.info(
+          retryOption === undefined
+            ? "To try again, run fungi login --provider fungi."
+            : `To try again, rerun fungi login with the same ${retryOption} option.`,
+        );
+        throw cause;
+      }
       stdout.write(
         "Fungi login complete. Models and Team MCP use this account.\n",
       );
@@ -1485,7 +1466,12 @@ export async function runFungiCli(
           : `Fungi account: ${parseFungiMcpEndpoint(login.issuer).host} · ${login.team === undefined ? "no Team chosen; run fungi login --provider fungi" : `${login.team.name} (${login.team.handle})`}\n`,
       );
     }
-    await runAuth(command, authCall);
+    try {
+      await runAuth(command, authCall);
+    } catch (cause) {
+      if (command === "login") linearCli.info("To try again, run fungi login.");
+      throw cause;
+    }
     return;
   }
   const { parseReasoning } = await import("./reasoning-option.js");
@@ -1646,7 +1632,8 @@ async function signInArguments(
   if (door === "fungi") return ["login", "--provider", "fungi"];
   if (door === "api_key") return ["login", "--auth-type", "api_key"];
   const provider = await chooseSubscription(cli);
-  if (provider === undefined) throw new Error("Login cancelled.");
+  if (provider === undefined)
+    throw new Error("Login cancelled. Run fungi login to try again.");
   return ["login", "--provider", provider, "--auth-type", "oauth"];
 }
 

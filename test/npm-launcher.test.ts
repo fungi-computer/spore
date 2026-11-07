@@ -22,6 +22,7 @@ async function launch(
   native = false,
   darwinRelease = "22.6.0",
   cpuModel: string | null = "Intel(R) Core(TM)",
+  nodeVersion = process.versions.node,
 ) {
   const root = await mkdtemp(join(tmpdir(), "fungi-launcher-"));
   try {
@@ -42,7 +43,8 @@ async function launch(
     const preload = join(root, "platform.cjs");
     await writeFile(
       preload,
-      `Object.defineProperty(process, 'platform', {value:${JSON.stringify(platform)}});
+      `Object.defineProperty(process.versions, 'node', {value:${JSON.stringify(nodeVersion)}});
+Object.defineProperty(process, 'platform', {value:${JSON.stringify(platform)}});
 Object.defineProperty(process, 'arch', {value:${JSON.stringify(arch)}});
 process.report.getReport = () => (${JSON.stringify({ header: { glibcVersionRuntime: glibc } })});
 require("node:os").release = () => ${JSON.stringify(darwinRelease)};
@@ -124,7 +126,7 @@ test("a supported host missing its native package reports the exact reinstall co
   expect(child.status).toBe(1);
   expect(child.stdout).toBe("");
   expect(child.stderr).toBe(
-    "Fungi's native package for linux-x64 is missing or doesn't match this version. Reinstall: npm i -g @fungi.computer/spore@0.4.0\n",
+    "Fungi's native package for linux-x64 is missing or doesn't match this version. Reinstall: npm i -g @fungi.computer/spore@0.4.0 --include=optional\n",
   );
 });
 
@@ -155,7 +157,7 @@ for (const arch of ["arm64", "x64"]) {
     expect(child.status).toBe(1);
     expect(child.stdout).toBe("");
     expect(child.stderr).toBe(
-      `Fungi's native package for darwin-${arch} is missing or doesn't match this version. Reinstall: npm i -g @fungi.computer/spore@0.4.0\n`,
+      `Fungi's native package for darwin-${arch} is missing or doesn't match this version. Reinstall: npm i -g @fungi.computer/spore@0.4.0 --include=optional\n`,
     );
   });
 }
@@ -217,5 +219,25 @@ for (const model of ["VirtualApple", null]) {
     expect(child.stderr).toContain(
       "Use arm64 Node on Apple Silicon and reinstall the CLI",
     );
+  });
+}
+
+for (const version of ["20.20.0", "22.12.0"]) {
+  test(`Node ${version} is refused with upgrade and retry instructions`, async () => {
+    const child = await launch(
+      "linux",
+      "x64",
+      "2.39",
+      [],
+      true,
+      undefined,
+      undefined,
+      version,
+    );
+    expect(child.status).toBe(1);
+    expect(child.stdout).not.toContain("RUNTIME_STARTED");
+    expect(child.stderr).toContain("Install Node 22.13 or newer");
+    expect(child.stderr).toContain("npm i -g @fungi.computer/spore");
+    expect(child.stderr).toContain("then run fungi");
   });
 }

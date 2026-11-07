@@ -153,7 +153,9 @@ test("clicking a footer sub-agent row opens that Agent's conversation beside the
         `The footer never listed the sub-agent:\n${setup.captureCharFrame()}`,
       );
     };
-    await rowLine("1 sub-agent");
+    // Scout is idle: the collapsed summary counts working/needs-you children.
+    // Expanding below must still reveal Scout and open its real conversation.
+    await rowLine("0 sub-agents");
     expect(setup.captureCharFrame()).not.toContain("Scout · ");
     await waitForCommandGraph(commands, (snapshot) =>
       snapshot.slash.some((row) => row.alias === "agents"),

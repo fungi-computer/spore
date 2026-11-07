@@ -9,7 +9,9 @@ import {
   copyFile,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
+  rename,
   writeFile,
 } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -24,7 +26,10 @@ import {
 } from "@fungi.computer/cli-version";
 import { releasePackages } from "../../../tooling/release/data-impact.mjs";
 import { readPack } from "../../../tooling/release/pack-inputs.mjs";
-import { upgradeReportSchema } from "./upgrade-report.mjs";
+import {
+  declaredLocalSessionResets,
+  upgradeReportSchema,
+} from "./upgrade-report.mjs";
 import { startUpgradeRegistry } from "./upgrade-registry.fixture.mjs";
 
 const { fetch, AbortSignal } = globalThis;
@@ -56,7 +61,8 @@ const paths = [
   return join(candidateDir, item.file);
 });
 const report = { from: [], checks: [] };
-const checkName = "Local Session survives published update";
+const survivalCheck = "Local Session survives published update";
+const resetCheck = "declared Local Session reset refuses and recovers";
 
 for (const fungi of baselines) {
   let published;
@@ -293,21 +299,110 @@ for (const fungi of baselines) {
       candidateBuild,
     );
 
-    // Read by the OLD id in the SAME project, not --last in a fresh folder.
-    const after = sessionSchema.parse(
-      JSON.parse(
-        (
-          await success(launcher, [
-            "sessions",
-            "show",
-            before.sessionId,
-            "--json",
-          ])
-        ).stdout,
-      ),
-    );
-    assert.equal(after.sessionId, before.sessionId);
-    assert.deepEqual(after.messages, before.messages);
+    // The candidate's reviewed claims decide whether this upgrade crosses a
+    // Local Session reset; without one the old Session must survive unchanged.
+    const declared = declaredLocalSessionResets(process.cwd(), fungi);
+    let outcome;
+    if (declared.length === 0) {
+      // Read by the OLD id in the SAME project, not --last in a fresh folder.
+      const after = sessionSchema.parse(
+        JSON.parse(
+          (
+            await success(launcher, [
+              "sessions",
+              "show",
+              before.sessionId,
+              "--json",
+            ])
+          ).stdout,
+        ),
+      );
+      assert.equal(after.sessionId, before.sessionId);
+      assert.deepEqual(after.messages, before.messages);
+      outcome = {
+        kind: `PUBLISHED_${baseline}_REAL_UPDATE_SESSION_SURVIVES`,
+        retainedMessages: before.messages.length,
+      };
+    } else {
+      // The one Agent store the published CLI created in this project.
+      const agents = join(project, ".fungi", "agents");
+      const owners = [];
+      for (const name of await readdir(agents))
+        if ((await readdir(join(agents, name))).includes("agent.sqlite"))
+          owners.push(join(agents, name));
+      assert.equal(owners.length, 1, "Expected one published Agent store");
+      const [store] = owners;
+      const storeFiles = async () =>
+        Object.fromEntries(
+          await Promise.all(
+            (await readdir(store))
+              .filter((name) => name.startsWith("agent.sqlite"))
+              .sort()
+              .map(async (name) => [name, await digest(join(store, name))]),
+          ),
+        );
+      const retained = await storeFiles();
+      const refused = await run(launcher, [
+        "sessions",
+        "show",
+        before.sessionId,
+        "--json",
+      ]);
+      assert.notEqual(
+        refused.code,
+        0,
+        "A declared reset must refuse the old Session",
+      );
+      assert.ok(
+        refused.stderr.includes(
+          `Agent store ${join(store, "agent.sqlite")} is incompatible with this version of Fungi. To reset, stop the owning Fungi service, then move this database, its .owner.sqlite sidecar and any associated SQLite journal files aside together. Create a fresh Agent; existing Sessions are not migrated.`,
+        ),
+        `The refusal must name the store and its documented recovery:\n${refused.stderr}`,
+      );
+      assert.deepEqual(
+        await storeFiles(),
+        retained,
+        "Refusal rewrote the old store",
+      );
+      // The documented recovery, exactly: stop, move the files aside together,
+      // then a fresh Agent in the same project works on the candidate service.
+      await success(launcher, ["stop"]);
+      const moved = join(root, "moved-agent-store");
+      await mkdir(moved, { mode: 0o700 });
+      for (const name of Object.keys(retained))
+        await rename(join(store, name), join(moved, name));
+      const prompt = `Fresh Agent after ${baseline} reset`;
+      const fresh = await run(launcher, ["run", prompt]);
+      assert.equal(fresh.code, 1, fresh.stderr);
+      assert.match(fresh.stderr, /No signed-in model provider/u);
+      const recovered = sessionSchema.parse(
+        JSON.parse(
+          (await success(launcher, ["sessions", "show", "--last", "--json"]))
+            .stdout,
+        ),
+      );
+      assert.notEqual(recovered.sessionId, before.sessionId);
+      assert.ok(JSON.stringify(recovered.messages).includes(prompt));
+      assert.equal((await service()).version, candidateBuild);
+      const kept = Object.fromEntries(
+        await Promise.all(
+          Object.keys(retained).map(async (name) => [
+            name,
+            await digest(join(moved, name)),
+          ]),
+        ),
+      );
+      assert.deepEqual(kept, retained, "The moved store must keep its bytes");
+      outcome = {
+        kind: `PUBLISHED_${baseline}_REAL_UPDATE_SESSION_RESET_RECOVERED`,
+        resetClaims: declared.map(({ version, id }) => `${version}:${id}`),
+        movedFiles: Object.entries(retained).map(([name, sha256]) => ({
+          name,
+          sha256,
+        })),
+        recoveredSessionId: recovered.sessionId,
+      };
+    }
     assert.ok(
       registry.requests.includes("/@fungi.computer/spore/latest"),
       "The published updater did not consult the candidate registry",
@@ -317,7 +412,7 @@ for (const fungi of baselines) {
       "The package manager did not install the local candidate archive",
     );
     receipt = {
-      kind: `PUBLISHED_${baseline}_REAL_UPDATE_SESSION_SURVIVES`,
+      ...outcome,
       baseline,
       publishedIntegrity: integrity,
       release: published,
@@ -325,7 +420,6 @@ for (const fungi of baselines) {
       candidateBuild,
       serviceReplaced,
       sessionId: before.sessionId,
-      retainedMessages: before.messages.length,
       oldService,
       newService,
       tarballs: registry.packages.map(({ path, manifest, integrity }) => ({
@@ -367,7 +461,13 @@ for (const fungi of baselines) {
   }
   if (failure !== undefined) {
     console.error(`Fungi ${fungi} upgrade failed`, failure);
-    report.checks.push({ name: checkName, from: fungi, status: "fail" });
+    report.checks.push({
+      name: declaredLocalSessionResets(process.cwd(), fungi).length
+        ? resetCheck
+        : survivalCheck,
+      from: fungi,
+      status: "fail",
+    });
     continue;
   }
   assert.ok(receipt, "No upgrade receipt was produced");
@@ -377,9 +477,13 @@ for (const fungi of baselines) {
     { mode: 0o600 },
   );
   console.log(
-    `PASS ${receipt.kind}: candidate service starts; Session ${receipt.sessionId} survives`,
+    `PASS ${receipt.kind}: candidate service starts; Session ${receipt.sessionId} ${receipt.resetClaims ? `refused and recovered under ${receipt.resetClaims.join(", ")}` : "survives"}`,
   );
-  report.checks.push({ name: checkName, from: fungi, status: "pass" });
+  report.checks.push({
+    name: receipt.resetClaims ? resetCheck : survivalCheck,
+    from: fungi,
+    status: "pass",
+  });
 }
 const decoded = upgradeReportSchema.parse(report);
 const rechecked = await readPack(candidateDir);

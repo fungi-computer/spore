@@ -47,6 +47,9 @@ export type NeedsYou = Readonly<{
   /** When the wait began. */
   since: number;
   expiresAt?: number;
+  parent: NonNullable<SessionAttention["waitingOn"]> | null;
+  escalated: NonNullable<SessionAttention["escalated"]> | null;
+  escalatedByParent: boolean;
 }>;
 
 /** One Agent's lane; the Agent name is the area, so areas cannot drift. */
@@ -60,6 +63,9 @@ export type Lane = Readonly<{
   since: number | null;
   /** What the store says about the state, such as a stuck goal's summary. */
   detail?: string;
+  parent: NonNullable<SessionAttention["waitingOn"]> | null;
+  waitingOn: NonNullable<SessionAttention["waitingOn"]> | null;
+  waitingNotRead: number;
 }>;
 
 /** Every Agent read once, ordered most pressing first. */
@@ -161,7 +167,7 @@ const atOf = (row: SessionSummaryRow) =>
     : (row.settledAt ?? row.lastActivityAt);
 
 function laneOf(
-  base: Pick<Lane, "agentId" | "name">,
+  base: Pick<Lane, "agentId" | "name" | "parent" | "waitingNotRead">,
   row: SessionSummaryRow,
   attention: readonly SessionAttention[],
   owned: boolean,
@@ -172,7 +178,13 @@ function laneOf(
     since: number | null,
     detail?: string,
   ): Lane => {
-    const shared = { ...base, sessionId: row.sessionId, state, since };
+    const shared = {
+      ...base,
+      sessionId: row.sessionId,
+      state,
+      since,
+      waitingOn: null,
+    };
     return detail === undefined
       ? shared
       : { ...shared, detail: cut(detail, 200) };
@@ -188,7 +200,10 @@ function laneOf(
     (item) => item.inbox === false && routedKinds.has(item.kind),
   );
   if (routed !== undefined)
-    return lane("waiting_on_agent", routed.since, routed.summary);
+    return {
+      ...lane("waiting_on_agent", routed.since, routed.summary),
+      waitingOn: routed.waitingOn ?? null,
+    };
   const at = atOf(row) ?? null;
   const working =
     state === "working" ||
@@ -205,6 +220,7 @@ function needsYouFor(
   sessionId: string,
   sessionTitle: string,
   item: SessionAttention,
+  parent: NonNullable<SessionAttention["waitingOn"]> | null,
 ): NeedsYou {
   const shared = {
     id: [agent.agentId, sessionId, item.extensionId, item.id].join("/"),
@@ -215,6 +231,13 @@ function needsYouFor(
     kind: item.kind,
     summary: cut(item.summary, 200),
     since: item.since,
+    parent,
+    escalated: item.escalated ?? null,
+    escalatedByParent:
+      item.escalated?.reason === "escalated" &&
+      parent !== null &&
+      item.escalated.by.agentId === parent.agentId &&
+      item.escalated.by.sessionId === parent.sessionId,
   };
   return item.expiresAt === undefined
     ? shared
@@ -229,6 +252,9 @@ function readAgent(agent: BoardAgent, now: number): AgentRead {
   const base = {
     agentId: cut(agent.agentId, 256),
     name: cut(agent.name.length === 0 ? agent.agentId : agent.name, 256),
+    parent: null,
+    waitingOn: null,
+    waitingNotRead: agent.waitingNotRead,
   };
   if (agent.unreadable !== undefined)
     return {
@@ -261,11 +287,18 @@ function readAgent(agent: BoardAgent, now: number): AgentRead {
             row.sessionId,
             row.state === "unavailable" ? "" : row.title,
             item,
+            agent.parents.get(row.sessionId) ?? null,
           ),
         ),
     );
   return {
-    lane: laneOf(base, first, attentionOf(first.sessionId), agent.owned, now),
+    lane: laneOf(
+      { ...base, parent: agent.parents.get(first.sessionId) ?? null },
+      first,
+      attentionOf(first.sessionId),
+      agent.owned,
+      now,
+    ),
     needs,
   };
 }
@@ -319,18 +352,7 @@ export function project(
   shipping: readonly SourceRead[],
   expanded: Expanded,
 ): BoardProjection {
-  const count = (state: LaneState) =>
-    rows.lanes.filter((lane) => lane.state === state).length;
-  const counts = {
-    working: count("working"),
-    waiting_on_you: count("waiting_on_you"),
-    waiting_on_agent: count("waiting_on_agent"),
-    stuck: count("stuck"),
-    failed: count("failed"),
-    stopped: count("stopped"),
-    unavailable: count("unavailable"),
-    idle: count("idle"),
-  };
+  const counts = laneCounts(rows.lanes);
   const listed = expanded.lanes
     ? rows.lanes
     : rows.lanes.filter((lane) => listedCollapsed.has(lane.state));
@@ -349,4 +371,20 @@ export function project(
   return rows.failure === undefined
     ? projection
     : { ...projection, readFailure: rows.failure };
+}
+
+/** Shared full-lane counts, before any display cut or collapse. */
+export function laneCounts(lanes: readonly Lane[]) {
+  const count = (state: LaneState) =>
+    lanes.filter((lane) => lane.state === state).length;
+  return {
+    working: count("working"),
+    waiting_on_you: count("waiting_on_you"),
+    waiting_on_agent: count("waiting_on_agent"),
+    stuck: count("stuck"),
+    failed: count("failed"),
+    stopped: count("stopped"),
+    unavailable: count("unavailable"),
+    idle: count("idle"),
+  };
 }

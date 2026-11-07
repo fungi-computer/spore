@@ -11,6 +11,20 @@ import {
 } from "./model.js";
 import { createShippingReader, type ShippingTiming } from "./shipping.js";
 
+/** The one Agent-store read shared by the interactive board and --json. */
+export async function readBoardRows(
+  root: string,
+  now: number,
+  previous?: BoardRows,
+): Promise<BoardRows> {
+  try {
+    return readRows(await readBoardAgents(root), now);
+  } catch (cause) {
+    reportFailure("board-agents-read", cause);
+    return failedRows(previous, cause, now);
+  }
+}
+
 /** Private resource ceilings; none of them is product policy. */
 export type BoardTiming = Readonly<{
   /** Agents and lanes are read again this often. */
@@ -68,14 +82,8 @@ export function createBoardController(
     reading = true;
     clearTimeout(timer);
     void shipping.tick();
-    try {
-      rows = readRows(await readBoardAgents(options.root), now());
-    } catch (cause) {
-      reportFailure("board-agents-read", cause);
-      rows = failedRows(rows, cause, now());
-    } finally {
-      reading = false;
-    }
+    rows = await readBoardRows(options.root, now(), rows);
+    reading = false;
     changed();
     if (!stopped())
       timer = setTimeout(() => {

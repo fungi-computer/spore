@@ -127,11 +127,17 @@ export async function runDoctor(options: {
     report(
       "connectivity",
       reachable,
-      reachable ? "HTTP endpoint reachable" : "Endpoint unavailable",
+      reachable
+        ? "HTTP endpoint reachable"
+        : "Endpoint unavailable. Check your network connection, then run fungi doctor.",
     );
   } catch (cause) {
     reportFailure("doctor-connectivity-check", cause);
-    report("connectivity", false, "Check your network connection");
+    report(
+      "connectivity",
+      false,
+      "Check your network connection, then run fungi doctor.",
+    );
   }
   report("version", true, options.version + " (installed)");
   if (unfinished.length > 0)

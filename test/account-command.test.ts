@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { homedir } from "node:os";
-import { join } from "node:path";
 import { test } from "bun:test";
 import { runFungiCli } from "../src/cli.js";
-import { createPrivateCredentialStore } from "@fungi.computer/truffle";
-import type { OAuthCredential } from "@earendil-works/pi-ai";
 import { createIsolatedCliEnvironment } from "./cli-test-isolation.js";
 
 test("fungi account --json reads the isolated home's Fungi account", async () => {
@@ -61,63 +58,29 @@ test("fresh account and teams commands both exit 0 and say not signed in", async
   }
 }, 15000);
 
-test("credential activation CLI uses stdin, fails closed on conflict and never outputs credentials", async () => {
-  const isolated = await createIsolatedCliEnvironment();
-  const { home } = isolated;
-  const first = {
-    type: "oauth",
-    access: "fake-cli-secret-first",
-    refresh: "fake-cli-secret-refresh",
-    expires: Date.now() + 3_600_000,
-    accountId: "fake-account",
-  } satisfies OAuthCredential;
-  const next = { ...first, access: "fake-cli-secret-next" };
-  async function activate(
-    expected: OAuthCredential | null,
-    credential: OAuthCredential,
-  ) {
-    const child = Bun.spawn(
-      [
-        process.execPath,
-        new URL("../src/cli.tsx", import.meta.url).pathname,
-        "account",
-        "use-credential",
-        "--provider",
-        "anthropic",
-        "--from-file",
-        "-",
-      ],
+test("account exposes no subscription credential import commands", async () => {
+  for (const command of ["use-credential", "prepare-credential"]) {
+    let output = "";
+    const io = {
+      stdout: {
+        write: (chunk: string) => {
+          output += chunk;
+          return true;
+        },
+      },
+    };
+    await assert.rejects(
+      runFungiCli(["account", command, "--provider", "anthropic"], io),
       {
-        env: isolated.env,
-        stdin: "pipe",
-        stdout: "pipe",
-        stderr: "pipe",
+        name: "Error",
+        message:
+          "Usage: fungi account [--json] | teams [--json] | use-team <team-id> | balance [--json]",
       },
     );
-    await child.stdin.write(JSON.stringify({ expected, credential }));
-    await child.stdin.end();
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    assert.equal(`${stdout}${stderr}`.includes("fake-cli-secret"), false);
-    return { stdout, stderr, code };
+    assert.equal(output, "");
   }
-  try {
-    assert.equal((await activate(null, first)).code, 0);
-    assert.equal((await activate(first, next)).code, 0);
-    const conflict = await activate(first, first);
-    assert.equal(conflict.code, 1);
-    assert.deepEqual(JSON.parse(conflict.stdout), {
-      ok: false,
-      error: { category: "conflict" },
-    });
-    const saved = await createPrivateCredentialStore(
-      join(home, ".config/fungi/credentials.json"),
-    ).read("anthropic");
-    assert.equal(saved?.type === "oauth" && saved.access === next.access, true);
-  } finally {
-    await isolated.cleanup();
-  }
-}, 15000);
+  await assert.rejects(
+    runFungiCli(["account", "--from-file", "-"]),
+    /--from-file is only valid with mcp use/u,
+  );
+});

@@ -64,7 +64,8 @@ export async function chooseLoginProvider(
       collapsedGroup: "More providers",
       signal: controller.signal,
     });
-    if (isCancel(selected)) throw new Error("Login cancelled.");
+    if (isCancel(selected))
+      throw new Error("Login cancelled. Run fungi login to try again.");
     return selected;
   } finally {
     signals.off("SIGINT", stop);

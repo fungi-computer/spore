@@ -34,9 +34,11 @@ provider's browser sign-in, then return to your terminal and send a prompt. You
 can also choose an API key or Fungi models. A Fungi account is optional when you
 use your own subscription.
 
-To change your sign-in later, run `fungi login`. It opens the same
-model-provider chooser. Use `fungi login --help` for direct provider options.
-Login does not change an existing Session's model; use `/model` to choose one.
+To change your sign-in later, run `fungi login` in an interactive terminal. It
+opens the same model-provider chooser. Without an interactive terminal, bare
+`fungi login` selects Fungi. Use `fungi login --help` for direct provider
+options. Login does not change an existing Session's model; use `/model` to
+choose one.
 
 For hosted Fungi models, run `fungi login --provider fungi`, approve browser
 sign-in and choose the Team that pays for models. Hosted models need Team
@@ -86,6 +88,9 @@ fungi resume
 configuration and HTTP reachability without displaying credentials. On an
 unsupported platform it reports the platform limit and leaves sign-in unchecked.
 It does not send a model prompt, verify Team credit or check for updates.
+Unfinished steps say SETUP and give the next command. A failed network check
+says FAIL: restore your connection, then run `fungi doctor` again. To retry a
+cancelled sign-in, run `fungi login`.
 
 Run these in the same project folder. `fungi stop` stops the shared service for
 all local clients without deleting saved Sessions. After updating the CLI,

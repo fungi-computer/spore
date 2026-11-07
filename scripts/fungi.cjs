@@ -5,6 +5,15 @@ const { createHash } = require("node:crypto");
 const { readFileSync } = require("node:fs");
 const { release, cpus } = require("node:os");
 
+// Match the published package's Node engine before loading platform dependencies.
+const [nodeMajor, nodeMinor] = process.versions.node.split(".").map(Number);
+if (nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 13)) {
+  console.error(
+    `Fungi CLI needs Node 22.13 or newer; found ${process.versions.node}. Install Node 22.13 or newer, reinstall with npm i -g @fungi.computer/spore, then run fungi.`,
+  );
+  process.exit(1);
+}
+
 const runtimes = {
   "linux-x64": "@oven/bun-linux-x64/bin/bun",
   "linux-arm64": "@oven/bun-linux-aarch64/bin/bun",
@@ -60,7 +69,7 @@ function nativeResolution() {
 }
 if (nativeResolution().kind === "missing") {
   console.error(
-    `Fungi's native package for ${platform} is missing or doesn't match this version. Reinstall: npm i -g @fungi.computer/spore@${sporeVersion}`,
+    `Fungi's native package for ${platform} is missing or doesn't match this version. Reinstall: npm i -g @fungi.computer/spore@${sporeVersion} --include=optional`,
   );
   process.exit(1);
 }

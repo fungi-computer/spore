@@ -366,16 +366,3 @@ for (const command of [
     );
   });
 }
-
-test("credential subcommands still validate their own earlier boundary", async () => {
-  await expectError(
-    { args: ["account", "prepare-credential"] },
-    [],
-    "Usage: fungi account prepare-credential --provider anthropic|openai",
-  );
-  await expectError(
-    { args: ["account", "use-credential"] },
-    [],
-    "Usage: fungi account use-credential --provider anthropic|openai --from-file -",
-  );
-});

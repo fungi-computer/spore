@@ -54,6 +54,8 @@ function agent(
     owned: true,
     sessions,
     attention: new Map(attention),
+    parents: new Map(sessions.map((session) => [session.sessionId, null])),
+    waitingNotRead: 0,
   };
 }
 
@@ -104,6 +106,88 @@ test("an inbox-false question counts as waiting on an agent, never needs you", (
   );
   expect(rows.needs).toEqual([]);
   expect(rows.lanes.map(({ state }) => state)).toEqual(["waiting_on_agent"]);
+});
+
+test("only the exact parent's explicit escalation is escalatedByParent", () => {
+  const parent = { agentId: "shiitake", sessionId: "lead", name: "Shiitake" };
+  for (const [by, reason, expected] of [
+    [parent, "escalated", true],
+    [{ ...parent, sessionId: "sibling-session" }, "escalated", false],
+    [parent, "sender_archived", false],
+    [parent, "sender_absent", false],
+  ] as const) {
+    const child = {
+      ...agent(
+        "sol",
+        [row("s", "needs_you")],
+        [
+          [
+            "s",
+            [
+              {
+                ...item("question", "Budget?", now - minute),
+                escalated: { by, reason, note: "Decision" },
+              },
+            ],
+          ],
+        ],
+      ),
+      parents: new Map([["s", parent]]),
+    };
+    const view = project(readRows([child], now), [], collapsed);
+    expect(view.needsYou[0]).toMatchObject({
+      parent,
+      escalated: { by, reason },
+      escalatedByParent: expected,
+    });
+    const title = boardView(view, { now, width: 100 }).sections[0]?.rows[0]
+      ?.title;
+    expect(title).toContain(
+      reason === "escalated"
+        ? "escalated by Shiitake"
+        : reason === "sender_archived"
+          ? "Shiitake archived"
+          : "Shiitake is gone",
+    );
+  }
+});
+
+test("a waiting lane names its recipient and never hides unread waiting Sessions", () => {
+  const parent = { agentId: "shiitake", sessionId: "lead", name: "Shiitake" };
+  const child = {
+    ...agent(
+      "sol",
+      [row("s", "done")],
+      [
+        [
+          "s",
+          [
+            {
+              ...item("question", "Branch?", now - minute, true),
+              waitingOn: parent,
+            },
+          ],
+        ],
+      ],
+    ),
+    parents: new Map([["s", parent]]),
+    waitingNotRead: 2,
+  };
+  const view = project(readRows([child], now), [], {
+    lanes: true,
+    shipping: false,
+  });
+  expect(view.lanes.shown[0]).toMatchObject({
+    state: "waiting_on_agent",
+    waitingOn: parent,
+    parent,
+    waitingNotRead: 2,
+  });
+  expect(
+    boardView(view, { now, width: 100 })
+      .sections.flatMap((section) => section.rows)
+      .find((item) => item.id === "lane/sol")?.title,
+  ).toContain("waiting on Shiitake: Branch? · 2 more waiting");
 });
 
 test("goal-blocked and goal-stalled read stuck; goal-waiting reads working", () => {

@@ -4,6 +4,7 @@ import { testRender } from "@opentui/react/test-utils";
 import { CopySurface } from "../src/button/copy-surface.js";
 import { UpdateToasts, updateToast } from "../src/update-toasts.js";
 import type { UpdateNotification } from "../src/update-notifications.js";
+import { pressDecodedKey } from "./native-readiness.js";
 
 test("available updates keep the shared default duration; restart waits for explicit action", () => {
   const restart = () => undefined;
@@ -50,8 +51,13 @@ test("update facts use the shared toast and its restart action, then release the
         frame.includes("Fungi 1.1.0 is available: run fungi update"),
       );
     });
-    act(() => {
+    // A lone Escape byte is ambiguous until the input parser's timeout flushes
+    // it; await the real decoded keypress before the next notification.
+    await pressDecodedKey(setup, () => {
       setup.mockInput.pressEscape();
+    });
+    expect(setup.captureCharFrame()).not.toContain("Fungi 1.1.0 is available");
+    act(() => {
       notify?.({ kind: "restart", version: "1.1.0" });
     });
     await act(async () => {

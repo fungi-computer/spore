@@ -54,6 +54,22 @@ const defaultAgents: SubagentsProjection["agents"] = [
   },
 ];
 
+/** Count each parent and reason separately, as the host projection does. */
+function escalationCounts(agents: SubagentsProjection["agents"]) {
+  const groups = new Map<string, SubagentsProjection["escalatedBy"][number]>();
+  for (const agent of agents) {
+    if (agent.state !== "needs_you" || agent.escalated === undefined) continue;
+    const { by: name, reason } = agent.escalated;
+    const key = `${reason}:${name}`;
+    groups.set(key, {
+      name,
+      reason,
+      count: (groups.get(key)?.count ?? 0) + 1,
+    });
+  }
+  return [...groups.values()];
+}
+
 /** The host's slot, with the `/agents` command it advertises. */
 const slotsFor = (
   expanded: boolean,
@@ -81,6 +97,32 @@ const slotsFor = (
     value: Schema.encodeSync(SubagentsProjection)({
       agents,
       more: 0,
+      uncounted: 0,
+      counts: {
+        working: agents.filter((agent) => agent.state === "working").length,
+        waiting_on_agent: agents.filter(
+          (agent) => agent.state === "waiting_on_agent",
+        ).length,
+        needs_you: agents.filter((agent) => agent.state === "needs_you").length,
+        idle: agents.filter((agent) => agent.state === "idle").length,
+        failed: agents.filter((agent) => agent.state === "failed").length,
+        unavailable: agents.filter((agent) => agent.state === "unavailable")
+          .length,
+      },
+      escalated: agents.filter(
+        (agent) => agent.escalated !== undefined && agent.state === "needs_you",
+      ).length,
+      waitingOn: [
+        ...new Set(
+          agents.flatMap((agent) =>
+            agent.waitingOn === undefined ? [] : [agent.waitingOn],
+          ),
+        ),
+      ].map((name) => ({
+        name,
+        count: agents.filter((agent) => agent.waitingOn === name).length,
+      })),
+      escalatedBy: escalationCounts(agents),
       expanded,
     }),
   },
@@ -283,7 +325,7 @@ for (const [width, height] of [
     };
     try {
       await frame(
-        (value) => value.includes("4 sub-agents · 1 working · 1 needs you"),
+        (value) => value.includes("2 sub-agents · 1 working · 1 needs you"),
         "collapsed on first render",
       );
       expect(setup.captureCharFrame()).not.toContain("Scribe · idle");
@@ -294,12 +336,12 @@ for (const [width, height] of [
         (value) => value.includes("Scribe · idle"),
         "rows listed after /agents",
       );
-      expect(setup.captureCharFrame()).not.toContain("4 sub-agents");
+      expect(setup.captureCharFrame()).not.toContain("2 sub-agents");
       expect(toastCorner()).toBe("");
       expect(calls).toEqual(["agents"]);
       await run();
       await frame(
-        (value) => value.includes("4 sub-agents · 1 working · 1 needs you"),
+        (value) => value.includes("2 sub-agents · 1 working · 1 needs you"),
         "collapsed after a second /agents",
       );
       expect(calls).toEqual(["agents", "agents"]);
@@ -326,6 +368,7 @@ const escalatedCritic: SubagentsProjection["agents"][number] = {
   name: "Critic",
   sessionId: "critic-main",
   state: "needs_you",
+  escalated: { by: "Shiitake", reason: "escalated" },
   attention: "Price",
   ask: {
     askId: "ask-price",
@@ -380,6 +423,12 @@ async function footerFor(
           type: "prompt",
           prompt: {
             type: "decision",
+            // The escalated fixture is an explicit parent handoff, as the real
+            // answerChild prompt's summary records (covered in subagents.test).
+            summary:
+              child.escalated === undefined
+                ? `${child.name} asks`
+                : `${child.name} asks · escalated by ${child.escalated.by}`,
             message: question.question,
             options: question.options.map((option) => ({
               value: option.label,
@@ -471,6 +520,7 @@ test("an escalated question shows inline with Answer, and only then is this conv
     const taken = await footer.frame("1. $0");
     expect(taken).toContain("Price: $0 or $50?");
     expect(taken).toContain("Scout · waiting on Shiitake");
+    expect(taken).toContain("escalated by Shiitake");
     expect(taken).toContain("waiting on you");
     expect(footer.calls).toEqual([
       { agentId: "agent-critic", sessionId: "critic-main", askId: "ask-price" },
@@ -484,12 +534,12 @@ test("the collapsed summary is amber only for needs you", async () => {
   const calm = await footerFor([calmScout], false);
   const needing = await footerFor([calmScout, escalatedCritic], false);
   try {
-    expect(calm.text).toContain("1 sub-agent · 1 waiting on Shiitake");
+    expect(calm.text).toContain("0 sub-agents · 1 waiting on Shiitake");
     expect(needing.text).toContain(
-      "2 sub-agents · 1 waiting on Shiitake · 1 needs you",
+      "1 sub-agent · 1 waiting on Shiitake · 1 needs you",
     );
     expect(calm.ink("sub-agent")).toBeDefined();
-    expect(calm.ink("sub-agent")).not.toBe(needing.ink("sub-agents"));
+    expect(calm.ink("sub-agent")).not.toBe(needing.ink("sub-agent"));
   } finally {
     await calm.close();
     await needing.close();

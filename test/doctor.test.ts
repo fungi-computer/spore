@@ -37,3 +37,28 @@ test("doctor prints the current FAILED code/since without starting a service", a
   expect(output).toContain(`FAILED sink-write-failed since ${since}`);
   expect(reads).toBe(1);
 });
+
+test("doctor gives a retry command when the network request fails", async () => {
+  let output = "";
+  const passed = await runDoctor({
+    localServiceStatus: () => Promise.resolve(undefined),
+    fungiAccount: () => Promise.resolve(undefined),
+    models: {
+      getProviders: () => [],
+      checkAuth: () => Promise.resolve(undefined),
+      login: () => Promise.reject(new Error("unused")),
+      logout: () => Promise.resolve(),
+    },
+    connect: () => Promise.reject(new TypeError("fetch failed")),
+    version: "fixture",
+    write: (text) => {
+      output += text;
+    },
+  });
+  expect(passed).toBe(false);
+  expect(output).toContain(
+    "Check your network connection, then run fungi doctor.",
+  );
+  expect(output).not.toContain("TypeError");
+  expect(output).toContain("PASS version:");
+});

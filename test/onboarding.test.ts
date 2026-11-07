@@ -185,7 +185,9 @@ test("doctor reports actual failed checks without exposing credentials or blocki
   expect(output).not.toContain("FAIL sign-in");
   expect(output).toContain(`Platform: ${process.platform} ${process.arch}`);
   expect(output).toContain("glibc:");
-  expect(output).toContain("FAIL connectivity");
+  expect(output).toContain(
+    "FAIL connectivity: Endpoint unavailable. Check your network connection, then run fungi doctor.",
+  );
   expect(output).toContain("PASS version: 0.1.0");
 });
 

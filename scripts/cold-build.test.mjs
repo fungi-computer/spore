@@ -67,6 +67,8 @@ test("TUI builds and checks in a clean checkout after Parakeet cache restoration
       "--concurrency=4",
       `--cache=${cacheMode}`,
       "--output-logs=new-only",
+      "--log-order=stream",
+      "--log-prefix=task",
     ]);
   }
 

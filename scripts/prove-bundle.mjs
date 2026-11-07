@@ -138,10 +138,13 @@ try {
   assert.deepEqual(nativeManifest.cpu, [process.arch]);
   if (process.platform === "linux")
     assert.deepEqual(nativeManifest.libc, ["glibc"]);
-  assert.match(
-    await readFile(join(packageRoot, "README.md"), "utf8"),
-    /fungi acp/,
+  const readme = await readFile(join(packageRoot, "README.md"), "utf8");
+  assert.equal(
+    readme,
+    await readFile(new URL("../npm/README.md", import.meta.url), "utf8"),
+    "The installed Spore README must match the current npm source",
   );
+  assert.match(readme, /fungi acp/);
   assert.match(
     await readFile(join(packageRoot, "THIRD_PARTY_NOTICES"), "utf8"),
     /THIRD-PARTY NOTICES/,
@@ -242,7 +245,7 @@ try {
     assert.notEqual(missing.status, 0);
     assert.equal(
       missing.stderr,
-      `Fungi's native package for ${platform} is missing or doesn't match this version. Reinstall: npm i -g @fungi.computer/spore@${version}\n`,
+      `Fungi's native package for ${platform} is missing or doesn't match this version. Reinstall: npm i -g @fungi.computer/spore@${version} --include=optional\n`,
     );
   } finally {
     await rename(hiddenNative, nativeRoot);

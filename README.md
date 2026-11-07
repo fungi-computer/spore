@@ -7,23 +7,23 @@ runtime.
 
 ## Install and start
 
-The user install path is `@fungi.computer/spore`, with Node 22.13 or newer. This
-private `@fungi.computer/spore` workspace supplies its terminal implementation.
-It is not the package to install globally.
-
-Install with npm, then sign in through your browser:
+Install Spore with Node 22.13 or newer on Linux or macOS, then run it in your
+project folder:
 
 ```sh
 npm i -g @fungi.computer/spore
-fungi login --provider fungi
-fungi doctor
 fungi
 ```
 
-Run from your project folder. You can skip first-run setup. Fungi login opens
-browser approval and selects the Team that pays for hosted models. With one
-current Team, selection is automatic. Use `/model` to choose Fungi and a model
-such as Luna. Login does not change an existing model selection.
+Choose **Use my Claude or ChatGPT subscription**, finish the provider's browser
+sign-in, then return to the terminal and send a prompt. You can also choose an
+API key or Fungi models. A Fungi account is optional with your own subscription.
+Run `fungi doctor` to check setup; unfinished steps say SETUP and give the next
+command. To retry a cancelled sign-in, run `fungi login`.
+
+For hosted models, run `fungi login --provider fungi` and choose the Team that
+pays for models. Hosted models need Team credit. Login does not change an
+existing Session's model selection.
 
 Inside the terminal, `/model` chooses a model and `/thinking` selects a
 supported level. **Use agent model** clears the Session override. Choices are
@@ -39,11 +39,11 @@ confirmation, as does removing a saved rule; both confirmations default to
 keeping the current permissions. Rules are shared by Workspace Agents in the
 project, while the mode belongs to the selected Agent.
 
-`fungi login` defaults to Fungi. Choose another provider explicitly with
-`fungi login --provider <id>` or `/login` inside a conversation. A Fungi sign-in
-refusal asks for another login, a credit refusal names the Team to fund, and a
-paused or unreachable service requires retrying when available. Fungi failure
-does not fall back to another model provider.
+`fungi login` opens the model-provider chooser in a terminal. Choose a provider
+directly with `fungi login --provider <id>` or `/login` inside a conversation. A
+Fungi sign-in refusal asks for another login, a credit refusal names the Team to
+fund, and a paused or unreachable service requires retrying when available.
+Fungi failure does not fall back to another model provider.
 
 ## Work, resume and recover
 

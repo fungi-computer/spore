@@ -1,5 +1,48 @@
 # @fungi.computer/spore
 
+## 0.9.0
+
+### Minor Changes
+
+- Changes since 0.8.3:
+
+  - fix(tests): align release fixtures with scheduler and CI contracts
+  - fix(release): bound declared upgrade resets by the stamped candidate
+  - fix(release): rehearse a declared Local Session reset across upgrade
+  - fix(spore): guide retries after Fungi account login fails
+  - fix(spore): restore optional packages in reinstall advice
+  - fix(spore): show a retry command after provider login fails
+  - fix(spore): give first-time users actionable setup recovery
+  - fix(subagents): keep escalation provenance in composer questions
+  - fix(runtime): align attention fixtures and unsafe command inventory
+  - feat(board): expose a stable headless attention snapshot
+  - fix(subagents): report children beyond the status read ceiling
+  - fix(subagents): count every child before prioritizing footer rows
+  - fix(cli): remove subscription credential import commands
+  - fix(subagents): retain promotion reasons and join Pi timers
+  - fix(subagents): merge integration and finish active footer counts
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/agar@0.7.2
+  - @fungi.computer/gills@0.2.2
+  - @fungi.computer/nacre@0.2.1
+  - @fungi.computer/parakeet@0.9.0
+  - @fungi.computer/shiitake-extensions@0.6.7
+  - @fungi.computer/shiitake@0.12.0
+  - @fungi.computer/truffle@0.9.0
+  - @fungi.computer/veil@0.6.2
+  - @fungi.computer/corral@0.1.13
+  - @fungi.computer/approvals@0.2.1
+
 ## 0.8.3
 
 ### Patch Changes

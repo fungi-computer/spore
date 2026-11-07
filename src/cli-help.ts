@@ -10,7 +10,11 @@ const help = `Usage: fungi [command] [options]
 Start here:
   fungi                          Open your conversations in this folder
   fungi new                      Start a new conversation
-  fungi login                    Sign in to Fungi, a subscription or an API key
+  fungi login                    Choose a subscription, API key or Fungi models
+
+First time? Run fungi in your project folder, choose your Claude or ChatGPT
+subscription, finish browser sign-in, then send a prompt. A provider API key
+or funded Fungi Team also works. Check unfinished setup with fungi doctor.
 
 Conversations:
   fungi resume [<id>] [--last]   Reopen a saved conversation
@@ -185,11 +189,15 @@ Installed with install.sh? Run the install command again instead.
 Git credential helper for a Fungi Team's tracker. Git runs it for you; it is
 not meant to be run by hand.
 `,
-    board: `Usage: fungi board [-C <directory>]
+    board: `Usage: fungi board [-C <directory>] [--json]
 
 Show what needs you across this folder's Agents, which Agents are stuck, and
 what shipped today. It reads each Agent's saved state without starting the
-Agent. What shipped comes from board.shipping in .fungi/settings.json (in the
+Agent. --json prints what needs attention once, as schemaVersion 1, for scripts
+and Agents. It needs no terminal. It includes parents, ages and escalation
+provenance, without the display cut. It reads no shipping source. A failed read
+is written as readFailure before exiting non-zero.
+What shipped comes from board.shipping in .fungi/settings.json (in the
 folder or your home), as git or npm sources:
   {"board":{"shipping":[{"kind":"git","ref":"main","shows":"landed"},
                         {"kind":"npm","packages":["@scope/package"]}]}}

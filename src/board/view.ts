@@ -113,10 +113,19 @@ const laneLabel = {
 
 function needsRow(item: NeedsYou, now: number, compact: boolean): BoardRow {
   const waited = age(item.since, now);
+  const escalation = item.escalated;
+  const provenance =
+    escalation === null
+      ? ""
+      : escalation.reason === "escalated"
+        ? ` · escalated by ${escalation.by.name}`
+        : escalation.reason === "sender_archived"
+          ? ` · ${escalation.by.name} archived`
+          : ` · ${escalation.by.name} is gone`;
   return {
     id: item.id,
     tone: "attention",
-    title: `${item.agentName} · ${item.summary}`,
+    title: `${item.agentName} · ${item.summary}${provenance}`,
     meta: compact
       ? waited
       : [item.kind, item.sessionTitle, waited]
@@ -127,14 +136,15 @@ function needsRow(item: NeedsYou, now: number, compact: boolean): BoardRow {
 }
 
 function laneRow(lane: Lane, now: number): BoardRow {
-  const label =
-    lane.detail === undefined
-      ? laneLabel[lane.state]
-      : `${laneLabel[lane.state]}: ${lane.detail}`;
+  const state =
+    lane.state === "waiting_on_agent" && lane.waitingOn !== null
+      ? `waiting on ${lane.waitingOn.name}`
+      : laneLabel[lane.state];
+  const label = lane.detail === undefined ? state : `${state}: ${lane.detail}`;
   const row = {
     id: `lane/${lane.agentId}`,
     tone: laneTone[lane.state],
-    title: `${lane.name} · ${label}`,
+    title: `${lane.name} · ${label}${lane.waitingNotRead === 0 ? "" : ` · ${String(lane.waitingNotRead)} more waiting`}`,
     meta:
       lane.state === "failed" && lane.since !== null
         ? clock(lane.since)
