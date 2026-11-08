@@ -19,7 +19,8 @@ import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/servic
 import { localExtensions } from "@fungi.computer/truffle/extensions";
 import { manageLocalExecRules } from "@fungi.computer/truffle/rules";
 import { createIsolatedCliEnvironment } from "./cli-test-isolation.js";
-import { runFungiCli } from "../src/cli.js";
+import { ShiitakeError } from "@fungi.computer/shiitake";
+import { fungiCliFailureLine, runFungiCli } from "../src/cli.js";
 
 const cliVersion = z
   .looseObject({ version: z.string().min(1) })
@@ -1551,45 +1552,53 @@ test("fungi logout --provider fungi signs out through the shared Fungi account o
 });
 
 test("fungi run --workspace tells an unsigned user how to sign in and exits 1 without a stack", async () => {
-  const isolated = await createIsolatedCliEnvironment();
-  const executable = [
-    process.execPath,
-    new URL("../src/cli.tsx", import.meta.url).pathname,
-  ];
-  const cwd = await mkdtemp(join(tmpdir(), "fungi-cli-run-"));
+  const home = await mkdtemp(join(tmpdir(), "fungi-cli-run-"));
+  let stderr = "";
+  const stream = {
+    write: (chunk: string | Uint8Array) => {
+      stderr += String(chunk);
+      return true;
+    },
+  };
+  const rejected = new ShiitakeError(
+    "model",
+    "rejected",
+    "No signed-in model provider is available. Use your own Claude or ChatGPT subscription: /login in a Session, or fungi login --provider anthropic --auth-type oauth (Claude) or fungi login --provider openai --auth-type oauth (ChatGPT) in the CLI. For hosted Fungi: fungi login --provider fungi.",
+  );
   try {
-    const child = Bun.spawn([...executable, "run", "--workspace", "hello"], {
-      cwd,
-      env: isolated.env,
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: 10000,
-    });
-    const [stderr] = await Promise.all([
-      new Response(child.stderr).text(),
-      new Response(child.stdout).text(),
-    ]);
-    expect(await child.exited).toBe(1);
-    expect(stderr).toContain(
-      "Use your own Claude or ChatGPT subscription: /login in a Session, or fungi login --provider anthropic --auth-type oauth (Claude) or fungi login --provider openai --auth-type oauth (ChatGPT) in the CLI. For hosted Fungi, run fungi login --provider fungi.\nfungi: No signed-in model provider is available.",
+    await assert.rejects(
+      runFungiCli(
+        ["run", "--workspace", "hello"],
+        {
+          cwd: home,
+          stderr: stream,
+          authModels: {
+            getProviders: () =>
+              createPrivateModels()
+                .getProviders()
+                .filter((provider) => provider.id === "openai"),
+            checkAuth: () => Promise.resolve(undefined),
+            login: () => Promise.reject(new Error("unused")),
+            logout: () => Promise.resolve(),
+          },
+        },
+        {
+          createServiceManager: () => ({
+            ...createPrivateLocalServiceManager({ home }),
+            connect: () => Promise.reject(rejected),
+          }),
+        },
+        home,
+      ),
+      (cause) => cause === rejected,
     );
-    expect(stderr).not.toContain("model:rejected");
-    expect(stderr).not.toMatch(/\n\s+at |Error:|terminal outcome/u);
   } finally {
-    const stop = Bun.spawn([...executable, "stop"], {
-      cwd,
-      env: isolated.env,
-      stdout: "ignore",
-      stderr: "ignore",
-      timeout: 5000,
-    });
-    try {
-      await stop.exited;
-    } finally {
-      await Promise.all([
-        rm(cwd, { recursive: true, force: true }),
-        isolated.cleanup(),
-      ]);
-    }
+    await rm(home, { recursive: true, force: true });
   }
-}, 20000);
+  stream.write(fungiCliFailureLine(rejected));
+  expect(stderr).toContain(
+    "Use your own Claude or ChatGPT subscription: /login in a Session, or fungi login --provider anthropic --auth-type oauth (Claude) or fungi login --provider openai --auth-type oauth (ChatGPT) in the CLI. For hosted Fungi, run fungi login --provider fungi.\nfungi: No signed-in model provider is available.",
+  );
+  expect(stderr).not.toContain("model:rejected");
+  expect(stderr).not.toMatch(/\n\s+at |Error:|terminal outcome/u);
+});

@@ -65,7 +65,11 @@ import {
   type PrivateLocalServiceSelection,
 } from "@fungi.computer/truffle/service";
 import { linearAuthInteraction } from "@fungi.computer/truffle/auth";
-import { hasOnboarding, runOnboarding } from "./onboarding.js";
+import {
+  hasOnboarding,
+  modelLoginMissing,
+  runOnboarding,
+} from "./onboarding.js";
 import { helpFor } from "./cli-help.js";
 import {
   chooseSignInDoor,
@@ -73,7 +77,6 @@ import {
   type SignInDoor,
 } from "./sign-in-choice.js";
 import { runDoctor } from "./doctor.js";
-import { reportFailure } from "./button/log-event.js";
 import {
   forgetProjectMcpConnection,
   readProjectMcpConnection,
@@ -121,24 +124,6 @@ const sessionClients = [
 const fungiVersion = z
   .looseObject({ version: z.string().min(1) })
   .parse(createRequire(import.meta.url)("../package.json")).version;
-
-type ModelAuthCheck = Pick<
-  NonNullable<LocalAuthCliOptions["models"]>,
-  "checkAuth"
->;
-
-/** Check the chosen provider; another login never satisfies the Fungi default. */
-async function modelLoginMissing(
-  models: ModelAuthCheck,
-  providerId = "fungi",
-): Promise<boolean> {
-  try {
-    return (await models.checkAuth(providerId)) === undefined;
-  } catch (cause) {
-    reportFailure("model-login-check", cause);
-    return false;
-  }
-}
 
 export type FungiCliIo = Readonly<{
   cwd?: string | undefined;
@@ -1618,7 +1603,7 @@ export async function runFungiCli(
       );
     } catch (cause) {
       if (await modelLoginMissing(models(), arguments_.values.provider))
-        process.stderr.write(`${fungiModelLoginNotice}\n`);
+        (io.stderr ?? process.stderr).write(`${fungiModelLoginNotice}\n`);
       throw cause;
     }
   } else {
@@ -1721,6 +1706,11 @@ function validateFungiConnectionOptions(
   validateFungiConnectedMode(command, last, options);
 }
 
+/** The single `fungi:` line a failed command prints, never a stack. */
+export function fungiCliFailureLine(cause: unknown): string {
+  return `fungi: ${cause instanceof Error ? userFacingCause(cause.message) : "Command failed"}\n`;
+}
+
 if (import.meta.main) {
   // Source launches and internal-service starts have the same release source
   // as the npm launcher; Local must never read the TUI source manifest.
@@ -1742,9 +1732,7 @@ if (import.meta.main) {
       await runFungiCli(process.argv.slice(2), { cwd: process.cwd() });
     }
   } catch (cause) {
-    process.stderr.write(
-      `fungi: ${cause instanceof Error ? userFacingCause(cause.message) : "Command failed"}\n`,
-    );
+    process.stderr.write(fungiCliFailureLine(cause));
     process.exitCode = 1;
   }
 }

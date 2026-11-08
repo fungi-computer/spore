@@ -177,3 +177,9 @@ test("fungi vm without Lima prints how to install it", async () => {
     message: /fungi vm needs Lima/u,
   });
 });
+
+test("the default template ships inside Spore with no home mount", async () => {
+  const template = await Bun.file(fungiVmTemplate).text();
+  expect(template).toContain("mounts: []");
+  expect(template).not.toContain("- template:_default/mounts");
+});

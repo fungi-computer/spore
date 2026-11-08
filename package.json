@@ -1,6 +1,6 @@
 {
   "name": "@fungi.computer/spore",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "private": false,
   "type": "module",
   "bin": {
@@ -11,7 +11,7 @@
     "clean": "node --input-type=module --eval \"import { rm } from 'node:fs/promises'; await rm('dist', { recursive: true, force: true });\"",
     "lint": "eslint src test --max-warnings=0 && ../../node_modules/.bin/oxlint --config ../../oxlint.config.ts --deny-warnings src test",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "pnpm run whats-new && pnpm run clean && tsc -p tsconfig.build.json && node scripts/build-tool-sigils.mjs && cp .botanical/whats-new.json dist/whats-new.json",
+    "build": "pnpm run whats-new && pnpm run clean && tsc -p tsconfig.build.json && node scripts/build-tool-sigils.mjs && cp .botanical/whats-new.json dist/whats-new.json && mkdir -p dist/lima && cp src/lima/fungi-vm.yaml dist/lima/fungi-vm.yaml",
     "whats-new": "node ../../tooling/release/whats-new.mjs --write",
     "test": "pnpm run test:unit && pnpm run test:merge",
     "test:unit": "bash ../../tooling/proof-runner/hermetic-host.sh -- node scripts/test-unit.mjs",

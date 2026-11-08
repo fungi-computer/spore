@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
-import { hasOnboarding, runOnboarding } from "../src/onboarding.js";
+import {
+  hasOnboarding,
+  modelLoginMissing,
+  runOnboarding,
+} from "../src/onboarding.js";
 import { linearAuthInteraction } from "@fungi.computer/truffle/auth";
 import { runDoctor } from "../src/doctor.js";
 
@@ -287,4 +291,19 @@ test("doctor reports saved Fungi sign-in and a ready model without credential va
   expect(output).toContain("PASS version: 0.0.1 (installed)");
   expect(output).not.toContain("https://hub.test");
   expect(output).not.toContain("team-1");
+});
+
+test("first-run setup is skipped when any provider already has a login", async () => {
+  const signedIn = (id: string) => ({
+    getProviders: () => [
+      { id: "fungi" },
+      { id: "anthropic" },
+      { id: "openai" },
+    ],
+    checkAuth: (provider: string) =>
+      Promise.resolve(provider === id ? { type: "oauth" } : undefined),
+  });
+  expect(await modelLoginMissing(signedIn("anthropic"))).toBe(false);
+  expect(await modelLoginMissing(signedIn("none"))).toBe(true);
+  expect(await modelLoginMissing(signedIn("anthropic"), "openai")).toBe(true);
 });

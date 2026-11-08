@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { access } from "node:fs/promises";
 import { basename } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 export const vmCommandHelp = `Usage: fungi vm [--yolo|--workspace|--read-only] [--template <file|url>]
@@ -9,22 +11,27 @@ export const vmCommandHelp = `Usage: fungi vm [--yolo|--workspace|--read-only] [
        fungi vm rm [--yes]
 
 Open Shiitake in a Lima Linux VM that mounts only this project folder. The
-first run creates the VM from Fungi's Lima template; later runs start it again
-and open fungi inside it, in this folder. The agent can change and run
+first run creates the VM from the Lima template inside Spore; later runs start
+it again and open fungi inside it, in this folder. The agent can change and run
 anything in this project folder and reach the internet. Your home folder and
-SSH keys are not mounted. Needs Lima: brew install lima on macOS, or
+SSH keys are not mounted. A firewall rule inside the VM blocks your computer's
+localhost; root in the VM could remove it. Needs Lima: brew install lima on macOS, or
 https://lima-vm.io/docs/installation/ on Linux.
 
-  login      Run fungi login in the VM, forwarding port 1455 while it runs
-             so a ChatGPT browser sign-in can finish
+  login      Show the VM's logins, then run fungi login in it. Claude uses
+             copy-code sign-in; port 1455 is forwarded while it runs so a
+             ChatGPT browser sign-in can finish
   stop       Stop the VM; its disk, tools and logins are kept
   rm         Delete a stopped VM and its disk; the project folder stays
 
-      --template <file|url>      Lima template for a new VM (default: Fungi's)
+      --template <file|url>      Lima template for a new VM (default: Spore's)
       --yes                      Delete without asking
 `;
 
-export const fungiVmTemplate = "https://docs.fungi.computer/lima/fungi-vm.yaml";
+/** The Lima template shipped in this Spore; never fetched at run time. */
+export const fungiVmTemplate = fileURLToPath(
+  new URL("./lima/fungi-vm.yaml", import.meta.url),
+);
 
 /** One native command; resolves with its exit code, or "missing" for ENOENT. */
 export type VmRunner = Readonly<{
@@ -117,9 +124,18 @@ async function ensureRunning(
 ): Promise<LimaInstance> {
   const existing = await readInstance(runner, name);
   if (existing === undefined) {
+    const template = input.template ?? fungiVmTemplate;
+    if (input.template === undefined)
+      await access(template).catch((cause: unknown) => {
+        throw new Error(
+          `Spore's VM template is missing at ${template}. Reinstall Spore: npm i -g @fungi.computer/spore`,
+          { cause },
+        );
+      });
     input.stdout.write(
       `Creating ${name}: a Linux VM with only ${input.project} mounted, writable.\n` +
-        "The agent can change and run anything in this project folder and reach the internet.\n",
+        "The agent can change and run anything in this project folder and reach the internet.\n" +
+        "Your computer's localhost is blocked by a firewall rule inside the VM, which root there could remove.\n",
     );
     await mustSucceed(input, runner, [
       "start",
@@ -127,7 +143,7 @@ async function ensureRunning(
       `--mount-only=${input.project}:w`,
       `--param=SPORE_VERSION=${input.sporeVersion}`,
       "--tty=false",
-      input.template ?? fungiVmTemplate,
+      template,
     ]);
   } else if (existing.status === "Stopped") {
     await mustSucceed(input, runner, ["start", "--tty=false", name]);
@@ -164,6 +180,14 @@ export async function runVmCommand(
     const running = await ensureRunning(input, runner, name);
     if (running.sshConfigFile === undefined)
       throw new Error(`Lima did not report an SSH config for ${name}`);
+    // Say what the VM is already signed in to before offering another login.
+    await native(input, runner, "limactl", [
+      "shell",
+      "--workdir=/",
+      name,
+      "fungi",
+      "status",
+    ]);
     // Only for this login: the ChatGPT callback reaches the VM's 127.0.0.1:1455.
     return native(input, runner, "ssh", [
       "-F",

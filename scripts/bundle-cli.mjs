@@ -141,6 +141,12 @@ await copyFile(
   resolve(output, "native/apply-patch/LICENSE.codex"),
 );
 await copyFile(resolve(root, "npm/README.md"), resolve(output, "README.md"));
+// fungi vm starts Lima from this file; it is never fetched at run time.
+await mkdir(resolve(output, "dist/lima"), { recursive: true });
+await copyFile(
+  resolve(root, "src/lima/fungi-vm.yaml"),
+  resolve(output, "dist/lima/fungi-vm.yaml"),
+);
 await copyFile(
   resolve(root, "dist/tool-sigil-images.json"),
   resolve(output, "dist/tool-sigil-images.json"),
@@ -179,6 +185,7 @@ await writeFile(
         "dist/seatbelt/safe-base.sbpl",
         "dist/tool-sigil-images.json",
         "dist/whats-new.json",
+        "dist/lima/fungi-vm.yaml",
         "dist/fungi.cjs",
         "dist/internal/private-workerd-sandbox-worker.mjs",
         "dist/internal/local-image-fit-worker.mjs",

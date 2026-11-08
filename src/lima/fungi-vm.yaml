@@ -1,0 +1,117 @@
+# Fungi VM: a Lima template that runs Fungi's agent in its own Linux VM.
+# It ships inside Spore; `fungi vm` starts it from the project folder you want
+# the agent to work on, with only that folder mounted.
+#
+# The agent can change and run anything in the mounted project folder and reach
+# the internet. Your home folder, SSH keys and other projects are not mounted,
+# and no SSH agent or port is forwarded. Lima owns the VM's lifecycle:
+# `limactl stop`, `limactl start` and `limactl delete`.
+# Guide: https://docs.fungi.computer/guides/run-fungi-in-a-vm/
+
+minimumLimaVersion: 2.0.0
+
+# Lima's maintained Ubuntu 24.04 LTS image list, pinned by digest in each Lima
+# release. Deliberately not `template:_default/mounts`, which mounts your home.
+base:
+  - template:_images/ubuntu-24.04
+
+cpus: 2
+memory: 4GiB
+disk: 20GiB
+
+# No mounts unless `--mount-only` names one. Lima mounts a writable folder at
+# the same path inside the VM.
+mounts: []
+
+# No container runtime: Fungi does not need one.
+containerd:
+  system: false
+  user: false
+
+ssh:
+  # Your SSH agent stays on your computer.
+  forwardAgent: false
+  # Your ~/.ssh public keys are not copied into the VM.
+  loadDotSSHPubKeys: false
+
+# Ports opened inside the VM stay inside it. Forward one explicitly with
+# `limactl start --port-forward` if you need to reach it from your computer.
+portForwards:
+  - guestIP: 0.0.0.0
+    proto: any
+    ignore: true
+  - guestIP: 127.0.0.1
+    proto: any
+    ignore: true
+
+param:
+  # Node.js 24 LTS, pinned with Node's published SHA-256 checksums.
+  NODE_VERSION: 24.22.1
+  NODE_SHA256_X64: 6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6
+  NODE_SHA256_ARM64: dbabf7a1cbf947e6059ffad2c27b80041db97dea1e553b62afdee7f13fca336e
+  # The published docs copy pins the current Spore release.
+  SPORE_VERSION: latest
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+      if ! command -v bwrap >/dev/null || ! command -v git >/dev/null; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -q
+        apt-get install -yq --no-install-recommends bubblewrap ca-certificates curl git xz-utils
+      fi
+      # Ubuntu 24.04 blocks unprivileged user namespaces by default, which
+      # leaves Fungi's Workspace sandbox (bubblewrap) unavailable in the VM.
+      echo "kernel.apparmor_restrict_unprivileged_userns = 0" >/etc/sysctl.d/60-fungi-sandbox.conf
+      sysctl -q --system
+      # host.lima.internal is your computer's localhost seen from the VM. Drop
+      # new connections to it on every boot so services bound to your
+      # computer's 127.0.0.1 stay out of reach. Root in the VM can undo this.
+      # DNS must keep working: on macOS (VZ) the resolver is this same address,
+      # and with QEMU Lima DNATs 192.168.5.3:53 to it, hence the original
+      # destination match.
+      host_address="$(getent ahostsv4 host.lima.internal | awk 'NR == 1 { print $1 }')"
+      if [ -n "$host_address" ]; then
+        nft delete table inet fungi_vm 2>/dev/null || true
+        nft -f - <<EOF
+      table inet fungi_vm {
+        chain output {
+          type filter hook output priority 0; policy accept;
+          ct original ip daddr ${host_address} meta l4proto { tcp, udp } th dport 53 accept
+          ct original ip daddr ${host_address} ct state new drop
+        }
+      }
+      EOF
+      fi
+      if [ "$(node --version 2>/dev/null)" != "v${PARAM_NODE_VERSION}" ]; then
+        case "$(uname -m)" in
+          x86_64) node_arch=x64; node_sha256="${PARAM_NODE_SHA256_X64}" ;;
+          aarch64) node_arch=arm64; node_sha256="${PARAM_NODE_SHA256_ARM64}" ;;
+          *) echo "Fungi VM supports x86_64 and aarch64 guests, not $(uname -m)" >&2; exit 1 ;;
+        esac
+        archive="node-v${PARAM_NODE_VERSION}-linux-${node_arch}.tar.xz"
+        curl -fsSLo "/tmp/${archive}" "https://nodejs.org/dist/v${PARAM_NODE_VERSION}/${archive}"
+        echo "${node_sha256}  /tmp/${archive}" | sha256sum -c -
+        tar -xJf "/tmp/${archive}" -C /usr/local --strip-components=1 \
+          --exclude=CHANGELOG.md --exclude=LICENSE --exclude=README.md
+        rm -f "/tmp/${archive}"
+      fi
+      if [ ! -e /usr/local/lib/node_modules/@fungi.computer/spore/package.json ]; then
+        npm install --global --no-fund --no-audit "@fungi.computer/spore@${PARAM_SPORE_VERSION}"
+      fi
+
+probes:
+  - mode: readiness
+    description: Node.js and the fungi command to be installed
+    script: |
+      #!/bin/bash
+      set -eu
+      if ! timeout 600s bash -c "until command -v fungi >/dev/null; do sleep 3; done"; then
+        echo >&2 "the fungi command is not installed yet"
+        exit 1
+      fi
+    hint: |
+      Spore was not installed. Run `limactl shell <instance> sudo cat /var/log/cloud-init-output.log`
+      and check the guest's network access to nodejs.org and registry.npmjs.org.

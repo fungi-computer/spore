@@ -7,6 +7,7 @@ import { Cli } from "@fungi.computer/lantern";
 import writeFileAtomic from "write-file-atomic";
 import { z } from "zod";
 import { chooseSignInDoor, type SignInDoor } from "./sign-in-choice.js";
+import { reportFailure } from "./button/log-event.js";
 
 /** The stored door names predate the one-question setup; their meaning is fixed. */
 const savedDoor = {
@@ -91,4 +92,29 @@ async function saveSetup(
   await writeFileAtomic(path, JSON.stringify({ version: 1, door }) + "\n", {
     mode: 0o600,
   });
+}
+
+/** The part of the model registry first-run setup reads. */
+export type ModelAuthCheck = Readonly<{
+  getProviders: () => readonly Readonly<{ id: string }>[];
+  checkAuth: (providerId: string) => Promise<object | undefined>;
+}>;
+
+/** First-run setup is for a person with no model login at all, of any provider. */
+export async function modelLoginMissing(
+  models: ModelAuthCheck,
+  providerId?: string,
+): Promise<boolean> {
+  try {
+    const providers =
+      providerId === undefined
+        ? models.getProviders().map((provider) => provider.id)
+        : [providerId];
+    for (const id of providers)
+      if ((await models.checkAuth(id)) !== undefined) return false;
+    return true;
+  } catch (cause) {
+    reportFailure("model-login-check", cause);
+    return false;
+  }
 }
