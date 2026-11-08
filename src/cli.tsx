@@ -756,6 +756,7 @@ export async function runFungiCli(
           resolve(io.cwd ?? process.cwd(), arguments_.values.cd ?? "."),
         ),
         sporeVersion: fungiVersion,
+        logDirectory: join(home, ".fungi", "logs"),
         template: arguments_.values.template,
         modeFlag: mode === undefined ? undefined : `--${mode}`,
         yes: arguments_.values.yes === true,

@@ -31,27 +31,45 @@ async function project(folder = "My Project") {
   return realpath(path);
 }
 
+type FakeOptions = Readonly<{
+  missing?: boolean;
+  kvm?: boolean;
+  /** Make `limactl start` fail, leaving a Broken instance in this folder. */
+  failStartIn?: string;
+}>;
+
 /** Fake limactl/ssh: records argv and keeps one instance's Lima status. */
-function fakeLima(initial?: string, missing = false) {
+function fakeLima(initial?: string, options: FakeOptions = {}) {
   const calls: string[][] = [];
   let status = initial;
+  const run = (command: string, args: readonly string[]) => {
+    calls.push([command, ...args]);
+    if (options.missing) return Promise.resolve("missing" as const);
+    if (command === "limactl" && args[0] === "start") {
+      if (options.failStartIn !== undefined) {
+        status = "Broken";
+        return Promise.resolve(1);
+      }
+      status = "Running";
+    }
+    if (command === "limactl" && args[0] === "stop") status = "Stopped";
+    if (command === "limactl" && args[0] === "delete") status = undefined;
+    return Promise.resolve(0);
+  };
   const runner: VmRunner = {
     capture: (command, args) => {
       calls.push([command, ...args]);
-      if (missing) return Promise.reject(new Error("fungi vm needs Lima."));
+      if (options.missing)
+        return Promise.reject(new Error("fungi vm needs Lima."));
       return Promise.resolve(
         status === undefined
           ? ""
-          : `${JSON.stringify({ name: current, status, sshConfigFile: "/lima/ssh.config" })}\n`,
+          : `${JSON.stringify({ name: current, status, dir: options.failStartIn, sshConfigFile: "/lima/ssh.config" })}\n`,
       );
     },
-    run: (command, args) => {
-      calls.push([command, ...args]);
-      if (missing) return Promise.resolve("missing");
-      if (command === "limactl" && args[0] === "start") status = "Running";
-      if (command === "limactl" && args[0] === "stop") status = "Stopped";
-      return Promise.resolve(0);
-    },
+    run,
+    runLogged: (command, args) => run(command, args),
+    kvmUsable: () => Promise.resolve(options.kvm ?? true),
   };
   let current = "";
   return {
@@ -102,6 +120,7 @@ test("fungi vm creates the VM with only this folder mounted, then opens fungi in
     [
       "limactl",
       "start",
+      "--log-format=json",
       `--name=${name}`,
       `--mount-only=${cwd}:w`,
       `--param=SPORE_VERSION=${sporeVersion}`,
@@ -121,7 +140,7 @@ test("fungi vm starts a stopped VM and never recreates it", async () => {
   await vm(["--template", "./custom.yaml"], cwd, lima);
   const name = vmInstanceName(cwd);
   expect(lima.calls.filter(([, action]) => action !== "list")).toEqual([
-    ["limactl", "start", "--tty=false", name],
+    ["limactl", "start", "--log-format=json", "--tty=false", name],
     ["limactl", "shell", `--workdir=${cwd}`, name, "fungi"],
   ]);
 });
@@ -173,7 +192,7 @@ test("fungi vm stop uses Lima's stop and reports an absent VM", async () => {
 
 test("fungi vm without Lima prints how to install it", async () => {
   const cwd = await project();
-  await assert.rejects(vm([], cwd, fakeLima(undefined, true)), {
+  await assert.rejects(vm([], cwd, fakeLima(undefined, { missing: true })), {
     message: /fungi vm needs Lima/u,
   });
 });
@@ -182,4 +201,35 @@ test("the default template ships inside Spore with no home mount", async () => {
   const template = await Bun.file(fungiVmTemplate).text();
   expect(template).toContain("mounts: []");
   expect(template).not.toContain("- template:_default/mounts");
+});
+
+test("fungi vm says plainly when this user cannot use /dev/kvm", async () => {
+  const cwd = await project();
+  const lima = fakeLima(undefined, { kvm: false });
+  await assert.rejects(vm([], cwd, lima), {
+    message:
+      "Your user can't use /dev/kvm yet: add yourself to the kvm group (sudo usermod -aG kvm $USER) and log in again.",
+  });
+  expect(lima.calls.some(([, action]) => action === "start")).toBe(false);
+});
+
+test("a failed first start names Lima's cause and removes the half-created VM", async () => {
+  const cwd = await project();
+  const instanceDir = await mkdtemp(join(tmpdir(), "fungi-vm-instance-"));
+  roots.push(instanceDir);
+  await Bun.write(
+    join(instanceDir, "ha.stderr.log"),
+    `${JSON.stringify({ level: "info", msg: "Starting QEMU" })}\n${JSON.stringify({ level: "fatal", msg: "Could not access KVM kernel module: Permission denied" })}\n`,
+  );
+  const lima = fakeLima(undefined, { failStartIn: instanceDir });
+  await assert.rejects(vm([], cwd, lima), {
+    message:
+      /Could not access KVM kernel module: Permission denied\. Removed the half-created/u,
+  });
+  expect(lima.calls.at(-1)).toEqual([
+    "limactl",
+    "delete",
+    "--force",
+    vmInstanceName(cwd),
+  ]);
 });

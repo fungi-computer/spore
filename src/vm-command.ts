@@ -1,7 +1,9 @@
+import process from "node:process";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access } from "node:fs/promises";
-import { basename } from "node:path";
+import { constants, createWriteStream } from "node:fs";
+import { access, mkdir, readFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
@@ -39,13 +41,23 @@ export type VmRunner = Readonly<{
     command: string,
     args: readonly string[],
   ) => Promise<number | "missing">;
+  /** Like run, but Lima's output goes to a log file instead of the terminal. */
+  runLogged: (
+    command: string,
+    args: readonly string[],
+    log: string,
+  ) => Promise<number | "missing">;
   capture: (command: string, args: readonly string[]) => Promise<string>;
+  /** False on Linux when this user cannot open /dev/kvm. */
+  kvmUsable: () => Promise<boolean>;
 }>;
 
 export type VmCommandInput = Readonly<{
   action: "open" | "login" | "stop" | "rm";
   project: string;
   sporeVersion: string;
+  /** Where Lima's start output is written. */
+  logDirectory: string;
   template?: string | undefined;
   modeFlag?: string | undefined;
   yes: boolean;
@@ -73,8 +85,35 @@ export function vmInstanceName(project: string): string {
 const limaInstance = z.looseObject({
   name: z.string(),
   status: z.string(),
+  dir: z.string().optional(),
   sshConfigFile: z.string().optional(),
 });
+// Lima's JSON log lines (`--log-format=json`, and the host agent's stderr log).
+const limaLogLine = z.looseObject({ level: z.string(), msg: z.string() });
+
+const kvmRefusal =
+  "Your user can't use /dev/kvm yet: add yourself to the kvm group (sudo usermod -aG kvm $USER) and log in again.";
+
+/** The last fatal or error message in one Lima JSON log, if any. */
+async function lastLimaFailure(path: string): Promise<string | undefined> {
+  // A start that failed before Lima made the instance has no host-agent log.
+  const text = await readFile(path, "utf8").catch((cause: unknown) => {
+    if (cause instanceof Error && "code" in cause && cause.code === "ENOENT")
+      return "";
+    throw cause;
+  });
+  let failure: string | undefined;
+  for (const line of text.split("\n")) {
+    if (!line.startsWith("{")) continue;
+    const parsed = limaLogLine.safeParse(JSON.parse(line));
+    if (
+      parsed.success &&
+      (parsed.data.level === "fatal" || parsed.data.level === "error")
+    )
+      failure = parsed.data.msg;
+  }
+  return failure;
+}
 type LimaInstance = z.infer<typeof limaInstance>;
 
 async function readInstance(
@@ -104,16 +143,45 @@ async function native(
   return code;
 }
 
-async function mustSucceed(
+/**
+ * Run one `limactl start` quietly. Its output goes to a log; a failure names
+ * Lima's own cause and removes an instance this run half-created.
+ */
+async function limaStart(
   input: VmCommandInput,
   runner: VmRunner,
+  name: string,
   args: readonly string[],
+  created: boolean,
 ): Promise<void> {
-  const code = await native(input, runner, "limactl", args);
-  if (code !== 0)
-    throw new Error(
-      `limactl ${args[0] ?? ""} failed with exit code ${String(code)}`,
+  await mkdir(input.logDirectory, { recursive: true });
+  const log = join(input.logDirectory, `vm-${name}.log`);
+  const command = ["start", "--log-format=json", ...args];
+  input.stdout.write(`$ limactl ${command.join(" ")}\n  Log: ${log}\n`);
+  const startedAt = Date.now();
+  const code = await runner.runLogged("limactl", command, log);
+  if (code === "missing") throw new Error(limaInstall);
+  if (code === 0) {
+    input.stdout.write(
+      `${name} is ready (${String(Math.round((Date.now() - startedAt) / 1000))} s).\n`,
     );
+    return;
+  }
+  const instance = await readInstance(runner, name);
+  const cause =
+    (instance?.dir === undefined
+      ? undefined
+      : await lastLimaFailure(join(instance.dir, "ha.stderr.log"))) ??
+    (await lastLimaFailure(log)) ??
+    `limactl start exited with code ${String(code)}`;
+  let removed = "";
+  if (created && instance !== undefined) {
+    await runner.runLogged("limactl", ["delete", "--force", name], log);
+    removed = ` Removed the half-created ${name}.`;
+  }
+  throw new Error(
+    `Lima could not start ${name}: ${cause}.${removed} Log: ${log}`,
+  );
 }
 
 /** Create or start the project's VM; return its Lima state once running. */
@@ -123,6 +191,8 @@ async function ensureRunning(
   name: string,
 ): Promise<LimaInstance> {
   const existing = await readInstance(runner, name);
+  if (existing?.status !== "Running" && !(await runner.kvmUsable()))
+    throw new Error(kvmRefusal);
   if (existing === undefined) {
     const template = input.template ?? fungiVmTemplate;
     if (input.template === undefined)
@@ -135,18 +205,25 @@ async function ensureRunning(
     input.stdout.write(
       `Creating ${name}: a Linux VM with only ${input.project} mounted, writable.\n` +
         "The agent can change and run anything in this project folder and reach the internet.\n" +
-        "Your computer's localhost is blocked by a firewall rule inside the VM, which root there could remove.\n",
+        "Your computer's localhost is blocked by a firewall rule inside the VM, which root there could remove.\n" +
+        "First run: downloads Ubuntu, then installs Node.js and Spore in the VM (about a minute).\n",
     );
-    await mustSucceed(input, runner, [
-      "start",
-      `--name=${name}`,
-      `--mount-only=${input.project}:w`,
-      `--param=SPORE_VERSION=${input.sporeVersion}`,
-      "--tty=false",
-      template,
-    ]);
+    await limaStart(
+      input,
+      runner,
+      name,
+      [
+        `--name=${name}`,
+        `--mount-only=${input.project}:w`,
+        `--param=SPORE_VERSION=${input.sporeVersion}`,
+        "--tty=false",
+        template,
+      ],
+      true,
+    );
   } else if (existing.status === "Stopped") {
-    await mustSucceed(input, runner, ["start", "--tty=false", name]);
+    input.stdout.write(`Starting ${name}.\n`);
+    await limaStart(input, runner, name, ["--tty=false", name], false);
   } else if (existing.status !== "Running") {
     throw new Error(
       `Lima reports ${name} as ${existing.status}. Check it with limactl list ${name}.`,
@@ -241,6 +318,32 @@ export const nativeVmRunner: VmRunner = {
         resolve(code ?? (signal === null ? 1 : 128));
       });
     }),
+  runLogged: (command, args, log) =>
+    new Promise((resolve, reject) => {
+      const output = createWriteStream(log, { flags: "a" });
+      output.once("open", () => {
+        const child = spawn(command, [...args], {
+          stdio: ["ignore", output, output],
+        });
+        child.once("error", (error: NodeJS.ErrnoException) => {
+          output.end();
+          if (error.code === "ENOENT") resolve("missing");
+          else reject(error);
+        });
+        child.once("exit", (code, signal) => {
+          output.end();
+          resolve(code ?? (signal === null ? 1 : 128));
+        });
+      });
+      output.once("error", reject);
+    }),
+  kvmUsable: () =>
+    process.platform !== "linux"
+      ? Promise.resolve(true)
+      : access("/dev/kvm", constants.R_OK | constants.W_OK).then(
+          () => true,
+          () => false,
+        ),
   capture: (command, args) =>
     new Promise((resolve, reject) => {
       const child = spawn(command, [...args], {

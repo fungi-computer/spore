@@ -1,5 +1,29 @@
 # @fungi.computer/spore
 
+## 0.10.2
+
+### Patch Changes
+
+- Changes since 0.10.1:
+
+  - fix(tui): only a missing Lima log reads as empty
+  - fix(tui): quiet fungi vm output, plain failures, no project litter
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/agar@0.9.0
+  - @fungi.computer/gills@0.3.0
+  - @fungi.computer/nacre@0.3.0
+  - @fungi.computer/parakeet@0.10.0
+  - @fungi.computer/truffle@0.10.1
+  - @fungi.computer/shiitake@0.12.3
+  - @fungi.computer/shiitake-extensions@0.6.10
+  - @fungi.computer/corral@0.1.16
+  - @fungi.computer/veil@0.6.5
+
 ## 0.10.1
 
 ### Patch Changes
