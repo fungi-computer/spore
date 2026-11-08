@@ -1,5 +1,23 @@
 # @fungi.computer/spore
 
+## 0.11.0
+
+### Minor Changes
+
+- Changes since 0.10.2:
+
+  - fix(tui): read the host's Git identity without dropping errors
+  - feat(tui): new fungi vm VMs clone a prepared base VM
+  - feat(tui): fungi vm --port and the host's Git identity
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/nacre@0.4.0
+  - @fungi.computer/parakeet@0.11.0
+  - @fungi.computer/truffle@0.10.2
+
 ## 0.10.2
 
 ### Patch Changes

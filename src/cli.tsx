@@ -13,7 +13,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { lstatSync, realpathSync } from "node:fs";
 import { agentsCommandHelp, runAgentsCommand } from "./agents-command.js";
-import { nativeVmRunner, runVmCommand, type VmRunner } from "./vm-command.js";
+import { runVmCommand, type VmRunner } from "./vm-command.js";
+import { nativeVmRunner } from "./vm-native-runner.js";
 import {
   runComputersCommand,
   type ComputersCommandOwners,
@@ -206,6 +207,11 @@ const fungiCommandSchema = z.enum([
 type FungiCommand = z.infer<typeof fungiCommandSchema>;
 
 const noFungiPositionals = z.tuple([]);
+const vmPort = z
+  .string()
+  .regex(/^[0-9]{1,5}$/u)
+  .transform(Number)
+  .pipe(z.number().int().min(1).max(65535));
 const optionalFungiPositional = z.tuple([z.string().optional()]);
 type FungiArgumentRules = Partial<
   Record<FungiCommand, Readonly<{ schema: z.ZodType; error: string }>>
@@ -562,6 +568,7 @@ export async function runFungiCli(
       archived: { type: "boolean" },
       json: { type: "boolean" },
       template: { type: "string" },
+      port: { type: "string", multiple: true },
       // Hidden developer option: build fungi from a Botanical checkout.
       "from-source": { type: "string" },
     },
@@ -689,8 +696,12 @@ export async function runFungiCli(
     stdout.write(helpFor(positionals[0]));
     return;
   }
-  if (command !== "vm" && arguments_.values.template !== undefined)
-    throw new Error("--template is only valid with fungi vm");
+  if (
+    command !== "vm" &&
+    (arguments_.values.template !== undefined ||
+      arguments_.values.port !== undefined)
+  )
+    throw new Error("--template and --port are only valid with fungi vm");
   if (command === "acp") {
     if (positionals[0] === "login") {
       const commandToken = arguments_.tokens.find(
@@ -746,9 +757,21 @@ export async function runFungiCli(
       .parse(positionals[0]);
     if (
       action !== undefined &&
-      (mode !== undefined || arguments_.values.template !== undefined)
+      (mode !== undefined ||
+        arguments_.values.template !== undefined ||
+        arguments_.values.port !== undefined)
     )
-      throw new Error("Permission mode flags and --template only open the VM");
+      throw new Error(
+        "Permission mode flags, --port and --template only open the VM",
+      );
+    const ports = arguments_.values.port?.map((port) => {
+      const parsed = vmPort.safeParse(port);
+      if (!parsed.success)
+        throw new Error(
+          `--port takes a port number from 1 to 65535, not ${port}`,
+        );
+      return parsed.data;
+    });
     const code = await runVmCommand(
       {
         action: action ?? "open",
@@ -758,6 +781,7 @@ export async function runFungiCli(
         sporeVersion: fungiVersion,
         logDirectory: join(home, ".fungi", "logs"),
         template: arguments_.values.template,
+        ports,
         modeFlag: mode === undefined ? undefined : `--${mode}`,
         yes: arguments_.values.yes === true,
         stdout,

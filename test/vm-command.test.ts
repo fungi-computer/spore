@@ -36,47 +36,80 @@ type FakeOptions = Readonly<{
   kvm?: boolean;
   /** Make `limactl start` fail, leaving a Broken instance in this folder. */
   failStartIn?: string;
+  /** This computer's global Git config. */
+  git?: Readonly<Record<string, string>>;
+  /** Ports the existing instance already forwards. */
+  forwarded?: readonly number[];
 }>;
 
-/** Fake limactl/ssh: records argv and keeps one instance's Lima status. */
+/**
+ * Fake limactl/ssh: records argv and keeps each instance's Lima status. The
+ * project's instance starts in `initial`; others (the base) appear as created.
+ */
 function fakeLima(initial?: string, options: FakeOptions = {}) {
   const calls: string[][] = [];
-  let status = initial;
+  const statuses = new Map<string, string>();
+  let current = "";
+  const target = (args: readonly string[]) => {
+    const flagged = args.find((arg) => arg.startsWith("--name="));
+    return flagged?.slice("--name=".length) ?? args.at(-1) ?? "";
+  };
   const run = (command: string, args: readonly string[]) => {
     calls.push([command, ...args]);
     if (options.missing) return Promise.resolve("missing" as const);
-    if (command === "limactl" && args[0] === "start") {
+    if (command !== "limactl") return Promise.resolve(0);
+    const [action] = args;
+    if (action === "start") {
       if (options.failStartIn !== undefined) {
-        status = "Broken";
+        statuses.set(target(args), "Broken");
         return Promise.resolve(1);
       }
-      status = "Running";
+      statuses.set(target(args), "Running");
     }
-    if (command === "limactl" && args[0] === "stop") status = "Stopped";
-    if (command === "limactl" && args[0] === "delete") status = undefined;
+    if (action === "clone") statuses.set(args.at(-1) ?? "", "Stopped");
+    if (action === "stop") statuses.set(target(args), "Stopped");
+    if (action === "delete") statuses.delete(target(args));
     return Promise.resolve(0);
   };
   const runner: VmRunner = {
     capture: (command, args) => {
       calls.push([command, ...args]);
+      if (command === "git") {
+        return Promise.resolve(`${options.git?.[args.at(-1) ?? ""] ?? ""}\n`);
+      }
       if (options.missing)
         return Promise.reject(new Error("fungi vm needs Lima."));
       return Promise.resolve(
-        status === undefined
-          ? ""
-          : `${JSON.stringify({ name: current, status, dir: options.failStartIn, sshConfigFile: "/lima/ssh.config" })}\n`,
+        [...statuses]
+          .map(
+            ([name, status]) =>
+              `${JSON.stringify({
+                name,
+                status,
+                dir: options.failStartIn,
+                sshConfigFile: "/lima/ssh.config",
+                config: {
+                  portForwards: (name === current
+                    ? (options.forwarded ?? [])
+                    : []
+                  ).map((guestPort) => ({ guestPort })),
+                },
+              })}\n`,
+          )
+          .join(""),
       );
     },
     run,
     runLogged: (command, args) => run(command, args),
     kvmUsable: () => Promise.resolve(options.kvm ?? true),
   };
-  let current = "";
   return {
     calls,
     runner,
+    statuses,
     named: (name: string) => {
       current = name;
+      if (initial !== undefined) statuses.set(name, initial);
     },
   };
 }
@@ -111,27 +144,76 @@ test("instance names are stable per project path and valid for Lima", () => {
   expect(vmInstanceName("/elsewhere/My Project!")).not.toBe(name);
 });
 
-test("fungi vm creates the VM with only this folder mounted, then opens fungi in it", async () => {
+test("fungi vm prepares one base VM, clones it with only this folder mounted, then opens fungi", async () => {
   const cwd = await project();
   const lima = fakeLima();
   const output = await vm(["--yolo"], cwd, lima);
   const name = vmInstanceName(cwd);
-  expect(lima.calls.filter(([, action]) => action !== "list")).toEqual([
+  const lifecycle = lima.calls.filter(
+    ([command, action]) =>
+      command === "limactl" && action !== "list" && action !== "shell",
+  );
+  const base =
+    lifecycle[0]?.find((arg) => arg.startsWith("--name="))?.slice(7) ?? "";
+  expect(base).toMatch(/^fungi-base-[0-9a-f]{10}$/u);
+  expect(lifecycle).toEqual([
     [
       "limactl",
       "start",
       "--log-format=json",
-      `--name=${name}`,
-      `--mount-only=${cwd}:w`,
+      `--name=${base}`,
+      "--mount-none",
       `--param=SPORE_VERSION=${sporeVersion}`,
       "--tty=false",
       fungiVmTemplate,
     ],
-    ["limactl", "shell", `--workdir=${cwd}`, name, "fungi", "--full-access"],
+    ["limactl", "stop", base],
+    ["limactl", "clone", "--tty=false", `--mount-only=${cwd}:w`, base, name],
+    ["limactl", "start", "--log-format=json", "--tty=false", name],
+  ]);
+  expect(lima.calls.at(-1)).toEqual([
+    "limactl",
+    "shell",
+    `--workdir=${cwd}`,
+    name,
+    "fungi",
+    "--full-access",
   ]);
   expect(output).toContain(
     "The agent can change and run anything in this project folder and reach the internet.",
   );
+
+  // A second project reuses the stopped base: one clone and one start.
+  const other = await project("Other");
+  const before = lima.calls.length;
+  const again = await vm([], other, lima);
+  expect(again).not.toContain("Preparing the base VM");
+  expect(
+    lima.calls
+      .slice(before)
+      .filter(([, action]) => action === "start" || action === "clone")
+      .map(([, action, ...rest]) => [action, rest.at(-1)]),
+  ).toEqual([
+    ["clone", vmInstanceName(other)],
+    ["start", vmInstanceName(other)],
+  ]);
+});
+
+test("a custom --template creates the VM directly, without the base", async () => {
+  const cwd = await project();
+  const lima = fakeLima();
+  await vm(["--template", "./custom.yaml"], cwd, lima);
+  expect(lima.calls.find(([, action]) => action === "start")).toEqual([
+    "limactl",
+    "start",
+    "--log-format=json",
+    `--name=${vmInstanceName(cwd)}`,
+    `--mount-only=${cwd}:w`,
+    `--param=SPORE_VERSION=${sporeVersion}`,
+    "--tty=false",
+    "./custom.yaml",
+  ]);
+  expect(lima.calls.some(([, action]) => action === "clone")).toBe(false);
 });
 
 test("fungi vm starts a stopped VM and never recreates it", async () => {
@@ -139,7 +221,11 @@ test("fungi vm starts a stopped VM and never recreates it", async () => {
   const lima = fakeLima("Stopped");
   await vm(["--template", "./custom.yaml"], cwd, lima);
   const name = vmInstanceName(cwd);
-  expect(lima.calls.filter(([, action]) => action !== "list")).toEqual([
+  expect(
+    lima.calls.filter(
+      ([command, action]) => command === "limactl" && action !== "list",
+    ),
+  ).toEqual([
     ["limactl", "start", "--log-format=json", "--tty=false", name],
     ["limactl", "shell", `--workdir=${cwd}`, name, "fungi"],
   ]);
@@ -222,7 +308,7 @@ test("a failed first start names Lima's cause and removes the half-created VM", 
     `${JSON.stringify({ level: "info", msg: "Starting QEMU" })}\n${JSON.stringify({ level: "fatal", msg: "Could not access KVM kernel module: Permission denied" })}\n`,
   );
   const lima = fakeLima(undefined, { failStartIn: instanceDir });
-  await assert.rejects(vm([], cwd, lima), {
+  await assert.rejects(vm(["--template", "./custom.yaml"], cwd, lima), {
     message:
       /Could not access KVM kernel module: Permission denied\. Removed the half-created/u,
   });
@@ -231,5 +317,67 @@ test("a failed first start names Lima's cause and removes the half-created VM", 
     "delete",
     "--force",
     vmInstanceName(cwd),
+  ]);
+});
+
+test("fungi vm --port forwards on create and adds a missing port to a stopped VM", async () => {
+  const cwd = await project();
+  const name = vmInstanceName(cwd);
+  const fresh = fakeLima();
+  await vm(["--port", "5173", "--port", "3000"], cwd, fresh);
+  expect(fresh.calls.find(([, action]) => action === "clone")).toContain(
+    '--set=.portForwards = [{"guestPort":5173,"hostPort":5173},{"guestPort":3000,"hostPort":3000}] + .portForwards',
+  );
+  const stopped = fakeLima("Stopped", { forwarded: [5173] });
+  await vm(["--port", "5173", "--port", "8080"], cwd, stopped);
+  expect(stopped.calls.find(([, action]) => action === "edit")).toEqual([
+    "limactl",
+    "edit",
+    "--tty=false",
+    name,
+    '--set=.portForwards = [{"guestPort":8080,"hostPort":8080}] + .portForwards',
+  ]);
+  await assert.rejects(vm(["--port", "9000"], cwd, fakeLima("Running")), {
+    message: /running without port 9000\. Stop it first/u,
+  });
+  await assert.rejects(vm(["--port", "70000"], cwd, fakeLima()), {
+    message: "--port takes a port number from 1 to 65535, not 70000",
+  });
+});
+
+test("a new VM gets this computer's Git name and email", async () => {
+  const cwd = await project();
+  const name = vmInstanceName(cwd);
+  const lima = fakeLima(undefined, {
+    git: { "user.name": "Ada Lovelace", "user.email": "ada@example.test" },
+  });
+  await vm([], cwd, lima);
+  expect(
+    lima.calls.filter(
+      ([, action, , , tool]) => action === "shell" && tool === "git",
+    ),
+  ).toEqual([
+    [
+      "limactl",
+      "shell",
+      "--workdir=/",
+      name,
+      "git",
+      "config",
+      "--global",
+      "user.name",
+      "Ada Lovelace",
+    ],
+    [
+      "limactl",
+      "shell",
+      "--workdir=/",
+      name,
+      "git",
+      "config",
+      "--global",
+      "user.email",
+      "ada@example.test",
+    ],
   ]);
 });
