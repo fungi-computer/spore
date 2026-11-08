@@ -88,9 +88,15 @@ test("a request that names anything else, or is not one, is dropped", async () =
       sessionId: "session",
     }),
   );
-  await until(() => opened.length === 1);
+  // Passes take files in directory order, not write order: the valid request
+  // can open before a dropped one is removed. Every file is consumed, so wait
+  // for the folder to empty and the one open, rather than assume the valid
+  // request was handled last.
+  await until(
+    async () =>
+      opened.length === 1 && (await readdir(requests.directory)).length === 0,
+  );
   expect(opened).toEqual([{ agentId: "agent", sessionId: "session" }]);
-  expect(await readdir(requests.directory)).toEqual([]);
   await requests.close();
 });
 

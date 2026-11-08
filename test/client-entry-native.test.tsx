@@ -35,7 +35,9 @@ const states = [
 const settled = {
   idle: `${sigilGutterText("●")}idle`,
   panel: "Verify the garden change",
-  prompt: "Water one bed",
+  // The garden's `/water` question, not its slash-menu row, which RETURN
+  // replaces: the row matched a transient frame before the prompt rendered.
+  prompt: "Which bed?",
   queued: `${sigilGutterText("●")}idle`,
   active: `${sigilGutterText("●")}streaming`,
   waiting: "Loop ·",
@@ -47,6 +49,29 @@ const settled = {
 /** The footer is status and model only: no key hints, no copy in their place. */
 const footerHint =
   /Enter|Ctrl|Esc|Tab |PgUp|↑↓|send|panes|tool group|Tab queue|cancel or exit|dismiss|refresh|toggle|choose|complete|O open/u;
+
+/**
+ * Render until the frame shows the state. OpenTUI's waitForFrame gives up as
+ * soon as the renderer is idle, before the app's own async work (the slash
+ * catalog query, the Session command) has scheduled the next render; on a
+ * loaded box that left the prompt state unrendered. This waits on the frame
+ * itself, bounded only by the test's own timeout.
+ */
+async function untilFrame(
+  setup: Awaited<ReturnType<typeof testRender>>,
+  predicate: (frame: string) => boolean,
+): Promise<string> {
+  for (;;) {
+    await act(async () => {
+      await setup.renderOnce();
+    });
+    const frame = setup.captureCharFrame();
+    if (predicate(frame)) return frame;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+}
 
 function footerLine(frame: string): string {
   const lines = frame.split("\n");
@@ -133,9 +158,7 @@ for (const { width, height } of [
         "keyboard",
       );
       try {
-        await act(async () =>
-          setup.waitForFrame((frame) => frame.includes(settled.idle)),
-        );
+        await untilFrame(setup, (frame) => frame.includes(settled.idle));
         if (state === "prompt") {
           const alias = "water";
           await setup.waitFor(() =>
@@ -170,10 +193,9 @@ for (const { width, height } of [
             if (state === "active") fixture.confirmLatestPrompt();
           });
         }
-        await act(async () =>
-          setup.waitForFrame((frame) => frame.includes(settled[state])),
+        const frame = await untilFrame(setup, (value) =>
+          value.includes(settled[state]),
         );
-        const frame = setup.captureCharFrame();
         const footer = footerLine(frame);
         expect(footer).not.toMatch(footerHint);
         expect(frame).not.toContain("Esc nothing to cancel");
