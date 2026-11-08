@@ -3,10 +3,9 @@
   "extends": ["//"],
   "tasks": {
     // News generation reads BOTANICAL_RELEASE_BUILD_MODE: continuous release
-    // rehearsals build before the claimed changelog entry exists. Both tasks
-    // that run the compiler declare it, because a nested clean-checkout build
-    // (scripts/cold-build.test.mjs) sees only this committed config, not the
-    // globalEnv that release-build.mjs stages in the candidate checkout.
+    // rehearsals build before the claimed changelog entry exists. Every task
+    // that runs the compiler declares it here, and only here, so the mode
+    // never enters the global hash and other tasks keep their cache entries.
     "whats-new": {
       "dependsOn": [],
       "env": ["BOTANICAL_RELEASE_BUILD_MODE"],

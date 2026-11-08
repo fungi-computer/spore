@@ -3,6 +3,7 @@ import { agentsCommandHelp } from "./agents-command.js";
 import { computerCommandHelp } from "./computer-command.js";
 import { computersCommandHelp } from "./computers-command.js";
 import { extensionCommandHelp } from "./extension-command.js";
+import { vmCommandHelp } from "./vm-command.js";
 
 /** Public help for the fungi command; internal commands answer only by name. */
 const help = `Usage: fungi [command] [options]
@@ -36,6 +37,10 @@ Team Computers:
                                  List or start your Team's Computers
   fungi computer <action>        Attach, inspect or detach a folder
   fungi mcp show|use|forget      Manage this project's Team MCP address
+
+Run in a VM:
+  fungi vm [login|stop|rm]       Open fungi in a Lima Linux VM with only this
+                                 folder mounted
 
 Fungi itself:
   fungi extension <action>       Add, list, remove, enable or disable extensions
@@ -226,6 +231,7 @@ credentials; fungi login remains the Hub sign-in path. A running Local service
 keeps its existing connection until fungi stop.
 `,
     computer: computerCommandHelp,
+    vm: vmCommandHelp,
     extension: extensionCommandHelp,
     permissions: `Usage: fungi permissions list [-C <project>]
        fungi permissions remove '["git","push"]' [-C <project>]

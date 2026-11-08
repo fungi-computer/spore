@@ -1,5 +1,29 @@
 # @fungi.computer/spore
 
+## 0.10.0
+
+### Minor Changes
+
+- Changes since 0.9.0:
+
+  - feat(tui): fungi vm opens Shiitake in a Lima VM for this folder
+  - fix(local): register Pi's OAuth flows wherever Local builds models
+  - perf(release): keep the build mode out of Turbo's global hash
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/shiitake@0.12.1
+  - @fungi.computer/truffle@0.9.1
+  - @fungi.computer/shiitake-extensions@0.6.8
+  - @fungi.computer/veil@0.6.3
+  - @fungi.computer/corral@0.1.14
+  - @fungi.computer/parakeet@0.9.1
+  - @fungi.computer/agar@0.7.3
+  - @fungi.computer/approvals@0.2.2
+  - @fungi.computer/nacre@0.2.2
+
 ## 0.9.0
 
 ### Minor Changes

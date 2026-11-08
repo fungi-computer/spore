@@ -11,8 +11,9 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { lstatSync } from "node:fs";
+import { lstatSync, realpathSync } from "node:fs";
 import { agentsCommandHelp, runAgentsCommand } from "./agents-command.js";
+import { nativeVmRunner, runVmCommand, type VmRunner } from "./vm-command.js";
 import {
   runComputersCommand,
   type ComputersCommandOwners,
@@ -40,7 +41,6 @@ import type { LocalAuthCliOptions } from "@fungi.computer/truffle/auth";
 import {
   createPrivateModels,
   resolveDefaultCredentialPath,
-  registerPrivateBundledModelOAuthFlows,
   listPrivateTeamComputers,
   startPrivateTeamComputer,
   attachPrivateLocalComputer,
@@ -117,9 +117,6 @@ const sessionClients = [
   questionClient,
   subagentsClient,
 ];
-
-if (process.env.FUNGI_BUNDLED_CLI !== undefined)
-  registerPrivateBundledModelOAuthFlows();
 
 const fungiVersion = z
   .looseObject({ version: z.string().min(1) })
@@ -214,6 +211,7 @@ const fungiCommandSchema = z.enum([
   "logout",
   "computers",
   "computer",
+  "vm",
   "extension",
   "permissions",
   "mcp",
@@ -264,6 +262,13 @@ const fungiArgumentRules = {
     ]),
     error:
       "Usage: fungi computer attach <computer> <folder> | status | detach <computer>",
+  },
+  vm: {
+    schema: z.union([
+      noFungiPositionals,
+      z.tuple([z.enum(["login", "stop", "rm"])]),
+    ]),
+    error: "Usage: fungi vm | fungi vm login | stop | rm",
   },
   account: {
     schema: z.union([
@@ -510,6 +515,7 @@ export async function runFungiCli(
     /** The installed-extension owner; tests point it at a disposable home. */
     extensions?: LocalExtensions;
     computerOwners?: Partial<ComputerCommandOwners>;
+    vmRunner?: VmRunner;
     readFungiStatus?: typeof readFungiAccountStatus;
     runAcp?: (options: LocalAcpStdioOptions) => Promise<void>;
     runAuth?: (
@@ -570,6 +576,7 @@ export async function runFungiCli(
       errors: { type: "boolean" },
       archived: { type: "boolean" },
       json: { type: "boolean" },
+      template: { type: "string" },
       // Hidden developer option: build fungi from a Botanical checkout.
       "from-source": { type: "string" },
     },
@@ -649,10 +656,10 @@ export async function runFungiCli(
   if (
     mode !== undefined &&
     command !== undefined &&
-    !["new", "resume", "run"].includes(command)
+    !["new", "resume", "run", "vm"].includes(command)
   )
     throw new Error(
-      "Permission mode flags are only valid with fungi, new, resume or run",
+      "Permission mode flags are only valid with fungi, new, resume, run or vm",
     );
   if (command === "git-credential") {
     const [action] = positionals;
@@ -697,6 +704,8 @@ export async function runFungiCli(
     stdout.write(helpFor(positionals[0]));
     return;
   }
+  if (command !== "vm" && arguments_.values.template !== undefined)
+    throw new Error("--template is only valid with fungi vm");
   if (command === "acp") {
     if (positionals[0] === "login") {
       const commandToken = arguments_.tokens.find(
@@ -745,6 +754,36 @@ export async function runFungiCli(
     (io.interactive ??
       (isInteractiveStream(io.stdin ?? process.stdin) &&
         isInteractiveStream(stdout)));
+  if (command === "vm") {
+    const action = z
+      .enum(["login", "stop", "rm"])
+      .optional()
+      .parse(positionals[0]);
+    if (
+      action !== undefined &&
+      (mode !== undefined || arguments_.values.template !== undefined)
+    )
+      throw new Error("Permission mode flags and --template only open the VM");
+    const code = await runVmCommand(
+      {
+        action: action ?? "open",
+        project: realpathSync(
+          resolve(io.cwd ?? process.cwd(), arguments_.values.cd ?? "."),
+        ),
+        sporeVersion: fungiVersion,
+        template: arguments_.values.template,
+        modeFlag: mode === undefined ? undefined : `--${mode}`,
+        yes: arguments_.values.yes === true,
+        stdout,
+        confirm: interactiveTerminal()
+          ? (question) => confirm(io, question)
+          : undefined,
+      },
+      overrides.vmRunner ?? nativeVmRunner,
+    );
+    if (code !== 0) process.exitCode = code;
+    return;
+  }
   const hub = arguments_.values.hub;
   const linearCli = new Cli({
     brand: "fungi",

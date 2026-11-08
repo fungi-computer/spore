@@ -202,6 +202,12 @@ Computers pages; a running backend can still serve until detached or stopped.
 Pending cleanup retries after the next successful same-account sign-in. See
 [account and logout recovery](../docs/src/content/docs/account/sign-in.mdx).
 
+`fungi vm` opens fungi inside a [Lima](https://lima-vm.io/) Linux VM that mounts
+only the current folder, creating or starting it first. `fungi vm login`,
+`fungi vm stop` and `fungi vm rm` sign in, stop and delete it. Lima owns the VM;
+every `limactl` command is printed before it runs. See
+[Run Fungi in its own VM](../docs/src/content/docs/guides/run-fungi-in-a-vm.md).
+
 ## Extensions
 
 ```sh
