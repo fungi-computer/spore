@@ -1,5 +1,11 @@
 # @fungi.computer/spore
 
+## 0.11.9
+
+### Patch Changes
+
+- @fungi.computer/parakeet@0.11.7
+
 ## 0.11.8
 
 ### Patch Changes
