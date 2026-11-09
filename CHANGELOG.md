@@ -1,5 +1,12 @@
 # @fungi.computer/spore
 
+## 0.11.6
+
+### Patch Changes
+
+- Updated dependencies
+  - @fungi.computer/parakeet@0.11.5
+
 ## 0.11.5
 
 ### Patch Changes
