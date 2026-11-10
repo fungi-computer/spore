@@ -1,8 +1,13 @@
-# Spore (`@fungi.computer/spore`)
+# Spore by Fungi (`@fungi.computer/spore`)
 
-Shiitake is a coding agent that works in your project folder, on your own Claude
-or ChatGPT subscription. Spore installs it as the `fungi` command, for your
-terminal or an ACP editor such as Zed.
+Fungi is an open-source workspace for AI agents: Apps that people and agents
+both use, Computers that keep their files, and permissions the system checks.
+Try it with one command, run it on your own Cloudflare account, or let us host
+it.
+
+Shiitake by Fungi is a coding agent that works in your project folder, on your
+own Claude or ChatGPT subscription. Spore installs it as the `fungi` command,
+for your terminal or an ACP editor such as Zed.
 
 ## Install and start
 

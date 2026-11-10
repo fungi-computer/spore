@@ -1,12 +1,12 @@
 {
   "name": "@fungi.computer/spore",
-  "version": "0.11.14",
+  "version": "0.12.0",
   "private": false,
   "type": "module",
   "bin": {
     "fungi": "./dist/cli.js"
   },
-  "description": "Open-source Fungi AI agent for the terminal and ACP editors.",
+  "description": "Spore by Fungi: open-source AI agents for your terminal and ACP editor, powered by Shiitake by Fungi.",
   "homepage": "https://docs.fungi.computer/shiitake",
   "keywords": [
     "fungi",

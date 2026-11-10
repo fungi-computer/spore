@@ -1,5 +1,22 @@
 # @fungi.computer/spore
 
+## 0.12.0
+
+### Minor Changes
+
+- Changes since 0.11.14:
+
+  - feat(marketing): use the approved Fungi pitch and published trial media
+
+### Patch Changes
+
+- Updated dependencies
+  - @fungi.computer/shiitake@0.13.0
+  - @fungi.computer/corral@0.1.18
+  - @fungi.computer/parakeet@0.11.11
+  - @fungi.computer/shiitake-extensions@0.6.12
+  - @fungi.computer/truffle@0.10.10
+
 ## 0.11.14
 
 ### Patch Changes
