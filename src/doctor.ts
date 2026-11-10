@@ -38,9 +38,7 @@ export async function runDoctor(options: {
   };
   // Setup the person has not done yet is not a failure: it is listed as SETUP
   // and does not fail the run.
-  const unfinished: string[] = [];
   const setup = (label: string, detail: string) => {
-    unfinished.push(label);
     options.write(`SETUP ${label}: ${detail}\n`);
   };
   options.write("fungi doctor\n");
@@ -90,13 +88,16 @@ export async function runDoctor(options: {
     reportFailure("doctor-team-auth-check", cause);
     report("sign-in", false, "Could not read saved login");
   }
+  let modelProviderReady = false;
   try {
     const account = await options.fungiAccount();
     const configured =
       account?.team !== undefined &&
       (await options.models.checkAuth("fungi")) !== undefined;
-    if (configured) report("Fungi models", true, "selected Team ready");
-    else if (account === undefined)
+    if (configured) {
+      modelProviderReady = true;
+      report("Fungi models", true, "selected Team ready");
+    } else if (account === undefined)
       setup("Fungi models", "Not set up. Optional.");
     else
       report(
@@ -107,6 +108,25 @@ export async function runDoctor(options: {
   } catch (cause) {
     reportFailure("doctor-model-check", cause);
     report("Fungi models", false, "Could not check provider configuration");
+  }
+  for (const [providerId, name] of [
+    ["openai", "ChatGPT"],
+    ["anthropic", "Claude"],
+  ] as const) {
+    try {
+      const auth = await options.models.checkAuth(providerId);
+      if (auth !== undefined) {
+        modelProviderReady = true;
+        report(
+          name,
+          true,
+          auth.type === "oauth" ? "subscription ready" : "API key ready",
+        );
+      }
+    } catch (cause) {
+      reportFailure("doctor-provider-auth-check", cause);
+      report(name, false, "Could not check provider configuration");
+    }
   }
   const url =
     options.endpoint === undefined
@@ -140,9 +160,10 @@ export async function runDoctor(options: {
     );
   }
   report("version", true, options.version + " (installed)");
-  if (unfinished.length > 0)
-    options.write(
-      "Next: run fungi login to use your Claude or ChatGPT subscription, an API key or Fungi models, then run fungi.\n",
-    );
+  options.write(
+    modelProviderReady
+      ? "Next: run fungi.\n"
+      : "Next: run fungi login to use your Claude or ChatGPT subscription, an API key or Fungi models, then run fungi.\n",
+  );
   return passed;
 }

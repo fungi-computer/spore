@@ -62,3 +62,29 @@ test("doctor gives a retry command when the network request fails", async () => 
   expect(output).not.toContain("TypeError");
   expect(output).toContain("PASS version:");
 });
+
+for (const providerId of ["openai", "anthropic"]) {
+  test(`doctor recognizes ${providerId} subscription sign-in without requiring Fungi setup`, async () => {
+    let output = "";
+    const passed = await runDoctor({
+      localServiceStatus: () => Promise.resolve(undefined),
+      fungiAccount: () => Promise.resolve(undefined),
+      models: {
+        getProviders: () => [],
+        checkAuth: (id) =>
+          Promise.resolve(id === providerId ? { type: "oauth" } : undefined),
+        login: () => Promise.reject(new Error("unused")),
+        logout: () => Promise.resolve(),
+      },
+      connect: () => Promise.resolve(true),
+      version: "fixture",
+      write: (text) => {
+        output += text;
+      },
+    });
+    expect(passed).toBe(true);
+    expect(output).toContain("subscription ready");
+    expect(output).not.toContain("run fungi login");
+    expect(output).toContain("Next: run fungi.");
+  });
+}

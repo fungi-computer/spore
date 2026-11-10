@@ -164,7 +164,10 @@ export function terminalCommandDefinitions(
       availability: () =>
         actions.serviceStatusOpen
           ? { status: "available" }
-          : { status: "unavailable", reason: "Service status is not open." },
+          : {
+              status: "unavailable",
+              reason: "Available only during service recovery.",
+            },
       handler: () => actions.showServiceStatus?.(),
     },
     {

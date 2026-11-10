@@ -257,6 +257,7 @@ for (const size of sizes) {
       const modal = await render(
         (colors) => (
           <ServiceRecoveryOverlay
+            viewport={size}
             view={recovery}
             colors={colors}
             onClose={() => undefined}

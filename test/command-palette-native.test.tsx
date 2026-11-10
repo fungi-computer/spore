@@ -1,4 +1,5 @@
 import { test, expect } from "bun:test";
+import { captureFrame } from "./frame-capture.js";
 import { createRoot } from "@opentui/react";
 import { openTerminalApplication } from "../src/terminal-application.js";
 import { act } from "react";
@@ -10,8 +11,14 @@ import { TuiFrame } from "../src/frame.js";
 import { createTuiFixture, fixtureClients } from "./fixture.js";
 import { pressDecodedKey, waitForFrame } from "./native-readiness.js";
 
-for (const width of [80, 160]) {
-  test(`the shell and /help share the searchable palette and successful recents at ${String(width)} columns`, async () => {
+for (const [width, height] of [
+  [60, 20],
+  [80, 24],
+  [100, 32],
+  [120, 40],
+  [160, 48],
+] as const) {
+  test(`key help is readable at ${String(width)}x${String(height)}`, async () => {
     const fixture = createTuiFixture();
     const commands = createWhistle();
     let executions = 0;
@@ -41,7 +48,7 @@ for (const width of [80, 160]) {
     });
     const setup = await testRender(<box />, {
       width,
-      height: width === 80 ? 24 : 48,
+      height,
     });
     const application = await openTerminalApplication({
       signals: { on: () => undefined, off: () => undefined },
@@ -121,21 +128,37 @@ for (const width of [80, 160]) {
       });
       await waitForFrame(setup, (frame) => frame.includes("Key bindings"));
       expect(setup.captureCharFrame()).not.toContain("/keys");
-      const openBinding = setup
-        .captureCharFrame()
-        .split("\n")
-        .find(
-          (line) => line.includes("Open pane") && line.includes("Ctrl K o"),
-        );
-      expect(openBinding).toBeDefined();
-      expect(openBinding?.indexOf("Open pane")).toBeLessThan(
-        openBinding?.indexOf("Ctrl K o") ?? 0,
+      expect(setup.captureCharFrame().replace(/\s+/gu, " ")).toContain(
+        "Open pane Ctrl K o",
       );
-      expect(openBinding?.trimEnd()).toEndWith("Ctrl K o");
+      for (const [search, expected] of [
+        ["All commands", "Ctrl K Ctrl K"],
+        ["Next layout", "Ctrl K Space"],
+        ["Show service status", "Available only during service recovery."],
+        ["Zoom pane", "newline in the composer"],
+      ] as const) {
+        await pressDecodedKey(setup, () => {
+          setup.mockInput.pressKey("u", { ctrl: true });
+        });
+        await act(async () => setup.mockInput.typeText(search));
+        await act(async () => setup.renderOnce());
+        const help = setup.captureCharFrame();
+        expect(help.replace(/\s+/gu, "")).toContain(
+          expected.replace(/\s+/gu, ""),
+        );
+        expect(help).not.toContain("<leader>");
+        await captureFrame(
+          setup,
+          process.env.TUI_SPLIT_CAPTURE_DIR,
+          `keys-${search.replaceAll(" ", "-")}-${String(width)}x${String(height)}`,
+        );
+      }
       await pressDecodedKey(setup, () => {
         setup.mockInput.pressEscape();
       });
       await waitForFrame(setup, (frame) => frame.includes("Ask anything"));
+      // The 60x20 audit adds help coverage; retain palette/recents coverage at larger sizes.
+      if (width === 60) return;
       await pressDecodedKey(setup, () => {
         setup.mockInput.pressKey("k", { ctrl: true });
       });

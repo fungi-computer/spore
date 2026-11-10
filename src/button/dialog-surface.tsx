@@ -28,7 +28,7 @@ export function DialogSurface({
   colors: TuiPresentation["colors"];
   onClose: () => void;
 }>) {
-  const { width, height } = useTerminalDimensions();
+  const { height } = useTerminalDimensions();
   return (
     <HostColorsContext.Provider value={colors}>
       <box
@@ -38,6 +38,7 @@ export function DialogSurface({
         width="100%"
         height="100%"
         zIndex={100}
+        padding={1}
         alignItems="center"
         justifyContent="center"
         backgroundColor={RGBA.fromInts(0, 0, 0, 140)}
@@ -47,8 +48,9 @@ export function DialogSurface({
         }}
       >
         <box
-          width={Math.max(1, Math.min(68, width - 2))}
-          maxHeight={Math.max(1, height - 2)}
+          width="100%"
+          maxWidth={68}
+          maxHeight="100%"
           backgroundColor={colors.background}
           onMouseDown={(event) => {
             event.stopPropagation();

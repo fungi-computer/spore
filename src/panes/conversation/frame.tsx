@@ -1080,6 +1080,7 @@ function TuiFrameConversation({
       {serviceRecovery === undefined || recoveryCollapsed ? null : (
         <ServiceRecoveryOverlay
           view={serviceRecovery}
+          viewport={{ width, height }}
           colors={colors}
           onClose={() => {
             setRecoveryCollapsed(true);

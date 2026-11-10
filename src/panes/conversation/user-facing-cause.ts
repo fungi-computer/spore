@@ -17,6 +17,11 @@ export function userFacingCause(cause: string | null | undefined): string {
   if (match === null) return trimmed === "" ? genericCause : trimmed;
   const code = `${match[1] ?? ""}:${match[2] ?? ""}`;
   const remainder = trimmed.slice(match[0].length).trim();
+  if (
+    code === "model:rejected" &&
+    remainder.startsWith("No signed-in model provider is available.")
+  )
+    return "No signed-in model provider is available. Use /login to sign in with your Claude or ChatGPT subscription, an API key or Fungi, then send your message again.";
   // A bare code-only sentence says nothing the code's own plain text does not.
   const known = knownCodes.get(code);
   if (

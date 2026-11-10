@@ -1550,16 +1550,29 @@ function TerminalTranscriptView({
         )}
       </scrollbox>
       {sessionStatus.viewState.kind === "error" ? (
-        <box flexDirection="column" height={2} paddingX={inset}>
-          <text fg={presentation.colors.error} height={1} wrapMode="none">
+        <box flexDirection="column" flexShrink={0} paddingX={inset}>
+          <text
+            fg={presentation.colors.error}
+            flexShrink={0}
+            width="100%"
+            wrapMode="word"
+          >
             {terminalText(
               `Stopped: ${userFacingCause(sessionStatus.viewState.cause)}`,
             )}
           </text>
-          <text fg={presentation.colors.info} height={1} wrapMode="none">
-            {composer.failure === "admission"
-              ? "/retry · or edit and submit the draft"
-              : "/retry · /continue · or type a new instruction"}
+          <text
+            fg={presentation.colors.info}
+            flexShrink={0}
+            width="100%"
+            wrapMode="word"
+          >
+            {emptyState.signInRequired &&
+            sessionStatus.viewState.cause.startsWith("model:rejected:")
+              ? "/login · sign in, then send your message again"
+              : composer.failure === "admission"
+                ? "/retry · or edit and submit the draft"
+                : "/retry · /continue · or type a new instruction"}
           </text>
         </box>
       ) : null}

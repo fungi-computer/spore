@@ -42,7 +42,9 @@ export function PaneStatusLine({ inset = 1 }: Readonly<{ inset?: number }>) {
         fg={colors[toneColors[item.tone]]}
         attributes={dim ? 2 : 0}
         width={stringWidth(item.text)}
-        flexShrink={dim ? 0 : 1}
+        flexShrink={dim ? 1 : 0}
+        minWidth={0}
+        truncate={dim}
         wrapMode="none"
       >
         {item.text}
@@ -56,7 +58,7 @@ export function PaneStatusLine({ inset = 1 }: Readonly<{ inset?: number }>) {
       height={1}
       paddingX={inset}
     >
-      <box flexDirection="row" columnGap={1} flexShrink={1} minWidth={0}>
+      <box flexDirection="row" columnGap={1} flexShrink={0}>
         {left.map((item, index) => text(item, index, false))}
       </box>
       {right.map((item, index) => text(item, index, true))}

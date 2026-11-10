@@ -5,7 +5,9 @@ import type {
 import { useEffect, useState } from "react";
 import {
   DialogSurface,
-  ModalPrompt,
+  ModalHeader,
+  modalContentWidth,
+  type PaneViewport,
   reportFailure,
   type ModalContent,
   type ServiceRebind,
@@ -227,9 +229,11 @@ export function useServiceRecovery(
 export function ServiceRecoveryOverlay({
   view,
   colors,
+  viewport,
   onClose,
 }: Readonly<{
   view: ServiceRecoveryView;
+  viewport: PaneViewport;
   colors: TuiPresentation["colors"];
   onClose: () => void;
 }>) {
@@ -257,7 +261,13 @@ export function ServiceRecoveryOverlay({
           };
   return (
     <DialogSurface colors={colors} onClose={onClose}>
-      <ModalPrompt content={content} colors={colors} />
+      <ModalHeader
+        content={content}
+        colors={colors}
+        width={modalContentWidth(viewport.width)}
+        compact={viewport.height < 14}
+        full
+      />
     </DialogSurface>
   );
 }

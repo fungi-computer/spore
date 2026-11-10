@@ -115,7 +115,9 @@ export function usePaneShellCommands(options: PaneShellCommandOptions) {
       values: readonly string[],
       order: number,
       handler: () => void,
+      description?: string,
     ) => ({
+      description,
       id,
       title,
       category: "Panes",
@@ -155,10 +157,17 @@ export function usePaneShellCommands(options: PaneShellCommandOptions) {
         },
         handler: commandLine,
       },
-      windowCommand("zoom", "Zoom pane", ["alt+enter", "<leader>z"], 2, () => {
-        const id = focused();
-        if (id !== undefined) current.current.registry.toggleZoom(id);
-      }),
+      windowCommand(
+        "zoom",
+        "Zoom pane",
+        ["alt+enter", "<leader>z"],
+        2,
+        () => {
+          const id = focused();
+          if (id !== undefined) current.current.registry.toggleZoom(id);
+        },
+        "Alt+Enter inserts a newline in the composer; Ctrl K z zooms from there.",
+      ),
       windowCommand(
         "focus-previous",
         "Focus left",

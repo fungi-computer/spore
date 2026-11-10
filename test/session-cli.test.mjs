@@ -1,3 +1,4 @@
+import { captureFrame } from "./frame-capture.js";
 import { executeAlias, waitForCommandGraph } from "./command-selection.js";
 import assert from "node:assert/strict";
 import { EventEmitter, once } from "node:events";
@@ -2541,3 +2542,50 @@ test("fungi resume <id|prefix> opens that session through the sessions resolver,
     /No Session matching missing/u,
   );
 });
+
+for (const [width, height] of [
+  [60, 20],
+  [80, 24],
+  [100, 32],
+  [120, 40],
+]) {
+  test(`skipped login wraps the complete recovery and offers /login at ${String(width)}x${String(height)}`, async () => {
+    const cause =
+      "No signed-in model provider is available. Use your own Claude or ChatGPT subscription: /login in a Session, or fungi login --provider anthropic --auth-type oauth (Claude) or fungi login --provider openai --auth-type oauth (ChatGPT) in the CLI. For hosted Fungi: fungi login --provider fungi.";
+    await withCli(
+      async ({ type, submit, setup, pushFrame }) => {
+        await type("Say hello.");
+        await submit();
+        const failed = failedRunFrame();
+        failed.messages[0].value.content = "Say hello.";
+        failed.terminals[0].diagnostic = `model:rejected: ${cause}`;
+        await pushFrame(failed);
+        await act(async () =>
+          setup.waitForFrame((frame) => frame.includes("Stopped:")),
+        );
+        const frame = setup.captureCharFrame();
+        await captureFrame(
+          setup,
+          process.env.TUI_LOGIN_RECOVERY_CAPTURE_DIR,
+          `skipped-login-${String(width)}x${String(height)}`,
+        );
+        assert.ok(
+          frame
+            .replace(/\s+/gu, "")
+            .includes(
+              "Stopped: No signed-in model provider is available. Use /login to sign in with your Claude or ChatGPT subscription, an API key or Fungi, then send your message again.".replace(
+                /\s+/gu,
+                "",
+              ),
+            ),
+        );
+        assert.match(frame, /\/login · sign in, then send your message again/u);
+        assert.doesNotMatch(frame, /\/retry ·|\/continue/u);
+      },
+      {
+        auth: async () => [],
+        rendererOptions: { width, height },
+      },
+    );
+  });
+}

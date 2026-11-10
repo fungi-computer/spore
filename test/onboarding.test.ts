@@ -217,7 +217,7 @@ test("doctor treats an untouched install as unfinished setup, not failure", asyn
   expect(output).toContain("Next: run fungi login");
 });
 
-test("doctor checks Fungi readiness rather than accepting another provider's login", async () => {
+test("doctor reports Fungi readiness separately from a working subscription", async () => {
   let output = "";
   const checked: string[] = [];
   const passed = await runDoctor({
@@ -246,7 +246,7 @@ test("doctor checks Fungi readiness rather than accepting another provider's log
     },
   });
   expect(passed).toBe(false);
-  expect(checked).toEqual(["fungi"]);
+  expect(checked).toContain("fungi");
   expect(output).toContain("PASS sign-in: Saved Fungi login · Garden");
   expect(output).toContain("FAIL Fungi models");
   expect(output).toContain(

@@ -176,6 +176,7 @@ function Harness({
     <text>connected</text>
   ) : (
     <ServiceRecoveryOverlay
+      viewport={{ width: 80, height: 24 }}
       view={view}
       colors={colors}
       onClose={() => undefined}
@@ -402,6 +403,7 @@ function ObservedRecovery({
       <text>{status.observation.status}</text>
       {view === undefined ? null : (
         <ServiceRecoveryOverlay
+          viewport={{ width: 80, height: 24 }}
           view={view}
           colors={colors}
           onClose={() => undefined}

@@ -1,5 +1,21 @@
 # @fungi.computer/spore
 
+## 0.11.10
+
+### Patch Changes
+
+- Changes since 0.11.9:
+
+  - fix(tui): explain shortcut sequences and verify audit sizes
+  - fix(tui): keep recovery and activity inside split panes
+  - fix(tui): use the narrowed terminal diagnostic type
+  - fix(tui): use subscription defaults and show login recovery
+
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/parakeet@0.11.8
+  - @fungi.computer/truffle@0.10.8
+
 ## 0.11.9
 
 ### Patch Changes
