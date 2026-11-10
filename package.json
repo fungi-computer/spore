@@ -1,12 +1,22 @@
 {
   "name": "@fungi.computer/spore",
-  "version": "0.11.11",
+  "version": "0.11.12",
   "private": false,
   "type": "module",
   "bin": {
     "fungi": "./dist/cli.js"
   },
-  "description": "Fungi's terminal client and the fungi command, published as one bundled npm package",
+  "description": "Open-source Fungi AI agent for the terminal and ACP editors.",
+  "homepage": "https://docs.fungi.computer/shiitake",
+  "keywords": [
+    "fungi",
+    "ai-agent",
+    "coding-agent",
+    "terminal",
+    "cli",
+    "acp",
+    "open-source"
+  ],
   "scripts": {
     "clean": "node --input-type=module --eval \"import { rm } from 'node:fs/promises'; await rm('dist', { recursive: true, force: true });\"",
     "lint": "eslint src test --max-warnings=0 && ../../node_modules/.bin/oxlint --config ../../oxlint.config.ts --deny-warnings src test",

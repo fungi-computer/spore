@@ -10,6 +10,7 @@ import {
 import { resolve } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import console from "node:console";
+import process from "node:process";
 import { createHash } from "node:crypto";
 import { transform } from "esbuild";
 import { writeCliNotices } from "./package-notices.mjs";
@@ -29,7 +30,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 // The TUI's package.json version is the one source of truth for the published
 // @fungi.computer/spore and its native packages, so `fungi --version` reads the
 // same value from source and from the packed launcher.
-const { version } = JSON.parse(
+const { version, description, homepage, keywords } = JSON.parse(
   await readFile(resolve(root, "package.json"), "utf8"),
 );
 const repository = resolve(root, "../..");
@@ -174,8 +175,9 @@ await writeFile(
     {
       name: "@fungi.computer/spore",
       version,
-      description: "Fungi local agent for terminals and ACP editors",
-      homepage: "https://docs.fungi.computer/guides/use-fungi-in-your-editor/",
+      description,
+      homepage,
+      keywords,
       bin: { fungi: "dist/fungi.cjs" },
       files: [
         "README.md",

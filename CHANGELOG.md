@@ -1,5 +1,13 @@
 # @fungi.computer/spore
 
+## 0.11.12
+
+### Patch Changes
+
+- Changes since 0.11.11:
+
+  - fix(packages): describe Fungi npm entry points
+
 ## 0.11.11
 
 ### Patch Changes
