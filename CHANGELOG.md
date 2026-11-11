@@ -1,5 +1,21 @@
 # @fungi.computer/spore
 
+## 0.12.2
+
+### Patch Changes
+
+- Changes since 0.12.1:
+
+  - fix(parakeet,grove): recover a tool failure only through its own retry
+  - fix(grove): show a recovered tool failure once and centre the no-model
+    welcome
+
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/nacre@0.4.6
+  - @fungi.computer/parakeet@0.11.13
+  - @fungi.computer/truffle@0.10.11
+
 ## 0.12.1
 
 ### Patch Changes

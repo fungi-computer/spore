@@ -378,9 +378,10 @@ export function ToolSectionView({
 function statusTone(
   status: ParakeetToolCallView["status"],
   presentation: TuiPresentation,
+  recovered = false,
 ) {
   const { colors } = presentation;
-  const tone = toolStatusTone(status);
+  const tone = toolStatusTone(status, recovered);
   return tone === "neutral" ? colors.foreground : colors[tone];
 }
 
@@ -493,12 +494,16 @@ function ToolCallRow({
             ),
           )}
           {call.exitCode === undefined ? null : (
-            <span fg={colors.error}>{` · exit ${String(call.exitCode)}`}</span>
+            <span
+              fg={call.recovered === true ? colors.foreground : colors.error}
+            >
+              {` · exit ${String(call.exitCode)}`}
+            </span>
           )}
         </text>
         <RowStatusTail
           caption={durationText(call.durationMs).replace(/^ · /u, "")}
-          tone={statusTone(call.status, presentation)}
+          tone={statusTone(call.status, presentation, call.recovered === true)}
           open={open}
           presentation={presentation}
         />
@@ -506,7 +511,10 @@ function ToolCallRow({
       {open ? (
         <box marginLeft={sigilGutterTotalWidth} marginTop={1}>
           {call.error === undefined ? null : (
-            <text fg={colors.error} marginBottom={1}>
+            <text
+              fg={call.recovered === true ? colors.foreground : colors.error}
+              marginBottom={1}
+            >
               {terminalText(call.error)}
             </text>
           )}
@@ -633,6 +641,9 @@ export function ToolGroupRow({
                 ` · ${String(group.calls.length)} ${group.calls.length === 1 ? "call" : "calls"}` +
                 (group.failedCount > 0
                   ? ` · ${String(group.failedCount)} failed`
+                  : "") +
+                (group.recoveredCount > 0
+                  ? ` · ${String(group.recoveredCount)} recovered`
                   : ""),
             ),
             Math.max(

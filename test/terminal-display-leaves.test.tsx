@@ -118,6 +118,7 @@ const entries: readonly [
           calls: [],
           tools: [],
           failedCount: 0,
+          recoveredCount: 0,
           status: "completed",
         }}
         presentation={p}
