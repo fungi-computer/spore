@@ -1,5 +1,13 @@
 # @fungi.computer/spore
 
+## 0.12.9
+
+### Patch Changes
+
+- Updated dependencies
+  - @fungi.computer/nacre@0.5.2
+  - @fungi.computer/truffle@0.10.15
+
 ## 0.12.8
 
 ### Patch Changes
