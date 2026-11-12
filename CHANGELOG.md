@@ -1,5 +1,13 @@
 # @fungi.computer/spore
 
+## 0.12.12
+
+### Patch Changes
+
+- Updated dependencies
+  - @fungi.computer/veil@0.7.0
+  - @fungi.computer/truffle@0.10.16
+
 ## 0.12.11
 
 ### Patch Changes
