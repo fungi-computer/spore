@@ -418,7 +418,7 @@ test("an unprotected Git approval keeps its hook risk on the main card and its r
   const view = await card(review, 100);
   try {
     const main = view.frame();
-    expect(main).toContain("Project hooks can run code as you");
+    expect(main).toContain("Git hooks in this project can run code as you");
     expect(main).toContain("Approve once");
     expect(main).toContain("Deny and say why");
     expect(main).not.toContain("Always allow");
@@ -432,9 +432,10 @@ test("an unprotected Git approval keeps its hook risk on the main card and its r
     expect(details).toContain(
       "protected project Git repository is unavailable",
     );
-    expect(details.match(/Project hooks can run code as you/gu)).toHaveLength(
-      1,
-    );
+    // Details replace the one-line risk with the full one; it shows once.
+    expect(details.match(/Risk/gu)).toHaveLength(1);
+    expect(details).toContain("Git runs hook scripts");
+    expect(details).not.toContain("Git hooks in this project can run code");
     expect(view.producer.answers).toEqual([]);
   } finally {
     view.close();
