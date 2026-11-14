@@ -77,6 +77,17 @@ const serviceWorkerDigest = createHash("sha256")
     await readFile(resolve(output, "dist/private-local-service-worker.mjs")),
   )
   .digest("hex");
+// `fungi oyster` and `fungi app create` run the package versions released with
+// this fungi; nothing resolves `latest` at run time.
+const doorVersion = async (directory) =>
+  JSON.parse(
+    await readFile(
+      resolve(repository, "packages", directory, "package.json"),
+      "utf8",
+    ),
+  ).version;
+const oysterVersion = await doorVersion("oyster");
+const createFungiAppVersion = await doorVersion("create-fungi-app");
 const build = spawnSync(
   "bun",
   [
@@ -91,6 +102,10 @@ const build = spawnSync(
     'process.env.NODE_ENV="production"',
     "--define",
     `process.env.FUNGI_SERVICE_WORKER_DIGEST=${JSON.stringify(serviceWorkerDigest)}`,
+    "--define",
+    `process.env.FUNGI_OYSTER_VERSION=${JSON.stringify(oysterVersion)}`,
+    "--define",
+    `process.env.FUNGI_CREATE_APP_VERSION=${JSON.stringify(createFungiAppVersion)}`,
     "--sourcemap=none",
     "--outfile",
     resolve(output, "dist/cli.js"),

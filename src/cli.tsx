@@ -73,6 +73,11 @@ import {
 } from "./onboarding.js";
 import { helpFor } from "./cli-help.js";
 import {
+  DoorFailure,
+  runDoorCommand,
+  type DoorRunner,
+} from "./door-command.js";
+import {
   chooseSignInDoor,
   chooseSubscription,
   type SignInDoor,
@@ -507,6 +512,7 @@ export async function runFungiCli(
     extensions?: LocalExtensions;
     computerOwners?: Partial<ComputerCommandOwners>;
     vmRunner?: VmRunner;
+    doorRunner?: DoorRunner;
     readFungiStatus?: typeof readFungiAccountStatus;
     runAcp?: (options: LocalAcpStdioOptions) => Promise<void>;
     runAuth?: (
@@ -516,6 +522,20 @@ export async function runFungiCli(
   } = {},
   home = homedir(),
 ): Promise<void> {
+  // Doors pass their own flags to the package that owns the command, so they
+  // route before Spore's strict option parser sees them.
+  const [door, ...doorArguments] = argv;
+  if (door === "oyster" || door === "app") {
+    await runDoorCommand({
+      group: door,
+      args: doorArguments,
+      cwd: io.cwd ?? process.cwd(),
+      sporeVersion: fungiVersion,
+      stdout: io.stdout ?? process.stdout,
+      runner: overrides.doorRunner,
+    });
+    return;
+  }
   const credentialPath = resolveDefaultCredentialPath(home);
   const createServiceManager =
     overrides.createServiceManager ??
@@ -1762,7 +1782,12 @@ if (import.meta.main) {
       await runFungiCli(process.argv.slice(2), { cwd: process.cwd() });
     }
   } catch (cause) {
-    process.stderr.write(fungiCliFailureLine(cause));
+    if (cause instanceof DoorFailure)
+      new Cli({ brand: "fungi", output: process.stderr }).problem(
+        cause.message,
+        cause.next,
+      );
+    else process.stderr.write(fungiCliFailureLine(cause));
     process.exitCode = 1;
   }
 }

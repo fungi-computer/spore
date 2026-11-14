@@ -2,6 +2,7 @@ import { fungiAccountCommandHelp } from "@fungi.computer/truffle";
 import { agentsCommandHelp } from "./agents-command.js";
 import { computerCommandHelp } from "./computer-command.js";
 import { computersCommandHelp } from "./computers-command.js";
+import { appCommandHelp, oysterCommandHelp } from "./door-command.js";
 import { extensionCommandHelp } from "./extension-command.js";
 import { vmCommandHelp } from "./vm-command.js";
 
@@ -37,6 +38,12 @@ Team Computers:
                                  List or start your Team's Computers
   fungi computer <action>        Attach, inspect or detach a folder
   fungi mcp show|use|forget      Manage this project's Team MCP address
+
+Oyster and Apps:
+  fungi oyster try [dir]         Run your own Apps on this machine
+  fungi oyster <command>         Also install-apps and install
+  fungi app create [dir]         Create a Fungi App
+  fungi app <command>            Also dev, build and install
 
 Run in a VM:
   fungi vm [login|stop|rm]       Open fungi in a Lima Linux VM with only this
@@ -239,6 +246,8 @@ keeps its existing connection until fungi stop.
 List or remove direct-argv Always-allow prefixes. All rules belong to the project and apply to every Agent in it. Removing a rule restores the card.
 Only a human answer on an approval card can create a rule.
 `,
+    oyster: oysterCommandHelp,
+    app: appCommandHelp,
     computers: computersCommandHelp,
     agents: agentsCommandHelp,
     account: fungiAccountCommandHelp,

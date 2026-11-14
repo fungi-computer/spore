@@ -1,5 +1,25 @@
 # @fungi.computer/spore
 
+## 0.14.0
+
+### Minor Changes
+
+- Changes since 0.13.2:
+
+  - fix(spore): embed the door pins in the packed bundle
+  - fix(spore): keep door internals private
+  - feat(spore): fungi oyster and fungi app doors onto the owning packages
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/shiitake@0.17.0
+  - @fungi.computer/truffle@0.12.3
+  - @fungi.computer/corral@0.1.27
+  - @fungi.computer/parakeet@0.11.29
+  - @fungi.computer/shiitake-extensions@0.9.3
+
 ## 0.13.2
 
 ### Patch Changes

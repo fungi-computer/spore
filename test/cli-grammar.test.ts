@@ -1605,3 +1605,117 @@ test("fungi run --workspace tells an unsigned user how to sign in and exits 1 wi
   expect(stderr).not.toContain("model:rejected");
   expect(stderr).not.toMatch(/\n\s+at |Error:|terminal outcome/u);
 });
+
+test("fungi oyster and fungi app delegate to the owning packages at the released pins", async () => {
+  const oysterVersion = z
+    .looseObject({ version: z.string().min(1) })
+    .parse(
+      createRequire(import.meta.url)("../../../packages/oyster/package.json"),
+    ).version;
+  const createVersion = z
+    .looseObject({ version: z.string().min(1) })
+    .parse(
+      createRequire(import.meta.url)(
+        "../../../packages/create-fungi-app/package.json",
+      ),
+    ).version;
+  const root = await mkdtemp(join(tmpdir(), "fungi-door-"));
+  const calls: {
+    command: string;
+    args: readonly string[];
+    cwd: string;
+    env: Readonly<Record<string, string>>;
+  }[] = [];
+  let code = 0;
+  const run = async (argv: string[], cwd = root) => {
+    let out = "";
+    await runFungiCli(
+      argv,
+      {
+        cwd,
+        stdout: {
+          write: (chunk: string | Uint8Array) => ((out += String(chunk)), true),
+        },
+      },
+      { doorRunner: (call) => (calls.push(call), Promise.resolve(code)) },
+      root,
+    );
+    return out;
+  };
+  const host = { FUNGI_HOST: `spore@${cliVersion}` };
+  try {
+    await run(["oyster", "try", "x", "--port", "1"]);
+    expect(calls.pop()).toEqual({
+      command: "npm",
+      args: [
+        "exec",
+        "--yes",
+        `--package=@fungi.computer/oyster@${oysterVersion}`,
+        "--",
+        "oyster",
+        "try",
+        "x",
+        "--port",
+        "1",
+      ],
+      cwd: root,
+      env: host,
+    });
+    await run(["oyster", "install-apps", "--help"]);
+    expect(calls.pop()?.args.slice(-2)).toEqual(["install-apps", "--help"]);
+    await run(["app", "create", "my-app", "--no-install"]);
+    expect(calls.pop()?.args).toEqual([
+      "exec",
+      "--yes",
+      `--package=create-fungi-app@${createVersion}`,
+      "--",
+      "create-fungi-app",
+      "my-app",
+      "--no-install",
+    ]);
+    await run(["app", "install", "./dist"]);
+    expect(calls.pop()?.args.slice(-3)).toEqual([
+      "oyster",
+      "install",
+      "./dist",
+    ]);
+    // The group help is Spore's; it never starts a child.
+    expect(await run(["oyster", "--help"])).toContain(
+      "Usage: fungi oyster try [dir]",
+    );
+    expect(await run(["app"])).toContain("Usage: fungi app create [dir]");
+    expect(await run(["help", "oyster"])).toContain(
+      "fungi oyster install-apps",
+    );
+    expect(calls).toEqual([]);
+    // Refusals carry the next step.
+    await assert.rejects(run(["oyster", "bogus"]), {
+      name: "DoorFailure",
+      message: "Unknown oyster command: bogus",
+      next: "Run fungi oyster --help",
+    });
+    await assert.rejects(run(["app", "dev"]), {
+      name: "DoorFailure",
+      message: "This folder is not a Fungi App",
+      next: "Run fungi app create <dir>, or npm install here",
+    });
+    // Inside an App, dev runs the project's own fungi-app.
+    await mkdir(join(root, "node_modules", ".bin"), { recursive: true });
+    await writeFile(join(root, "node_modules", ".bin", "fungi-app"), "");
+    await run(["app", "dev", "--port", "8800"]);
+    expect(calls.pop()).toEqual({
+      command: join(root, "node_modules", ".bin", "fungi-app"),
+      args: ["dev", "--port", "8800"],
+      cwd: root,
+      env: host,
+    });
+    // A failing child's exit code becomes fungi's.
+    code = 3;
+    const before = process.exitCode;
+    await run(["oyster", "try"]);
+    expect(process.exitCode).toBe(3);
+    process.exitCode = before ?? 0;
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
