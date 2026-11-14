@@ -995,8 +995,13 @@ export async function runFungiCli(
       throw new Error("fungi stop does not accept arguments or options");
     const manager = createServiceManager();
     const stopped = await manager.stop();
+    const ended =
+      (stopped.kind === "stopped" || stopped.kind === "killed") &&
+      stopped.endedCommands > 0
+        ? ` Ended ${String(stopped.endedCommands)} leftover command${stopped.endedCommands === 1 ? "" : "s"} the service had started.`
+        : "";
     linearCli.info(
-      stopped.kind === "not-running"
+      (stopped.kind === "not-running"
         ? stopped.recordCleaned
           ? "Local service wasn't running; cleaned up its record. Saved Sessions preserved."
           : "Local service wasn't running. Saved Sessions preserved."
@@ -1004,7 +1009,7 @@ export async function runFungiCli(
           ? "Local service was replaced; left the new service running."
           : stopped.kind === "killed"
             ? "Local service did not stop within 5 seconds, so it was killed. Saved Sessions preserved; interrupted turns resume when the service next starts."
-            : "Local service stopped. Saved Sessions preserved.",
+            : "Local service stopped. Saved Sessions preserved.") + ended,
     );
     return;
   }

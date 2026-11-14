@@ -1,5 +1,30 @@
 # @fungi.computer/spore
 
+## 0.13.0
+
+### Minor Changes
+
+- Changes since 0.12.16:
+
+  - fix(parakeet): name an execute row's tool and command, not its script
+  - feat(local): report how many leftover commands fungi stop ended
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/agar@0.13.0
+  - @fungi.computer/parakeet@0.11.26
+  - @fungi.computer/shiitake-extensions@0.9.0
+  - @fungi.computer/shiitake@0.16.0
+  - @fungi.computer/truffle@0.12.0
+  - @fungi.computer/nacre@0.6.1
+  - @fungi.computer/corral@0.1.24
+  - @fungi.computer/veil@0.7.3
+
 ## 0.12.16
 
 ### Patch Changes

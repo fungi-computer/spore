@@ -108,7 +108,7 @@ try {
   await selected.session.send("Run the 12 second build.", {
     requestId: "build",
   });
-  await waitForFrame(setup, (frame) => frame.includes("Running script"));
+  await waitForFrame(setup, (frame) => frame.includes("Running exec:"));
   const started = Date.now();
   const observations = [];
   for (const at of [3, 6, 9]) {
@@ -119,7 +119,7 @@ try {
       });
     }
     const frame = setup.captureCharFrame();
-    assert.match(frame, /Running script/u);
+    assert.match(frame, /Running exec:/u);
     assert.match(
       frame,
       new RegExp(`^ +build step ${at}/12: compiling module_${at}`, "mu"),
@@ -149,9 +149,9 @@ try {
   assert.equal(snapshot?.terminals[0]?.outcome, "completed");
   await waitForFrame(setup, (frame) => frame.includes("The build finished."));
   const final = setup.captureCharFrame();
-  assert.match(final, /Ran script.*● ▸/u);
+  assert.match(final, /Ran exec:.*● ▸/u);
   assert.doesNotMatch(final, /^ +(?:build step|warn) /mu);
-  assert.doesNotMatch(final, /Running script/u);
+  assert.doesNotMatch(final, /Running exec:/u);
   await captureFrame(setup, shots, "after-finished");
   if (shots)
     await writeFile(

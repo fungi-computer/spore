@@ -153,7 +153,7 @@ try {
     }
   }
   await readFile(join(root, "wait-started"));
-  await waitForFrame(setup, (frame) => frame.includes("Running script"));
+  await waitForFrame(setup, (frame) => frame.includes("Running exec:"));
   if (foreground) {
     for (let attempt = 0; attempt < 200; attempt++) {
       if ((await foregroundSleeps()).length > 0) break;

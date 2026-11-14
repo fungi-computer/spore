@@ -509,7 +509,10 @@ test("sessions grammar requires a listed number or --last and rejects unrelated 
 });
 
 test("stop awaits the service owner without opening a renderer or restarting it", async () => {
-  const stopping = Promise.withResolvers<{ kind: "stopped" }>();
+  const stopping = Promise.withResolvers<{
+    kind: "stopped";
+    endedCommands: number;
+  }>();
   const entered = Promise.withResolvers<undefined>();
   let output = "";
   const running = runFungiCli(
@@ -540,7 +543,7 @@ test("stop awaits the service owner without opening a renderer or restarting it"
   );
   await entered.promise;
   expect(output).toBe("");
-  stopping.resolve({ kind: "stopped" });
+  stopping.resolve({ kind: "stopped", endedCommands: 0 });
   await running;
   expect(output).toContain("Local service stopped");
 });
@@ -591,12 +594,12 @@ test("stop says in one line that a service which ignored SIGTERM was killed", as
     {
       createServiceManager: () => ({
         ...createPrivateLocalServiceManager(),
-        stop: () => Promise.resolve({ kind: "killed" }),
+        stop: () => Promise.resolve({ kind: "killed", endedCommands: 2 }),
       }),
     },
   );
   expect(output).toBe(
-    "Local service did not stop within 5 seconds, so it was killed. Saved Sessions preserved; interrupted turns resume when the service next starts.\n",
+    "Local service did not stop within 5 seconds, so it was killed. Saved Sessions preserved; interrupted turns resume when the service next starts. Ended 2 leftover commands the service had started.\n",
   );
 });
 
