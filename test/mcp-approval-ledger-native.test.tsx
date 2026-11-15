@@ -173,7 +173,9 @@ for (const { decision, revokeMembership } of [
         });
         if (revokeMembership) {
           await setup.waitForFrame((value) =>
-            value.includes("Couldn't answer (not-eligible). Nothing ran."),
+            value.includes(
+              "You can't answer this request. Nothing ran. Ask whoever owns it.",
+            ),
           );
           expect(ledger.get(pending.recordId)).toMatchObject({
             state: "pending",

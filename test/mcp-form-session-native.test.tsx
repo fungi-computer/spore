@@ -255,7 +255,10 @@ for (const action of ["deny", "escape"]) {
   });
 }
 
-for (const reason of ["not-attached", "not-pending"] as const) {
+for (const [reason, words] of [
+  ["not-attached", "This session isn't connected anymore."],
+  ["not-pending", "This request changed."],
+] as const) {
   test(`a ${reason} refusal is visible, not approval success`, async () => {
     const { producer, setup, close } = await mount(() =>
       Promise.resolve({ kind: "refused", reason }),
@@ -270,9 +273,7 @@ for (const reason of ["not-attached", "not-pending"] as const) {
       await pressDecodedKey(setup, () => {
         setup.mockInput.pressEnter();
       });
-      const frame = await waitForFrame(setup, (frame) =>
-        frame.includes(`Couldn't answer (${reason}). Nothing ran.`),
-      );
+      const frame = await waitForFrame(setup, (frame) => frame.includes(words));
       expect(frame).not.toContain("approved successfully");
       expect(producer.calls).toHaveLength(1);
       expect(producer.calls[0]?.input).toEqual({

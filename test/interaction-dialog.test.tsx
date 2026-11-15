@@ -492,3 +492,52 @@ for (const kind of [
     }
   });
 }
+
+test("a failed interaction shows only the failure Picker's hints, not the caller's", async () => {
+  const host = createWhistleInteractionHost({ title: "Approval" });
+  const session = host.begin();
+  const setup = await testRender(
+    <Hinted
+      host={host}
+      hints={[{ keys: "Enter", label: "answer here", priority: 0 }]}
+    />,
+    { width: 80, height: 30 },
+  );
+  try {
+    act(() => {
+      session.settle({ status: "failed", message: "Couldn't send." });
+    });
+    await act(async () =>
+      setup.waitForFrame((frame) => frame.includes("Couldn't send.")),
+    );
+    const frame = setup.captureCharFrame();
+    expect(frame).toContain("Enter select");
+    expect(frame).not.toContain("answer here");
+    expect(frame.match(/Esc /g)).toHaveLength(1);
+  } finally {
+    act(() => {
+      host.cancel();
+    });
+    act(() => {
+      setup.renderer.destroy();
+    });
+  }
+});
+
+function Hinted({
+  host,
+  hints,
+}: Readonly<{
+  host: ReturnType<typeof createWhistleInteractionHost>;
+  hints: NonNullable<Parameters<typeof InteractionView>[0]["hints"]>;
+}>) {
+  const { colors } = useTerminalTheme("mocha");
+  return (
+    <InteractionView
+      host={host}
+      colors={colors}
+      onClose={() => undefined}
+      hints={hints}
+    />
+  );
+}

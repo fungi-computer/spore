@@ -516,7 +516,7 @@ export function InteractionView({
           />
         </box>
       ) : null}
-      {state.prompt !== undefined ? null : (
+      {state.prompt !== undefined || failed ? null : (
         <HintRow
           hints={customHints ?? hints}
           width={dialogWidth}

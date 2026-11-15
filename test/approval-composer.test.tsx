@@ -837,7 +837,7 @@ test("a stale revision refusal remains visible, not approval success", async () 
 
 test("eligibility refusal distinguishes a denied rule from lost answer rights", async () => {
   for (const [always, expected] of [
-    [false, "Couldn't answer (not-eligible). Nothing ran."],
+    [false, "You can't answer this request. Nothing ran. Ask whoever owns it."],
     [
       true,
       "Always allow isn't available for this command. Approve once or deny.",

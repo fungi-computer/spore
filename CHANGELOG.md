@@ -1,5 +1,19 @@
 # @fungi.computer/spore
 
+## 0.14.8
+
+### Patch Changes
+
+- Changes since 0.14.7:
+
+  - fix(spore): show one hint row on a failed interaction
+  - fix(approvals): word every refused approval in plain language
+
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/parakeet@0.11.37
+  - @fungi.computer/truffle@0.12.9
+
 ## 0.14.7
 
 ### Patch Changes
