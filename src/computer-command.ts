@@ -33,6 +33,24 @@ fungi mcp use <url> --from-file - with its key first.
       --yes                      Accept the access notice without asking
 `;
 
+export type OfflineStatus = Readonly<{
+  kind: "offline";
+  retryInMs: number;
+  reason: "unreachable" | "probe-unavailable" | "connection-closed";
+}>;
+
+/** One plain sentence for a dropped link; the raw cause stays out of the terminal. */
+export function offlineLine(status: OfflineStatus): string {
+  const seconds = Math.max(1, Math.round(status.retryInMs / 1000));
+  const why =
+    status.reason === "connection-closed"
+      ? "the connection dropped"
+      : status.reason === "probe-unavailable"
+        ? "can't check the host (is this machine online?)"
+        : "can't reach the host";
+  return `offline, ${why}; retrying in ${String(seconds)} s`;
+}
+
 export type Write = Readonly<{ write: (text: string) => void }>;
 export type Signals = Readonly<{
   on: (signal: "SIGINT" | "SIGTERM", listener: () => void) => void;
@@ -138,9 +156,7 @@ export async function runComputerCommand(
       signal: controller.signal,
       onStatus: (status) => {
         const line =
-          status.kind === "offline"
-            ? `offline (${status.reason}); retrying`
-            : status.kind;
+          status.kind === "offline" ? offlineLine(status) : status.kind;
         if (line === last) return;
         last = line;
         stdout.write(`${attached.computerName}: ${line}\n`);

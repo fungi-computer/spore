@@ -1,5 +1,19 @@
 # @fungi.computer/spore
 
+## 0.14.9
+
+### Patch Changes
+
+- Changes since 0.14.8:
+
+  - fix(computer): export the offline status the line formatter takes
+  - fix(computer): say offline in plain words when the attach link drops
+
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/parakeet@0.11.38
+  - @fungi.computer/truffle@0.12.10
+
 ## 0.14.8
 
 ### Patch Changes
