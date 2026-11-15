@@ -123,7 +123,7 @@ test("the fixture project does not inherit parent-directory skills", async () =>
     cwd: project,
     home,
     hidden: () => [],
-  }).catalog(new AbortController().signal);
+  }).catalog({ sessionId: "session", signal: new AbortController().signal });
   expect(catalog.skills).toEqual([]);
 });
 

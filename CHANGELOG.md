@@ -1,5 +1,22 @@
 # @fungi.computer/spore
 
+## 0.15.0
+
+### Minor Changes
+
+- Changes since 0.14.9:
+
+  - feat(skills): pass the session id into the skill source
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/parakeet@0.12.0
+  - @fungi.computer/shiitake-extensions@0.11.0
+  - @fungi.computer/truffle@0.13.0
+
 ## 0.14.9
 
 ### Patch Changes
