@@ -1,5 +1,18 @@
 # @fungi.computer/spore
 
+## 0.16.1
+
+### Patch Changes
+
+- Updated dependencies
+  - @fungi.computer/agar@0.19.0
+  - @fungi.computer/nacre@0.7.1
+  - @fungi.computer/parakeet@0.12.3
+  - @fungi.computer/shiitake@0.19.1
+  - @fungi.computer/truffle@0.14.1
+  - @fungi.computer/corral@0.1.34
+  - @fungi.computer/shiitake-extensions@0.11.3
+
 ## 0.16.0
 
 ### Minor Changes
