@@ -76,18 +76,7 @@ function startFixtureHub(appDirectoryResponseSchema) {
         override: null,
         authorityVersion: 1,
         enforcement: null,
-        grants: [],
-        generationPermissions: { llm: false, media: false },
-        marketplacePermissions: {
-          browse: false,
-          purchase: false,
-        },
-        // The Hub's noAppAgentPermission: an installed App with no Agent grant.
-        agentPermission: {
-          kind: "all-team-agents",
-          directoryOperations: [],
-          sessionOperations: [],
-        },
+        permission: null,
         handlers: [],
         roles: [],
         declaredCapabilities: [],

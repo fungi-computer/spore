@@ -9,11 +9,43 @@ test("diagnostic codes never reach the user", () => {
     "No signed-in model provider is available. Use /login to sign in with your Claude or ChatGPT subscription, an API key or Fungi, then send your message again.",
   );
   expect(userFacingCause("model:rejected: Model acquisition failed")).toBe(
-    "No model is available. Run /login to sign in, then pick a model with /model.",
+    "The model couldn't start. Try /retry; if it keeps failing, run fungi doctor.",
   );
   expect(userFacingCause("model:rejected:")).not.toContain("model:rejected");
   expect(userFacingCause("Provider refused")).toBe("Provider refused");
   expect(userFacingCause(null)).toBe("The request did not complete.");
+});
+
+test("only a missing signed-in provider suggests signing in", () => {
+  for (const sentence of [
+    "Model acquisition failed",
+    "Model acquisition failed.",
+    "Couldn't read your saved sign-in; retry, or run fungi doctor.",
+    "Turn provider is not registered; pick another model with /model.",
+    "Offline model doesn't support high reasoning; pick another level with /model.",
+  ]) {
+    expect(userFacingCause(`model:rejected: ${sentence}`)).not.toContain(
+      "/login",
+    );
+  }
+  expect(
+    userFacingCause(
+      "model:rejected: Couldn't read your saved sign-in; retry, or run fungi doctor.",
+    ),
+  ).toBe("Couldn't read your saved sign-in; retry, or run fungi doctor.");
+});
+
+test("a bare acquisition failure offers retry and diagnostics, not login", () => {
+  for (const sentence of [
+    "Model acquisition failed",
+    "Model acquisition failed.",
+    "model:rejected: Model acquisition failed.",
+    "model:rejected:",
+  ]) {
+    expect(userFacingCause(sentence)).toBe(
+      "The model couldn't start. Try /retry; if it keeps failing, run fungi doctor.",
+    );
+  }
 });
 
 test("the status line leaves the stopped reason in the transcript", () => {
@@ -40,4 +72,15 @@ test("retry and disconnect causes stay out of the status line", () => {
       cause: "session:closed: Connection lost.",
     }),
   ).toBe("failed");
+});
+
+test("a provider usage-limit diagnostic reaches the footer without a retry suggestion", () => {
+  expect(
+    userFacingCause("OpenAI usage limit reached on your ChatGPT subscription."),
+  ).toBe("OpenAI usage limit reached on your ChatGPT subscription.");
+  expect(
+    userFacingCause(
+      "Anthropic usage limit reached on your Claude subscription; resets at 14:30.",
+    ),
+  ).not.toContain("retry");
 });

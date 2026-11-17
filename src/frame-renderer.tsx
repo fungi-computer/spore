@@ -1,4 +1,5 @@
 import { HostColorsContext, useHostColors } from "./button/dialog-surface.js";
+import { LocalStoreSchemaError } from "@fungi.computer/truffle/service";
 import type { createRoot } from "@opentui/react";
 import type { QueryClient } from "@tanstack/query-core";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -38,7 +39,7 @@ type FrameProjection = Readonly<{
   requested?: number;
   picker?: SessionPickerProps;
   landing?: LandingProps & Pick<SessionPickerProps, "initialTheme">;
-  recovery?: Readonly<{ message: string; retry: () => void; exit: () => void }>;
+  recovery?: Readonly<{ error: Error; retry: () => void; exit: () => void }>;
   serviceUpdated?: Readonly<{ message: string; exit: () => void }>;
 }>;
 type FrameStore = Readonly<{
@@ -107,7 +108,7 @@ function MountedFrameContent({ store }: Readonly<{ store: FrameStore }>) {
   const updated = live ? projection.serviceUpdated : undefined;
   useEffect(() => {
     if (recovery === undefined) return;
-    const handle = dialog.show(() => <ConnectionRecovery {...recovery} />, {
+    const handle = dialog.show(() => <SelectionRecovery {...recovery} />, {
       // Leaving recovery is a choice in the dialog, not Esc.
       beforeDismiss: () => false,
     });
@@ -129,7 +130,7 @@ function MountedFrameContent({ store }: Readonly<{ store: FrameStore }>) {
   if (entries === undefined && projection.recovery !== undefined)
     return (
       <HostColorsContext.Provider value={initialPresentation.colors}>
-        <ConnectionRecovery {...projection.recovery} />
+        <SelectionRecovery {...projection.recovery} />
       </HostColorsContext.Provider>
     );
   if (entries === undefined && projection.serviceUpdated !== undefined)
@@ -284,6 +285,51 @@ export function ConnectionRecovery({
   );
 }
 
+function SelectionRecovery({
+  error,
+  retry,
+  exit,
+}: Readonly<{ error: Error; retry: () => void; exit: () => void }>) {
+  const colors = useHostColors();
+  const dimensions = useTerminalDimensions();
+  if (!(error instanceof LocalStoreSchemaError))
+    return (
+      <ConnectionRecovery message={error.message} retry={retry} exit={exit} />
+    );
+  const compact = dimensions.height < 14;
+  return (
+    <box flexDirection="column" flexGrow={1} rowGap={compact ? 0 : 1}>
+      <ModalHeader
+        content={{
+          title:
+            error.reason === "newer"
+              ? "This Agent was saved by a newer Fungi"
+              : "Fungi cannot read this Agent",
+          summary: error.message,
+        }}
+        width={modalContentWidth(dimensions.width)}
+        compact={compact}
+        full
+        colors={colors}
+      />
+      <Picker
+        colors={colors}
+        choices={
+          error.reason === "newer"
+            ? [{ name: "Exit" }]
+            : [{ name: "Start a new Agent" }, { name: "Exit" }]
+        }
+        onSelect={(index) => {
+          if (error.reason === "newer") exit();
+          else if (index === 0) retry();
+          else if (index === 1) exit();
+        }}
+        onCancel={exit}
+      />
+    </box>
+  );
+}
+
 export function renderTuiConnectionRecovery(
   root: ReturnType<typeof createRoot>,
   error: Error,
@@ -293,7 +339,7 @@ export function renderTuiConnectionRecovery(
   const store = frameStore(root);
   store.update({
     ...store.read(),
-    recovery: { message: error.message, retry, exit },
+    recovery: { error, retry, exit },
   });
 }
 

@@ -382,6 +382,11 @@ function TuiFrameConversation({
   useEffect(() => {
     if (serviceRecovery === undefined) setRecoveryCollapsed(false);
   }, [serviceRecovery === undefined]);
+  // Footer rows are the last state the service reported, such as "3 working".
+  // Once the service is lost they are stale, and nothing in them is running:
+  // show only the recovery notice until a fresh snapshot arrives.
+  const footerContributions =
+    serviceRecovery === undefined ? contributions : [];
   const themeControls = useThemeControls(dialog, {
     commands,
     initialTheme,
@@ -879,7 +884,7 @@ function TuiFrameConversation({
           </text>
         ) : null}
         <PaneStatusLine inset={inset} />
-        {contributions.map(({ entryId, value }) => {
+        {footerContributions.map(({ entryId, value }) => {
           const rows =
             value.panel.length > 0
               ? value.panel

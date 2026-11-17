@@ -709,7 +709,7 @@ test("error and aborted assistant terminals are not successful output", async ()
     );
     await assert.rejects(
       run,
-      /^Error: No model is available\. Run \/login to sign in/u,
+      /^Error: The model couldn't start\. Try \/retry/u,
     );
     assert.deepEqual(output, []);
   }

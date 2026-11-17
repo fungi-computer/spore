@@ -80,51 +80,65 @@ test("bundled notices are independent of equal-name version discovery order", as
   }
 });
 
-test("bundled entities uses the exact-version upstream license supplement", async () => {
-  const root = await mkdtemp(join(tmpdir(), "fungi-entities-notices-"));
-  try {
-    const output = await prepareNotices(root);
-    const directory = join(root, "dependencies/entities");
-    await mkdir(directory, { recursive: true });
-    const manifest = join(directory, "package.json");
-    await writeFile(
-      manifest,
-      JSON.stringify({ name: "@nodable/entities", version: "3.1.0" }),
-    );
-    await writeFile(join(directory, "index.js"), "export {};\n");
-    await writeFile(
-      join(root, "graph.json"),
-      JSON.stringify({
-        inputs: { "dependencies/entities/index.js": { bytes: 0, imports: [] } },
-      }),
-    );
-    const options = { repository: root, output, metafile: "graph.json" };
-    await writeCliNotices(options);
-    const notices = await readFile(join(output, "THIRD_PARTY_NOTICES"), "utf8");
-    const upstream = await readFile(
-      join(
-        repository,
-        "apps/tui/npm/licenses/nodable-val-parsers-v3.1.0-LICENSE",
-      ),
-      "utf8",
-    );
-    assert.ok(
-      notices.includes(`@nodable/entities 3.1.0\n\n${upstream.trim()}`),
-    );
+for (const { name, version, nextVersion, license } of [
+  {
+    name: "@nodable/entities",
+    version: "3.1.0",
+    nextVersion: "3.1.1",
+    license: "nodable-val-parsers-v3.1.0-LICENSE",
+  },
+  {
+    name: "@earendil-works/pi-telemetry",
+    version: "0.99.2",
+    nextVersion: "0.99.3",
+    license: "LICENSE.pi",
+  },
+  {
+    name: "@earendil-works/pi-telemetry",
+    version: "1.5.2",
+    nextVersion: "1.5.3",
+    license: "LICENSE.pi",
+  },
+]) {
+  test(`bundled ${name} uses the exact-version upstream license supplement`, async () => {
+    const root = await mkdtemp(join(tmpdir(), "fungi-supplement-notices-"));
+    try {
+      const output = await prepareNotices(root);
+      const directory = join(root, "dependencies/unlicensed");
+      await mkdir(directory, { recursive: true });
+      const manifest = join(directory, "package.json");
+      await writeFile(manifest, JSON.stringify({ name, version }));
+      await writeFile(join(directory, "index.js"), "export {};\n");
+      await writeFile(
+        join(root, "graph.json"),
+        JSON.stringify({
+          inputs: {
+            "dependencies/unlicensed/index.js": { bytes: 0, imports: [] },
+          },
+        }),
+      );
+      const options = { repository: root, output, metafile: "graph.json" };
+      await writeCliNotices(options);
+      const notices = await readFile(
+        join(output, "THIRD_PARTY_NOTICES"),
+        "utf8",
+      );
+      const upstream = await readFile(
+        join(repository, `apps/tui/npm/licenses/${license}`),
+        "utf8",
+      );
+      assert.ok(notices.includes(`${name} ${version}\n\n${upstream.trim()}`));
 
-    // A future dependency update must supply its own reviewed provenance.
-    await writeFile(
-      manifest,
-      JSON.stringify({ name: "@nodable/entities", version: "3.1.1" }),
-    );
-    await assert.rejects(
-      writeCliNotices(options),
-      /No upstream license text found for: @nodable\/entities/,
-    );
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
+      // A future dependency update must supply its own reviewed provenance.
+      await writeFile(manifest, JSON.stringify({ name, version: nextVersion }));
+      await assert.rejects(writeCliNotices(options), {
+        message: `No upstream license text found for: ${name}`,
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
 
 test("cached native notices package without the compiler's source checkout", async () => {
   const root = await mkdtemp(join(tmpdir(), "fungi-native-notices-"));

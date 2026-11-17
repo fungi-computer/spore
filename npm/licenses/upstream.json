@@ -30,13 +30,29 @@
     ]
   },
   {
-    "packages": ["@earendil-works/pi-ai@1.3.0"],
-    "sourceRevision": "v1.3.0",
+    "packages": ["@earendil-works/pi-telemetry@0.99.2"],
+    "sourceRevision": "005af57d88ee23b33778f343a9595b32e67ff788",
+    "revisionEvidence": "upstream v0.99.2 tag; packages/telemetry/package.json declares 0.99.2",
+    "noticeEvidence": "npm tarball omits LICENSE; tag's MIT text is byte-identical to LICENSE.pi",
+    "notices": [
+      {
+        "file": "LICENSE.pi",
+        "source": "https://raw.githubusercontent.com/earendil-works/pi/v0.99.2/LICENSE",
+        "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48"
+      }
+    ]
+  },
+  {
+    "packages": [
+      "@earendil-works/pi-ai@1.5.2",
+      "@earendil-works/pi-telemetry@1.5.2"
+    ],
+    "sourceRevision": "v1.5.2",
     "revisionEvidence": "release tag",
     "notices": [
       {
         "file": "LICENSE.pi",
-        "source": "https://raw.githubusercontent.com/earendil-works/pi/v1.3.0/LICENSE",
+        "source": "https://raw.githubusercontent.com/earendil-works/pi/v1.5.2/LICENSE",
         "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48"
       }
     ]

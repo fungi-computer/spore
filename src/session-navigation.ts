@@ -114,14 +114,18 @@ export async function selectTuiSession(input: {
       onNotice(discoveryProblemMessage(discovery.problems));
     // The Agent the new Session belongs to. Several Agents leave it to the
     // person (landing) because the service never picks one for them.
+    const readableAgents = () =>
+      discovery.agents.filter(
+        (candidate) => candidate.unreadable === undefined,
+      );
     let agent: PrivateLocalAgentChoice | undefined =
-      discovery.agents.length > 1 ? undefined : discovery.agents[0];
+      readableAgents().length > 1 ? undefined : readableAgents()[0];
     const startNew = () => {
       const databasePath = agent?.databasePath;
       if (databasePath === undefined) {
-        if (discovery.agents.length > 1)
+        if (readableAgents().length > 1)
           throw new LocalAgentSelectionAmbiguous(
-            discovery.agents.map((candidate) => candidate.agentId),
+            readableAgents().map((candidate) => candidate.agentId),
           );
         return serviceManager.connect(
           {
@@ -201,12 +205,16 @@ export async function selectTuiSession(input: {
               : "The Agent could not be archived";
         }
         discovery = await discover();
-        agent = discovery.agents.length > 1 ? undefined : discovery.agents[0];
+        agent = readableAgents().length > 1 ? undefined : readableAgents()[0];
         continue;
       }
       if (choice?.kind === "agent") {
         const chosen = discovery.agents[choice.index];
         if (chosen === undefined) return undefined;
+        if (chosen.unreadable !== undefined) {
+          landingNotice = chosen.unreadable;
+          continue;
+        }
         agent = chosen;
         visible = discovery.sessions.filter(
           (session) => session.databasePath === chosen.databasePath,

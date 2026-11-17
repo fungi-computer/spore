@@ -91,12 +91,37 @@ function fakeApprovals(respond?: McpApprovalSource["answer"]) {
   return {
     source,
     answers,
-    publish: (next: ApprovalView) => {
+    publish: (next: ApprovalView | undefined) => {
       pending = next;
       for (const listener of listeners) listener();
     },
   };
 }
+
+test("a withdrawn approval card disappears without becoming a chat message", async () => {
+  const producer = fakeApprovals();
+  const setup = await testRender(
+    <Composer source={producer.source} width={80} height={30} />,
+    { width: 80, height: 30 },
+  );
+  try {
+    act(() => {
+      producer.publish(approval());
+    });
+    await waitForFrame(setup, (frame) => frame.includes("Approve once"));
+    act(() => {
+      producer.publish(undefined);
+    });
+    const frame = await waitForFrame(
+      setup,
+      (frame) => !frame.includes("Approve once"),
+    );
+    expect(frame).not.toContain("Approval computer.exec");
+    expect(frame).not.toContain("approval-1");
+  } finally {
+    setup.renderer.destroy();
+  }
+});
 
 async function card(
   review?: McpApprovalSource["review"],

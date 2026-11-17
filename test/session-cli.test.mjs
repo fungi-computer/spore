@@ -26,7 +26,10 @@ import { sessionQueryOptions } from "@fungi.computer/parakeet/headless";
 import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 import { renderTuiConversation } from "@fungi.computer/spore/frame-renderer";
 import { runFungiCli } from "../src/cli.js";
-import { runPrivateLocalWorkerServer } from "@fungi.computer/truffle/service";
+import {
+  LocalStoreSchemaError,
+  runPrivateLocalWorkerServer,
+} from "@fungi.computer/truffle/service";
 import { createTuiFixture, fixtureGoalStartedAt } from "./fixture.js";
 import {
   loadThemePreference,
@@ -713,6 +716,90 @@ test("rejects launch-time model selection before fresh, latest, or picked Sessio
     assert.equal(resumes, 0);
     assert.equal(pickerRenders, 0);
   }
+});
+
+for (const hasReadableAgent of [false, true]) {
+  test(`new Session selection skips an unreadable Agent (readable peer: ${hasReadableAgent})`, async () => {
+    const selected = [];
+    const currentPath = "/fixture/.fungi/agents/current/agent.sqlite";
+    const discovery = {
+      agents: [
+        {
+          agentId: "old",
+          databasePath: "/fixture/.fungi/agents/old/agent.sqlite",
+          unreadable: "predates the current schema",
+          sessionCount: 0,
+        },
+        ...(hasReadableAgent
+          ? [
+              {
+                agentId: "current",
+                databasePath: currentPath,
+                sessionCount: 0,
+              },
+            ]
+          : []),
+      ],
+      sessions: [],
+      problems: [],
+    };
+    await runTuiCli(
+      { invocationRoot: "/fixture", entry: "new" },
+      dependencies(discovery, {
+        createServiceManager: () => ({
+          connect: async (selection) => {
+            selected.push(selection);
+            return host;
+          },
+          createSession: async (selection) => {
+            selected.push(selection);
+            return host;
+          },
+        }),
+      }),
+    );
+    assert.equal(selected.length, 1);
+    assert.equal(
+      selected[0].databasePath,
+      hasReadableAgent ? currentPath : undefined,
+    );
+  });
+}
+
+test("schema recovery starts without the refused selection instead of retrying it", async () => {
+  const path = "/fixture/.fungi/agents/old/agent.sqlite";
+  const selected = [];
+  let recoveries = 0;
+  await runTuiCli(
+    {
+      invocationRoot: "/fixture",
+      databasePath: path,
+      sessionId: "old-session",
+    },
+    dependencies(
+      { agents: [], sessions: [], problems: [] },
+      {
+        createServiceManager: () => ({
+          connect: async (selection) => {
+            selected.push(selection);
+            if (selection.databasePath === path)
+              throw new LocalStoreSchemaError(path);
+            return host;
+          },
+        }),
+        renderRecovery: (_root, error, startNew, exit) => {
+          assert.ok(error instanceof LocalStoreSchemaError);
+          recoveries += 1;
+          if (recoveries > 1) exit();
+          else startNew();
+        },
+      },
+    ),
+  );
+  assert.equal(recoveries, 1);
+  assert.equal(selected.length, 2);
+  assert.equal(selected[1].databasePath, undefined);
+  assert.equal(selected[1].sessionId, undefined);
 });
 
 test("a vanished selected store fails visibly without falling through", async () => {
@@ -2419,69 +2506,90 @@ test("help and slash discovery follow live Whistle contributions", async () => {
   });
 });
 
-test("native startup recovery shows the error and Exit restores the terminal", async () => {
-  const { renderTuiConnectionRecovery } =
-    await import("@fungi.computer/spore/frame-renderer");
-  const shown = Promise.withResolvers();
-  const setup = await createTestRenderer({
-    width: 72,
-    height: 20,
-    useKittyKeyboard: null,
-  });
-  const restoreActEnvironment = enterReactActEnvironment();
-  let attempts = 0;
-  let exitClient;
-  const running = runTuiCli(
-    { invocationRoot: "/fixture", databasePath: "/fixture/agent.sqlite" },
-    {
-      prepareClientExtensions: noOpClientExtensions,
-      loadThemePreference: async () => ({ theme: "terminal" }),
-      createRenderer: async () => setup.renderer,
-      createServiceManager: () => ({
-        connect: async () => {
-          attempts++;
-          throw new Error("Fixture service unavailable");
-        },
-      }),
-      renderRecovery: (root, error, retry, exit) => {
-        exitClient = exit;
-        renderTuiConnectionRecovery(root, error, retry, exit);
-        shown.resolve();
-      },
-    },
-  );
-  try {
-    await act(async () => {
-      await shown.promise;
+for (const schemaRefusal of [false, "unreadable", "newer"]) {
+  test(`native startup recovery distinguishes schema refusal (${schemaRefusal}) and Exit restores the terminal`, async () => {
+    const { renderTuiConnectionRecovery } =
+      await import("@fungi.computer/spore/frame-renderer");
+    const shown = Promise.withResolvers();
+    const setup = await createTestRenderer({
+      width: 72,
+      height: 20,
+      useKittyKeyboard: null,
     });
-    await act(async () => setup.renderOnce());
-    const frame = setup.captureCharFrame();
-    assert.match(frame, /Connection unavailable/u);
-    assert.doesNotMatch(frame, /Fixture service unavailable/u);
-    assert.match(frame, /Retry connection/u);
-    assert.match(frame, /Exit/u);
-    // The raw error is behind d, never on the main view.
-    await act(async () => setup.mockInput.typeText("d"));
-    await act(async () => setup.renderOnce());
-    assert.match(setup.captureCharFrame(), /Fixture service unavailable/u);
-    await act(async () => setup.mockInput.typeText("d"));
-    await act(async () => setup.renderOnce());
-    await act(async () => setup.mockInput.pressArrow("down"));
-    await act(async () => setup.mockInput.pressEnter());
-    await act(async () => running);
-    assert.equal(setup.renderer.isDestroyed, true);
-    assert.equal(attempts, 1);
-  } finally {
+    const restoreActEnvironment = enterReactActEnvironment();
+    let attempts = 0;
+    let exitClient;
+    const running = runTuiCli(
+      { invocationRoot: "/fixture", databasePath: "/fixture/agent.sqlite" },
+      {
+        prepareClientExtensions: noOpClientExtensions,
+        loadThemePreference: async () => ({ theme: "terminal" }),
+        createRenderer: async () => setup.renderer,
+        createServiceManager: () => ({
+          connect: async () => {
+            attempts++;
+            throw schemaRefusal
+              ? new LocalStoreSchemaError(
+                  "/fixture/.fungi/agents/old-agent/agent.sqlite",
+                  schemaRefusal,
+                )
+              : new Error("Fixture service unavailable");
+          },
+        }),
+        renderRecovery: (root, error, retry, exit) => {
+          exitClient = exit;
+          renderTuiConnectionRecovery(root, error, retry, exit);
+          shown.resolve();
+        },
+      },
+    );
     try {
       await act(async () => {
-        exitClient?.();
-        await running;
+        await shown.promise;
       });
+      await act(async () => setup.renderOnce());
+      const frame = setup.captureCharFrame();
+      if (schemaRefusal) {
+        if (schemaRefusal === "newer") {
+          assert.match(frame, /saved by a newer Fungi/u);
+          assert.match(frame, /Update Fungi to open it/u);
+          assert.doesNotMatch(frame, /Start a new Agent/u);
+        } else {
+          assert.match(frame, /Fungi cannot read this Agent/u);
+          assert.match(frame, /Start a new Agent/u);
+        }
+        assert.match(frame, /files have not been\s+changed/u);
+        assert.doesNotMatch(frame, /move/u);
+        assert.doesNotMatch(frame, /Connection unavailable|Retry connection/u);
+      } else {
+        assert.match(frame, /Connection unavailable/u);
+        assert.doesNotMatch(frame, /Fixture service unavailable/u);
+        assert.match(frame, /Retry connection/u);
+        assert.match(frame, /Exit/u);
+        // The raw error is behind d, never on the main view.
+        await act(async () => setup.mockInput.typeText("d"));
+        await act(async () => setup.renderOnce());
+        assert.match(setup.captureCharFrame(), /Fixture service unavailable/u);
+        await act(async () => setup.mockInput.typeText("d"));
+        await act(async () => setup.renderOnce());
+      }
+      await act(async () => setup.mockInput.pressArrow("down"));
+      await act(async () => setup.mockInput.pressEnter());
+      await act(async () => running);
+      assert.equal(setup.renderer.isDestroyed, true);
+      assert.equal(attempts, 1);
     } finally {
-      restoreActEnvironment();
+      try {
+        await act(async () => {
+          exitClient?.();
+          await running;
+        });
+      } finally {
+        restoreActEnvironment();
+      }
     }
-  }
-});
+  });
+}
 
 test("real Goal control renders one safe committed footer row", async () => {
   const payload = "safe\u001b]52;c;Y21k\u0007\u009d\u0090\u202e end";

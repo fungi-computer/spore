@@ -25,17 +25,7 @@ const directory: AppDirectory = {
       override: null,
       authorityVersion: 1,
       enforcement: null,
-      grants: [],
-      generationPermissions: { llm: false, media: false },
-      marketplacePermissions: {
-        browse: false,
-        purchase: false,
-      },
-      agentPermission: {
-        kind: "all-team-agents" as const,
-        directoryOperations: [],
-        sessionOperations: [],
-      },
+      permission: null,
       handlers: [],
       roles: [],
       declaredCapabilities: [],

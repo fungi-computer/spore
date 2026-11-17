@@ -11,6 +11,7 @@ import {
   type ReloadSource,
 } from "@fungi.computer/parakeet/headless";
 import {
+  LocalStoreSchemaError,
   LocalServiceUpdated,
   type PrivateLocalServiceManager,
 } from "@fungi.computer/truffle/service";
@@ -751,10 +752,11 @@ export async function runSessionApplication(
     ),
   });
   try {
+    let selectionOptions = options;
     while (!terminal.destroyed()) {
       try {
         dependencies.renderConnecting(root);
-        await navigate(() => select(options));
+        await navigate(() => select(selectionOptions));
         break;
       } catch (cause) {
         reportFailure("session-connect-recovery", cause);
@@ -774,6 +776,17 @@ export async function runSessionApplication(
               root,
               asCliFailure(cause, "Connection unavailable"),
               () => {
+                if (cause instanceof LocalStoreSchemaError)
+                  selectionOptions = {
+                    ...options,
+                    databasePath: undefined,
+                    sessionId: undefined,
+                    sessionChoice: undefined,
+                    connect: undefined,
+                    resume: false,
+                    last: false,
+                    entry: "new",
+                  };
                 finish(true);
               },
               terminal.exit,

@@ -1,5 +1,43 @@
 # @fungi.computer/spore
 
+## 0.16.0
+
+### Minor Changes
+
+- Changes since 0.15.1:
+
+  - fix(spore): cover bundled telemetry 1.5.2 license
+  - fix(spore): retain pi-telemetry upstream license notice
+  - fix(local): preserve refused Agent stores in place
+  - fix(mule): classify a ChatGPT usage limit that arrives as a parsed error
+    event
+  - feat(spore): upgrade older Agent stores in place instead of archiving them
+  - fix(local): keep the service's timers running while models stream
+  - fix(local): return approval outcomes in the originating tool call
+  - fix(truffle): explain model acquisition failures
+  - fix(spore): archive incompatible folder Agent stores
+  - feat(nacre): carry each App's permission facts in the directory row
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/agar@0.18.2
+  - @fungi.computer/approvals@0.2.4
+  - @fungi.computer/nacre@0.7.0
+  - @fungi.computer/parakeet@0.12.2
+  - @fungi.computer/shiitake-extensions@0.11.2
+  - @fungi.computer/shiitake@0.19.0
+  - @fungi.computer/truffle@0.14.0
+  - @fungi.computer/veil@0.7.5
+  - @fungi.computer/corral@0.1.33
+
 ## 0.15.1
 
 ### Patch Changes

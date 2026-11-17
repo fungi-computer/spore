@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { quote } from "shell-quote";
-import * as Schema from "effect/Schema";
 import { createModels } from "@earendil-works/pi-ai";
 import {
   fauxAssistantMessage,
@@ -52,31 +51,17 @@ function exec(input: {
   return `return await env.computers.local.exec(${JSON.stringify(input)});`;
 }
 
-async function waitForApprovalDelivery(
-  session: ShiitakeSession,
-  afterMessage: number,
-): Promise<string> {
+async function waitForApproval(session: ShiitakeSession) {
+  const forms = bindSessionExtension(session, mcpFormApprovalContract);
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
-    const snapshot = await session.read();
-    const notices = snapshot.messages
-      .slice(afterMessage)
-      .flatMap(({ value }) => (value.role === "user" ? [value] : []));
-    if (notices.length > 0 && snapshot.activity.queue.state === "idle") {
-      expect(notices).toHaveLength(1);
-      return notices
-        .map((notice) =>
-          Schema.is(Schema.String)(notice.content)
-            ? notice.content
-            : notice.content
-                .map((part) => (part.type === "text" ? part.text : ""))
-                .join(""),
-        )
-        .join("\n");
-    }
+    const view = forms.view(await session.read());
+    const pending =
+      view.status === "running" ? view.value?.pending[0] : undefined;
+    if (pending !== undefined) return pending;
     await Bun.sleep(20);
   }
-  throw new Error("The approval result follow-up did not settle");
+  throw new Error("The waiting tool call did not present an approval");
 }
 
 for (const mode of ["full-access", "workspace", "read-only"] as const) {
@@ -186,9 +171,6 @@ for (const mode of ["full-access", "workspace", "read-only"] as const) {
             stopReason: "toolUse",
           }),
           fauxAssistantMessage("Turn completed"),
-          ...(step.approval === undefined
-            ? []
-            : [fauxAssistantMessage("Approval result received")]),
         ]),
       );
       const models = createModels();
@@ -283,27 +265,9 @@ for (const mode of ["full-access", "workspace", "read-only"] as const) {
             requestId: `extension-loop-${String(sequence)}`,
             delivery: "followUp",
           });
-          const { terminal } = await waitForAgentSettlement(
-            session,
-            accepted.commandId,
-            15_000,
-            new AbortController().signal,
-          );
-          expect(terminal.outcome).toBe("completed");
-          const results = (await session.read()).messages
-            .flatMap(({ value }) =>
-              value.role === "toolResult" ? [value] : [],
-            )
-            .slice(before);
-          expect(results).toHaveLength(1);
-          for (const result of results) expect(result.isError).toBe(false);
           const forms = bindSessionExtension(session, mcpFormApprovalContract);
-          const view = forms.view(await session.read());
           if (step.approval !== undefined) {
-            const pending =
-              view.status === "running" ? view.value?.pending[0] : undefined;
-            if (pending === undefined)
-              throw new Error("The escaped step has no real approval");
+            const pending = await waitForApproval(session);
             expect(pending.review?.kind).toBe(step.approval);
             expect(pending.approval.canAnswer).toBe(true);
             expect(pending.review?.prefix).toBeUndefined();
@@ -313,7 +277,6 @@ for (const mode of ["full-access", "workspace", "read-only"] as const) {
               );
             expect(approvals.has(pending.approval.record.recordId)).toBe(false);
             approvals.add(pending.approval.record.recordId);
-            const beforeNotice = (await session.read()).messages.length;
             const answered = await forms.call("answer", {
               id: pending.id,
               expectedRevision: pending.approval.record.revision,
@@ -321,18 +284,28 @@ for (const mode of ["full-access", "workspace", "read-only"] as const) {
             });
             expect(answered).toMatchObject({
               kind: "answered",
-              view: {
-                record: {
-                  state: step.decision === "approve" ? "applied" : "denied",
-                },
-              },
             });
-            // Apply delivers its real native result as a new follow-up. Wait for that
-            // command, not just the original pending_approval tool result, to settle.
-            const notice = await waitForApprovalDelivery(session, beforeNotice);
             expect(manageLocalExecRules(project, "list")).toEqual([]);
-            return notice;
           }
+          const { terminal } = await waitForAgentSettlement(
+            session,
+            accepted.commandId,
+            15_000,
+            new AbortController().signal,
+          );
+          expect(terminal.outcome).toBe("completed");
+          const snapshot = await session.read();
+          const results = snapshot.messages
+            .flatMap(({ value }) =>
+              value.role === "toolResult" ? [value] : [],
+            )
+            .slice(before);
+          expect(results).toHaveLength(1);
+          for (const result of results) expect(result.isError).toBe(false);
+          expect(
+            snapshot.messages.filter(({ value }) => value.role === "user"),
+          ).toHaveLength(sequence);
+          const view = forms.view(snapshot);
           expect(
             view.status === "running" ? view.value?.pending : undefined,
           ).toEqual([]);
@@ -368,7 +341,7 @@ for (const mode of ["full-access", "workspace", "read-only"] as const) {
         expect(await turn()).toContain("first-installed-value");
         if (sandboxed) {
           const beforeReinstall = await installed.list();
-          expect(await turn()).toContain('"reason":"declined"');
+          expect(await turn()).toContain("Denied by");
           expect(await installed.list()).toEqual(beforeReinstall);
         }
         expect(await turn()).toContain("Configuration reloaded");

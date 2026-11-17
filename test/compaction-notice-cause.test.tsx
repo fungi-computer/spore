@@ -45,8 +45,10 @@ test("failed compaction explains the cause without its internal code", async () 
     const frame = await waitForFrame(setup, (value) =>
       value.includes("compaction failed"),
     );
-    expect(frame).toContain("No model is available.");
-    expect(frame).toContain("/login");
+    expect(frame).toContain("The model couldn't start.");
+    expect(frame).toContain("/retry");
+    expect(frame).toContain("fungi doctor");
+    expect(frame).not.toContain("/login");
     expect(frame).not.toContain("model:rejected");
     expect(frame).not.toContain("Model acquisition failed");
   } finally {

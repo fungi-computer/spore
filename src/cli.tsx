@@ -25,6 +25,8 @@ import { parseArgs } from "node:util";
 import { privateLocalServiceVersion } from "@fungi.computer/truffle/service";
 import {
   formatLocalUpgradeNotice,
+  formatLocalFolderUpgradeNotice,
+  upgradeLocalFolder,
   upgradeLocalHome,
 } from "@fungi.computer/truffle/upgrade";
 import { Cli, isCancel } from "@fungi.computer/lantern";
@@ -646,6 +648,25 @@ export async function runFungiCli(
     if (upgrade.kind === "upgraded")
       for (const line of formatLocalUpgradeNotice(upgrade.report))
         (io.stderr ?? process.stderr).write(`${line}\n`);
+    // Read-only commands retain their own output/error contract. Preserve
+    // refused stores when opening a local folder, not when inspecting it.
+    if (
+      arguments_.values.connect === undefined &&
+      (command === undefined ||
+        command === "new" ||
+        command === "run" ||
+        command === "resume" ||
+        command === "acp" ||
+        command === "serve" ||
+        (command === "sessions" && positionals[0] === "resume") ||
+        (command === "board" && arguments_.values.json !== true))
+    ) {
+      const folderUpgrade = await upgradeLocalFolder(
+        resolve(io.cwd ?? process.cwd(), arguments_.values.cd ?? "."),
+      );
+      for (const line of formatLocalFolderUpgradeNotice(folderUpgrade))
+        (io.stderr ?? process.stderr).write(`${line}\n`);
+    }
   }
   const fullAccess =
     arguments_.values.yolo === true ||
