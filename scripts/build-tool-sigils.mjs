@@ -10,6 +10,37 @@ import { gutterSigils } from "../dist/button/tool-sigils.js";
 import { isSigilName } from "@fungi.computer/sigils";
 import { z } from "zod";
 
+/**
+ * The run-error gutter mark: the same status dot the web failure line shows
+ * (never a bang), drawn as a glossy Caps bead on the full three-column
+ * canvas. Every ring derives from one radius and shares the dot's own center
+ * (1.5 cells in, half the row down), so the mark lands on the gutter column
+ * exactly, with no opaque-box measuring. The colour is the illustrated
+ * coral token every Fungi error mark uses.
+ */
+function errorBead(cellWidth, cellHeight, scale) {
+  const width = cellWidth * 3 * scale;
+  const height = cellHeight * scale;
+  const cx = cellWidth * scale * 1.5;
+  const cy = height / 2;
+  const radius = (height * 11) / 32;
+  const px = (value) => String(Number(value.toFixed(3)));
+  const ring = px(radius);
+  const body = px(radius * 0.78);
+  const lightX = px(cx - radius * 0.3);
+  const lightY = px(cy - radius * 0.34);
+  const center = `cx="${px(cx)}" cy="${px(cy)}"`;
+  const coral = "fill:var(--stipe-art-coral, #ff6558)";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px(width)}" height="${px(height)}">
+<defs><radialGradient id="light" gradientUnits="userSpaceOnUse" cx="${lightX}" cy="${lightY}" r="${px(radius * 1.1)}"><stop offset="0" stop-color="#fff" stop-opacity="0.45"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>
+<circle ${center} r="${ring}" style="${coral}"/>
+<circle ${center} r="${ring}" fill="#000" fill-opacity="0.24"/>
+<circle ${center} r="${body}" style="${coral}"/>
+<circle ${center} r="${body}" fill="url(#light)"/>
+<ellipse cx="${lightX}" cy="${lightY}" rx="${px(radius * 0.24)}" ry="${px(radius * 0.17)}" transform="rotate(-35 ${lightX} ${lightY})" fill="#fff4de" fill-opacity="0.9"/>
+</svg>`;
+}
+
 /** Regenerate the owned artwork; the source freshness law uses default geometry. */
 export async function generateToolSigilImages(width = 8, height = 16) {
   const dimension = z.coerce.number().int().min(1).max(256);
@@ -68,6 +99,18 @@ export async function generateToolSigilImages(width = 8, height = 16) {
   };
   const images = {};
   for (const name of new Set(Object.values(gutterSigils))) {
+    if (name === gutterSigils.error) {
+      images[name] = await Promise.all(
+        [1, 2].map(async (scale) =>
+          (
+            await sharp(Buffer.from(errorBead(cellWidth, cellHeight, scale)))
+              .png()
+              .toBuffer()
+          ).toString("base64"),
+        ),
+      );
+      continue;
+    }
     if (!isSigilName(name)) throw new Error(`Unknown tool sigil: ${name}`);
     const svg = renderToStaticMarkup(createElement(Sigil, { name, size: 64 }));
     images[name] = await Promise.all(

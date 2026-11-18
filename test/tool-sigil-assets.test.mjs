@@ -97,3 +97,27 @@ test("checked-in default tool sigil artwork is fresh", async () => {
     }
   }
 });
+
+test("the run-error bead is one disc centered on the gutter dot", async () => {
+  const { cellWidth, cellHeight, images } = await generateToolSigilImages();
+  for (const [index, encoded] of images.error.entries()) {
+    const scale = index + 1;
+    const { data, info } = await sharp(Buffer.from(encoded, "base64"))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const opaque = [];
+    for (let y = 0; y < info.height; y++)
+      for (let x = 0; x < info.width; x++)
+        if (data[(y * info.width + x) * 4 + 3] > 10) opaque.push([x, y]);
+    const xs = opaque.map(([x]) => x);
+    const ys = opaque.map(([, y]) => y);
+    const [minX, maxX] = [Math.min(...xs), Math.max(...xs)];
+    const [minY, maxY] = [Math.min(...ys), Math.max(...ys)];
+    // Pixel centers sit at +0.5, so a disc centered on the cell boundary
+    // spans equally on both sides of it.
+    expect((minX + maxX + 1) / 2).toBe(cellWidth * scale * 1.5);
+    expect((minY + maxY + 1) / 2).toBe((cellHeight * scale) / 2);
+    expect(maxX - minX).toBe(maxY - minY);
+  }
+});

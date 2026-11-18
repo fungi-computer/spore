@@ -2,7 +2,10 @@ import { createContext, useContext } from "react";
 import type { RGBA } from "@opentui/core";
 import { toolKindSigils } from "@fungi.computer/parakeet/headless";
 
-/** Transcript gutter sigils: one per tool kind, plus the run-error and Agent-message rows. */
+/**
+ * Transcript gutter marks: one Sigil per tool kind, the run-error status bead
+ * (drawn by build-tool-sigils, never a bang), and the Agent-message Sigil.
+ */
 export const gutterSigils = Object.freeze({
   ...toolKindSigils,
   error: "error",

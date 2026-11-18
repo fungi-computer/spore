@@ -1,5 +1,21 @@
 # @fungi.computer/spore
 
+## 0.17.4
+
+### Patch Changes
+
+- Changes since 0.17.3:
+
+  - fix(tui): draw the run-error gutter mark as a centred status dot
+
+- Updated dependencies
+  - @fungi.computer/veil@0.9.0
+  - @fungi.computer/shiitake@0.21.3
+  - @fungi.computer/truffle@0.16.3
+  - @fungi.computer/corral@0.1.44
+  - @fungi.computer/parakeet@0.14.3
+  - @fungi.computer/shiitake-extensions@0.11.13
+
 ## 0.17.3
 
 ### Patch Changes
