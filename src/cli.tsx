@@ -906,6 +906,7 @@ export async function runFungiCli(
           method: "subscription",
           host: "local",
           scope: "user",
+          source: "builtin",
         },
         subscriptionKillSwitchFrom(process.env.FUNGI_SUBSCRIPTION_KILL),
       )

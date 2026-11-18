@@ -384,6 +384,7 @@ for (const size of sizes) {
           method,
           host: "local",
           scope: "user",
+          source: "builtin",
         }),
       ),
     );
