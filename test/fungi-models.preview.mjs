@@ -182,27 +182,13 @@ try {
   await form
     .getByRole("button", { name: "Continue with code", exact: true })
     .click();
-  await page
-    .getByRole("heading", { name: "Choose your personal Team" })
-    .waitFor();
+  // A new account with no Team gets its personal Team and opens it.
+  await page.waitForURL(/\/teams\/[^/?#]+$/u);
   step("real email-code signup");
   phase = "funded Team";
-  await page.getByLabel("Name").fill("Fungi models proof");
-  await page.getByLabel("Handle").fill(`models-${suffix}`);
-  const createdPromise = page.waitForResponse(
-    (r) =>
-      new URL(r.url()).pathname === "/api/teams" &&
-      r.request().method() === "POST",
+  const teamId = decodeURIComponent(
+    new URL(page.url()).pathname.split("/").at(-1),
   );
-  await page.getByRole("button", { name: "Create Team", exact: true }).click();
-  const created = await createdPromise;
-  assert.ok(created.ok());
-  const teamId = z
-    .object({
-      kind: z.literal("accepted"),
-      team: z.object({ teamId: z.string().min(1) }),
-    })
-    .parse(await created.json()).team.teamId;
   const request = async (path, method = "GET", data) =>
     context.request.fetch(`${origin}${path}`, {
       method,
@@ -215,7 +201,7 @@ try {
   const userId = z
     .object({ actor: z.object({ userId: z.string().min(1) }) })
     .parse(await accountResponse.json()).actor.userId;
-  step("funded Team created through UI");
+  step("personal Team opened at sign-up");
   phase = "CLI OAuth";
   globalThis.fetch = realFetch;
   let cliOutput = "";

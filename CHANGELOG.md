@@ -1,5 +1,13 @@
 # @fungi.computer/spore
 
+## 0.17.1
+
+### Patch Changes
+
+- Changes since 0.17.0:
+
+  - fix(tui): walk the models preview into the automatic personal Team
+
 ## 0.17.0
 
 ### Minor Changes
