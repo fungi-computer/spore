@@ -85,19 +85,8 @@ test("clicking a footer sub-agent row opens that Agent's conversation beside the
       requestId: "scout-first-conversation",
     });
     assert.equal(child.agentId, childId);
-    const childSessionId = child.sessionId;
     await child.close();
-    // The parent host's own record that this conversation sent the child work.
-    const parentStore = new DatabaseSync(parent.databasePath);
-    parentStore.exec(
-      "CREATE TABLE IF NOT EXISTS oyster_conversation_agents (parent_session_id TEXT NOT NULL, agent_id TEXT NOT NULL, session_id TEXT, at INTEGER NOT NULL, PRIMARY KEY (parent_session_id, agent_id)) STRICT",
-    );
-    parentStore
-      .prepare(
-        "INSERT INTO oyster_conversation_agents (parent_session_id, agent_id, session_id, at) VALUES (?, ?, ?, ?)",
-      )
-      .run(parent.sessionId, childId, childSessionId, Date.now());
-    parentStore.close();
+    // The child's own record names the parent as createdBy: the footer row.
     const parentDatabasePath = parent.databasePath;
     const parentSessionId = parent.sessionId;
     await parent.close();

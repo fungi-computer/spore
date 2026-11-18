@@ -246,6 +246,138 @@ test("status keeps the exact failure after a model choice acknowledges it", () =
   });
 });
 
+/**
+ * The three Sessions read live on 2026-11-17 with
+ * `fungi sessions show --last --json`: no attention and no pending prompt, yet
+ * the CLI printed "waiting for you". A turn that simply ended is idle.
+ */
+const endedTurns: readonly (readonly [string, SessionSnapshot])[] = [
+  [
+    "completed with a final report",
+    {
+      ...snapshot,
+      sessionId: "session_v4zs1lsqttm9imzmeomeq",
+      activity: { ...idleActivity, lastModelChoiceSequence: 1 },
+      terminals: [
+        {
+          commandId: "session_fact_i4sg0mu4sw69c4lkkrgee",
+          outcome: "completed",
+          sequence: 969,
+          diagnostic: null,
+        },
+      ],
+    },
+  ],
+  [
+    "cancelled twice",
+    {
+      ...snapshot,
+      sessionId: "session_mr9uxooasbefh91iyx4us",
+      activity: { ...idleActivity, lastModelChoiceSequence: 1 },
+      terminals: [
+        {
+          commandId: "session_fact_uacepn5x42mkdutm7dy7h",
+          outcome: "cancelled",
+          sequence: 909,
+          diagnostic: null,
+        },
+        {
+          commandId: "session_fact_fxvlihb9thiojop5g3842",
+          outcome: "cancelled",
+          sequence: 910,
+          diagnostic: null,
+        },
+      ],
+    },
+  ],
+  [
+    "cancelled after a sandbox failure",
+    {
+      ...snapshot,
+      sessionId: "session_7irjpp30lrqqxevwt97am",
+      activity: idleActivity,
+      terminals: [
+        {
+          commandId: "session_fact_evwcmr9lgtvz6q831lcto",
+          outcome: "cancelled",
+          sequence: 1306,
+          diagnostic: null,
+        },
+      ],
+      sandboxFailures: [
+        {
+          kind: "sandbox_failure",
+          ref: "iwd8997eros9mma5scagm",
+          executionId: "iwd8997eros9mma5scagm",
+          adapter: "local-workerd",
+          buildSha: null,
+          tag: "Unknown",
+          healthAlert: true,
+          fields: {
+            rawCause: {
+              name: "PrivateLocalProcessNotFoundError",
+              message:
+                "Computer process not found: local_process_jfv3z1ausd01gg0lhquy8",
+            },
+          },
+        },
+      ],
+    },
+  ],
+];
+
+test.each(endedTurns)(
+  "status reads a Session whose turn %s with no attention as idle",
+  (_ending, ended) => {
+    expect(renderSessionStatus(ended, 123, false)).toBe(
+      `Session ${ended.sessionId} · idle\n`,
+    );
+    expect(JSON.parse(renderSessionStatus(ended, 123, true))).toMatchObject({
+      label: "idle",
+    });
+    // An item routed to an Agent is calm; only a person's item waits on you.
+    const routed: SessionSnapshot = {
+      ...ended,
+      attention: [
+        {
+          id: "ask-1",
+          kind: "question",
+          summary: "Branch",
+          since: 1,
+          extensionId: "botanical-session-question",
+          inbox: false,
+          waitingOn: {
+            agentId: "agent-parent",
+            sessionId: "session-parent",
+            name: "porcelain-field",
+          },
+        },
+      ],
+    };
+    expect(renderSessionStatus(routed, 123, false)).toBe(
+      `Session ${ended.sessionId} · idle\n`,
+    );
+    const asked: SessionSnapshot = {
+      ...ended,
+      attention: [
+        {
+          id: "ask-1",
+          kind: "question",
+          summary: "Branch",
+          since: 1,
+          extensionId: "botanical-session-question",
+        },
+      ],
+    };
+    expect(renderSessionStatus(asked, 123, false)).toBe(
+      `Session ${ended.sessionId} · waiting on you\n`,
+    );
+    expect(JSON.parse(renderSessionStatus(asked, 123, true))).toMatchObject({
+      label: "waiting on you",
+    });
+  },
+);
+
 test("status labels a retry countdown from the raw retry facts", () => {
   const retrying: SessionSnapshot = {
     ...snapshot,

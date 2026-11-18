@@ -11,6 +11,7 @@ import type { PrivateLocalServiceSelection } from "@fungi.computer/truffle/servi
 import {
   mergeTerminals,
   sessionActivityStatus,
+  sessionStateLabel,
   sessionViewState,
 } from "@fungi.computer/parakeet/headless";
 import { z } from "zod";
@@ -199,7 +200,9 @@ function newestTerminal(
  * Stable owner state for automation and a concise human readout. The JSON
  * carries Shiitake's raw activity facts, the Parakeet view state and its
  * label, and the newest terminal with its exact diagnostic, so an error is
- * never reduced to a label.
+ * never reduced to a label. A turn that simply ended reads idle; only an open
+ * item a person must answer reads "waiting on you". An item routed to an
+ * Agent waits on that Agent, not on you.
  */
 export function renderSessionStatus(
   snapshot: SessionSnapshot,
@@ -208,20 +211,27 @@ export function renderSessionStatus(
   now = Date.now(),
 ): string {
   const view = sessionViewState(snapshot);
+  const rested = view.kind === "idle" || view.kind === "waiting_for_you";
+  const label = rested
+    ? sessionStateLabel(
+        view,
+        snapshot.attention.some((item) => item.inbox !== false),
+      )
+    : sessionDiagnosticLabel(view, now);
   if (json)
     return `${JSON.stringify({
       schemaVersion: 2,
       sessionId: snapshot.sessionId,
       state: view.kind,
-      label: sessionDiagnosticLabel(view, now),
+      label,
       viewState: view,
       activity: snapshot.activity,
       lastTerminal: newestTerminal(snapshot.terminals),
       lastActivityAt,
     })}\n`;
-  const label = view.kind.replaceAll("_", " ");
+  const plain = rested ? label : view.kind.replaceAll("_", " ");
   const cause = view.kind === "error" ? `: ${userFacingCause(view.cause)}` : "";
-  return `${terminalText(`Session ${snapshot.sessionId} · ${label}${cause}`)}\n`;
+  return `${terminalText(`Session ${snapshot.sessionId} · ${plain}${cause}`)}\n`;
 }
 
 function applyFrame(

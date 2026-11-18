@@ -562,6 +562,7 @@ test("sessions status --json exposes the owner's typed state through the Local s
           ],
           toolOutput: [],
           progress: null,
+          attention: [],
         },
         close: async () => {
           closed += 1;
