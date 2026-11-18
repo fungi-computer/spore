@@ -1,5 +1,26 @@
 # @fungi.computer/spore
 
+## 0.17.0
+
+### Minor Changes
+
+- Changes since 0.16.7:
+
+  - feat(parakeet): show a refused secret as a toast with a key settings link
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/parakeet@0.14.0
+  - @fungi.computer/shiitake@0.21.0
+  - @fungi.computer/truffle@0.16.0
+  - @fungi.computer/veil@0.8.1
+  - @fungi.computer/shiitake-extensions@0.11.10
+  - @fungi.computer/corral@0.1.41
+
 ## 0.16.7
 
 ### Patch Changes

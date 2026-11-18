@@ -35,6 +35,7 @@ import type { WhistleContributionLease } from "@fungi.computer/whistle";
 import {
   ParakeetProvider,
   useComposer,
+  useParakeetKeySettings,
   useClientContributions,
   useTimeline,
   placeClientTimeline,
@@ -45,10 +46,12 @@ import {
   type ParakeetDraftIdentity,
   type ParakeetSession,
   type ParakeetInteractions,
+  type ParakeetToast,
   type SlashCommandController,
   type ReloadSource,
 } from "@fungi.computer/parakeet/headless";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useLayoutEffect,
@@ -183,6 +186,17 @@ export function TuiFrameContent({
   ...props
 }: TuiFrameContentProps) {
   const toast = useToast();
+  // A Parakeet toast's action becomes the terminal toast's own action.
+  const showToast = useCallback(
+    ({ action, ...rest }: ParakeetToast) => {
+      toast.show(
+        action === undefined
+          ? rest
+          : { ...rest, action: { label: action.label, run: action.onSelect } },
+      );
+    },
+    [toast],
+  );
   return (
     <ParakeetProvider
       session={session}
@@ -191,7 +205,7 @@ export function TuiFrameContent({
       clients={props.clients}
       interactionStore={props.interactionStore}
       authorOf={messageAuthor}
-      onToast={toast.show}
+      onToast={showToast}
     >
       <TuiFrameConversation {...props} session={session} />
     </ParakeetProvider>
@@ -270,6 +284,23 @@ function TuiFrameConversation({
 }: TuiFrameContentProps) {
   const panelInstanceId = useId();
   const kit = usePaneKit();
+  // A prompt refused for holding a key points at /login, where the terminal
+  // keeps keys safely (the Vault takes this over when it exists).
+  useParakeetKeySettings(
+    useMemo(
+      () => ({
+        label: "Add it with /login",
+        onSelect: () => {
+          void commands
+            .execute({ namespace: "account", id: "login" }, { origin: "slash" })
+            .catch((cause: unknown) => {
+              reportFailure("open-login-from-secret-refusal", cause);
+            });
+        },
+      }),
+      [commands],
+    ),
+  );
   const stopAll =
     onStopAll === undefined
       ? undefined
