@@ -25,7 +25,9 @@ type ComputerState = Parameters<
 function label(state: ComputerState): string {
   if (state.state === "queued") return `queued #${String(state.position)}`;
   return state.state === "start_failed"
-    ? "couldn't start, try again"
+    ? state.reason === undefined
+      ? "couldn't start, try again"
+      : `couldn't start: ${state.reason}; try again`
     : state.state;
 }
 export async function runComputersCommand(
