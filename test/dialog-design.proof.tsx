@@ -13,7 +13,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { testRender } from "@opentui/react/test-utils";
 import { act } from "react";
 import { createWhistle } from "@fungi.computer/whistle";
-import { createPrivateModels } from "@fungi.computer/truffle";
+import { openPrivateModels } from "@fungi.computer/truffle";
 import {
   localLoginProviders,
   localPopularProviderIds,
@@ -101,7 +101,9 @@ const modelSource = {
   },
 };
 
-const registry = localLoginProviders(createPrivateModels().getProviders());
+const registry = localLoginProviders(
+  (await openPrivateModels()).getProviders(),
+);
 const never = new Promise<never>(() => undefined);
 
 /** A Local owner whose provider sign-in is scripted per scene. */

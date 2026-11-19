@@ -9,12 +9,17 @@ export const extensionCommandHelp = `Usage: fungi extension add <git-url | npm-s
        fungi extension enable project <id>
        fungi extension enable agent <id> [<agent-store>]
        fungi extension enable skills <id> [<agent-store>]
+       fungi extension enable logins <id>
        fungi extension disable project|agent|skills <id> [<agent-store>]
+       fungi extension disable logins <id>
 
 Install an extension once for your user, then enable its parts where you want
 them. "project" adds its client part and programs to Open pane in this folder,
 for whichever Agent you chat with. "agent" grants one Agent store the tools and
 capabilities the extension declares; that Agent uses them from its next start.
+"logins" lets the extension fill a model sign-in slot Fungi does not provide
+itself, for you on this machine; it then shows in fungi login and /login as
+"from <id>", and applies the next time Fungi opens its models.
 Installed extensions are trusted code that runs as you. A Git source is pinned
 to the commit it resolved; run add again to update.
 An extension may ship skills. add lists them and asks whether to add them for
@@ -71,6 +76,10 @@ export async function runExtensionCommand(
           `Declares: ${installed.capabilities.join(", ") || "no Agent capabilities"}; programs: ${installed.terminals.join(", ") || "none"}.\n` +
           `Enable it with fungi extension enable project ${installed.id} or fungi extension enable agent ${installed.id}.\n`,
       );
+      if (installed.logins.length > 0)
+        stdout.write(
+          `Model logins (${String(installed.logins.length)}): ${installed.logins.join(", ")}. Let it fill them with fungi extension enable logins ${installed.id}.\n`,
+        );
       if (installed.skills.length === 0) return;
       const count = installed.skills.length;
       stdout.write(
@@ -158,6 +167,20 @@ export async function runExtensionCommand(
             (await owner.disableAgent(store, second))
               ? `Withdrew ${second} from the Agent in ${store} from its next start; a running turn finishes unchanged.\n`
               : `${second} was not enabled for the Agent in ${store}.\n`,
+          );
+        return;
+      }
+      if (first === "logins") {
+        if (input.action === "enable") {
+          const enabled = await owner.enableLogins(second);
+          stdout.write(
+            `Enabled model logins for ${second} (${enabled.revision}): ${enabled.logins.join(", ")}. They show in fungi login and /login as "from ${second}" the next time Fungi opens its models.\n`,
+          );
+        } else
+          stdout.write(
+            (await owner.disableLogins(second))
+              ? `Disabled model logins for ${second} from the next time Fungi opens its models. Saved sign-ins are kept.\n`
+              : `${second} was not enabled for model logins.\n`,
           );
         return;
       }

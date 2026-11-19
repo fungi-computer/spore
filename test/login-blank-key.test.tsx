@@ -10,7 +10,7 @@ import { testRender } from "@opentui/react/test-utils";
 import { createWhistle } from "@fungi.computer/whistle";
 import { createWhistleInteractionHost } from "@fungi.computer/whistle/interaction";
 import { contributeAccountCommands } from "@fungi.computer/parakeet/headless";
-import { createPrivateModels } from "@fungi.computer/truffle";
+import { openPrivateModels } from "@fungi.computer/truffle";
 import { localAccountOwner } from "@fungi.computer/truffle/login";
 import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
 import { runPrivateLocalService } from "../../../runtimes/local/dist/private-local-service-listener.js";
@@ -52,7 +52,9 @@ test("/login with a blank OpenAI API key shows No key entered in the dialog", as
     const whistle = createWhistle();
     contributeAccountCommands(
       whistle,
-      localAccountOwner(manager, () => createPrivateModels().getProviders()),
+      localAccountOwner(manager, async () =>
+        (await openPrivateModels()).getProviders(),
+      ),
       {
         sourceId: "test",
         namespace: "account",

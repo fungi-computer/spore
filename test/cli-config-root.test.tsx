@@ -16,7 +16,7 @@ import { stripVTControlCharacters } from "node:util";
 import { createModels } from "@earendil-works/pi-ai";
 import {
   createPrivateCredentialStore,
-  createPrivateModels,
+  openPrivateModels,
   resolveDefaultCredentialPath,
 } from "@fungi.computer/truffle";
 import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
@@ -316,7 +316,7 @@ for (const injected of [false, true]) {
     const previousHome = process.env.HOME;
     const input = new PassThrough();
     const signals = new EventEmitter();
-    const models = createPrivateModels(fixture_.credentialPath);
+    const models = await openPrivateModels(fixture_.credentialPath);
     const beforeB = await readFile(fixture_.otherPath, "utf8");
     let picked = false;
     let auth: TuiAuthCall | undefined;

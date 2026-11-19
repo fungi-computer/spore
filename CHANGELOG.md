@@ -1,5 +1,19 @@
 # @fungi.computer/spore
 
+## 0.18.0
+
+### Minor Changes
+
+- Changes since 0.17.7:
+
+  - fix(truffle): bound login extensions and keep their records downgrade safe
+  - feat(truffle): let an installed extension fill an empty model login slot
+
+### Patch Changes
+
+- Updated dependencies
+  - @fungi.computer/truffle@0.17.0
+
 ## 0.17.7
 
 ### Patch Changes

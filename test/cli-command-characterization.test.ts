@@ -64,6 +64,8 @@ const accepted: readonly CommandForm[] = [
   { args: ["extension", "enable", "skills", "id", "store"] },
   { args: ["extension", "disable", "skills", "id"] },
   { args: ["extension", "disable", "skills", "id", "store"] },
+  { args: ["extension", "enable", "logins", "id"] },
+  { args: ["extension", "disable", "logins", "id"] },
   { args: ["mcp", "show"] },
   { args: ["mcp", "forget"] },
   { args: ["mcp", "use", "https://example.test/mcp"] },
@@ -124,12 +126,17 @@ const extensionError = `Usage: fungi extension add <git-url | npm-spec | path> [
        fungi extension enable project <id>
        fungi extension enable agent <id> [<agent-store>]
        fungi extension enable skills <id> [<agent-store>]
+       fungi extension enable logins <id>
        fungi extension disable project|agent|skills <id> [<agent-store>]
+       fungi extension disable logins <id>
 
 Install an extension once for your user, then enable its parts where you want
 them. "project" adds its client part and programs to Open pane in this folder,
 for whichever Agent you chat with. "agent" grants one Agent store the tools and
 capabilities the extension declares; that Agent uses them from its next start.
+"logins" lets the extension fill a model sign-in slot Fungi does not provide
+itself, for you on this machine; it then shows in fungi login and /login as
+"from <id>", and applies the next time Fungi opens its models.
 Installed extensions are trusted code that runs as you. A Git source is pinned
 to the commit it resolved; run add again to update.
 An extension may ship skills. add lists them and asks whether to add them for

@@ -13,7 +13,7 @@ import {
 import { createTestRenderer } from "@opentui/core/testing";
 import { act } from "react";
 import { createWhistle } from "@fungi.computer/whistle";
-import { createPrivateModels } from "../../../runtimes/local/dist/local-models.js";
+import { openPrivateModels } from "../../../runtimes/local/dist/local-models.js";
 import { openPrivateLocalRuntimeHost } from "../../../runtimes/local/dist/private-local-runtime-host.js";
 import { runPrivateLocalService } from "../../../runtimes/local/dist/private-local-service-listener.js";
 import { createPrivateLocalServiceManager } from "../../../runtimes/local/dist/private-local-service.js";
@@ -33,7 +33,7 @@ const root = await mkdtemp(join(tmpdir(), "fungi-org-"));
 const previousHome = process.env.HOME;
 process.env.HOME = join(root, "home");
 const directory = await serviceDirectory(join(root, "service"));
-const models = createPrivateModels(join(root, "credentials.json"));
+const models = await openPrivateModels(join(root, "credentials.json"));
 const faux = fauxProvider({ tokensPerSecond: 40 });
 models.setProvider(faux.provider);
 const pending = Promise.withResolvers();

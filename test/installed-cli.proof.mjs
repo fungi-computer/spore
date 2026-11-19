@@ -196,7 +196,7 @@ try {
         reasoning: [],
       },
     ],
-    createPrivateModels: () => ({
+    openPrivateModels: async () => ({
       getModel: () => model,
       getProvider: () => ({ id: model.provider, name: "Fixture" }),
       checkAuth: async () => ({ type: "oauth", source: "Fixture login" }),

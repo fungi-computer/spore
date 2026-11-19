@@ -13,7 +13,7 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import { expect, test } from "bun:test";
 import { z } from "zod";
-import { createPrivateModels } from "@fungi.computer/truffle";
+import { openPrivateModels } from "@fungi.computer/truffle";
 import type { LocalAuthCliOptions } from "@fungi.computer/truffle/auth";
 import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
 import { localExtensions } from "@fungi.computer/truffle/extensions";
@@ -25,6 +25,11 @@ import { fungiCliFailureLine, runFungiCli } from "../src/cli.js";
 const cliVersion = z
   .looseObject({ version: z.string().min(1) })
   .parse(createRequire(import.meta.url)("../package.json")).version;
+
+/** Pi's real OpenAI provider, opened once for the models these tests inject. */
+const openaiProviders = (await openPrivateModels())
+  .getProviders()
+  .filter((provider) => provider.id === "openai");
 
 test("version skips home work; refused activations and installed names warn once at distinct paths", async () => {
   const home = await mkdtemp(join(tmpdir(), "fungi-cli-upgrade-"));
@@ -285,10 +290,7 @@ test("permissions from an Agent subfolder list and remove the project rule witho
 test("--yes is accepted for the bare CLI and never mounts an unattended agent UI", async () => {
   let output = "";
   const models: NonNullable<LocalAuthCliOptions["models"]> = {
-    getProviders: () =>
-      createPrivateModels()
-        .getProviders()
-        .filter((provider) => provider.id === "openai"),
+    getProviders: () => openaiProviders,
     checkAuth: () => Promise.resolve({ type: "oauth" }),
     login: () => Promise.reject(new Error("unexpected login")),
     logout: () => Promise.resolve(),
@@ -400,10 +402,7 @@ test("default top-level auth dispatch uses the maintained Models owner", async (
   let selectedMethod: string | undefined;
   let statusOutput = "";
   const authModels: NonNullable<LocalAuthCliOptions["models"]> = {
-    getProviders: () =>
-      createPrivateModels()
-        .getProviders()
-        .filter((provider) => provider.id === "openai"),
+    getProviders: () => openaiProviders,
     checkAuth: () => Promise.resolve({ type: "oauth" }),
     login: async (_provider, _method, interaction) => {
       selectedMethod = await interaction.prompt({
@@ -1083,10 +1082,7 @@ test("a failed run without any model login points at fungi login", async () => {
         {
           cwd: "/tmp",
           authModels: {
-            getProviders: () =>
-              createPrivateModels()
-                .getProviders()
-                .filter((provider) => provider.id === "openai"),
+            getProviders: () => openaiProviders,
             checkAuth: () => Promise.resolve(undefined),
             login: () => Promise.reject(new Error("unused")),
             logout: () => Promise.resolve(),
@@ -1431,6 +1427,69 @@ test("ACP login retains parsed options before the command, including a value nam
   expect(method).toBe("acp");
 });
 
+test("ACP login passes any provider and auth type through to the shared login", async () => {
+  let call: [string, string | undefined, string | undefined] | undefined;
+  await runFungiCli(
+    ["acp", "login", "--provider", "fixture", "--auth-type", "oauth"],
+    {},
+    {
+      runAuth: (action, options) => {
+        call = [action, options?.providerId, options?.authType];
+        return Promise.resolve();
+      },
+      runAcp: () => Promise.reject(new Error("Login must not open ACP")),
+    },
+  );
+  expect(call).toEqual(["login", "fixture", "oauth"]);
+});
+
+test("fungi extension add reports a package's model logins; enable and disable logins change the user-wide activation", async () => {
+  const home = await mkdtemp(join(tmpdir(), "fungi-extension-logins-"));
+  const activations = join(home, ".fungi", "extensions", "activations.json");
+  const loginsOf = async () =>
+    z
+      .object({ logins: z.record(z.string(), z.string()).default({}) })
+      .parse(JSON.parse(await readFile(activations, "utf8"))).logins;
+  let output = "";
+  const run = (...args: string[]) =>
+    runFungiCli(
+      ["extension", ...args],
+      {
+        cwd: home,
+        stdout: {
+          write: (chunk) => {
+            output += String(chunk);
+            return true;
+          },
+        },
+      },
+      {},
+      home,
+    );
+  try {
+    await run(
+      "add",
+      join(
+        import.meta.dir,
+        "../../../runtimes/local/test/fixtures/login-extension",
+      ),
+    );
+    expect(output).toContain(
+      "Model logins (1): fixture subscription. Let it fill them with fungi extension enable logins login-fixture.",
+    );
+    await run("enable", "logins", "login-fixture");
+    expect(Object.keys(await loginsOf())).toEqual(["login-fixture"]);
+    expect(output).toContain("Enabled model logins for login-fixture");
+    await run("disable", "logins", "login-fixture");
+    expect(await loginsOf()).toEqual({});
+    expect(output).toContain("Disabled model logins for login-fixture");
+    await run("disable", "logins", "login-fixture");
+    expect(output).toContain("login-fixture was not enabled for model logins.");
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test("ACP terminal login accepts the editor's configured project root without passing it to login", async () => {
   for (const root of [["-C", "acp"], ["--cd=/workspace"]]) {
     let loggedIn = false;
@@ -1576,10 +1635,7 @@ test("fungi run --workspace tells an unsigned user how to sign in and exits 1 wi
           cwd: home,
           stderr: stream,
           authModels: {
-            getProviders: () =>
-              createPrivateModels()
-                .getProviders()
-                .filter((provider) => provider.id === "openai"),
+            getProviders: () => openaiProviders,
             checkAuth: () => Promise.resolve(undefined),
             login: () => Promise.reject(new Error("unused")),
             logout: () => Promise.resolve(),

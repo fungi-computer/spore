@@ -3,14 +3,16 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
-import { createPrivateModels } from "@fungi.computer/truffle";
+import { openPrivateModels } from "@fungi.computer/truffle";
 import type { ApiKeyCredential, AuthInteraction } from "@earendil-works/pi-ai";
 import type { LocalAuthModels } from "@fungi.computer/truffle/auth";
 import { runFungiCli, type TuiAuthCall } from "../src/cli.js";
 
+const providers = (await openPrivateModels()).getProviders();
+
 function models(): LocalAuthModels {
   return {
-    getProviders: () => createPrivateModels().getProviders(),
+    getProviders: () => providers,
     checkAuth: (id) =>
       Promise.resolve(id === "openai" ? { type: "oauth" } : undefined),
     login: () => Promise.reject(new Error("Unexpected provider login")),
@@ -139,7 +141,7 @@ test("fungi login refuses a blank API key with plain No key entered and stores n
       queueMicrotask(() => input.write("\r"));
     }
   });
-  const openai = createPrivateModels()
+  const openai = (await openPrivateModels())
     .getProviders()
     .find((provider) => provider.id === "openai");
   assert.ok(openai?.auth.apiKey);

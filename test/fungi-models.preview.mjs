@@ -31,7 +31,7 @@ const { readEmailCode } = await deployment("email-code-test.mjs");
 const { prResources, parsePrNumber } = await deployment("pr-resources.mjs");
 const { cloudflareApi } = await deployment("pr-cloudflare.mjs");
 import {
-  createPrivateModels,
+  openPrivateModels,
   createPrivateCredentialStore,
   signInFungiAccount,
   readFungiAccountStatus,
@@ -311,7 +311,7 @@ try {
   clientId = credential.clientId;
   step("CLI PKCE, browser consent and selected paying Team");
   phase = "Local native terminal";
-  const models = createPrivateModels(credentialPath);
+  const models = await openPrivateModels(credentialPath);
   host = await openPrivateLocalRuntimeHost(
     { invocationRoot: fixtureRoot, modelId: "@fungi/luna" },
     models,

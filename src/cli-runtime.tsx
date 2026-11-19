@@ -21,7 +21,7 @@ import type { QueryClient } from "@tanstack/query-core";
 import { createQueryClient } from "@fungi.computer/agar/query";
 import { createWhistle } from "@fungi.computer/whistle";
 import {
-  createPrivateModels,
+  openPrivateModels,
   resolveDefaultCredentialPath,
 } from "@fungi.computer/truffle";
 import { localAccountOwner } from "@fungi.computer/truffle/login";
@@ -175,7 +175,14 @@ export async function runTuiCli(
           reportFailure("local-service-cleanup", cause);
         },
       }),
-    loginProviders: () => createPrivateModels(credentialPath).getProviders(),
+    loginProviders: async () =>
+      (
+        await openPrivateModels(credentialPath, {
+          report: (cause) => {
+            reportFailure("extension-login", cause);
+          },
+        })
+      ).getProviders(),
     renderLanding: (root, sessions, folder, choose, theme, agents, notice) => {
       renderTuiLanding(root, {
         initialTheme: theme.initialTheme,
@@ -183,9 +190,13 @@ export async function runTuiCli(
         agents,
         notice,
         folder,
-        loadSummary: (signal) =>
+        loadSummary: async (signal) =>
           readLandingSummary(
-            createPrivateModels(credentialPath),
+            await openPrivateModels(credentialPath, {
+              report: (cause) => {
+                reportFailure("extension-login", cause);
+              },
+            }),
             agents,
             signal,
             { credentialPath },

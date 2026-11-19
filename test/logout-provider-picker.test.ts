@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { createWhistle } from "@fungi.computer/whistle";
 import { createWhistleInteractionHost } from "@fungi.computer/whistle/interaction";
-import { createPrivateModels } from "@fungi.computer/truffle";
+import { openPrivateModels } from "@fungi.computer/truffle";
 import { runLocalAuthCli } from "@fungi.computer/truffle/auth";
 import { localAccountOwner } from "@fungi.computer/truffle/login";
 import { contributeAccountCommands } from "@fungi.computer/parakeet/headless";
@@ -43,7 +43,7 @@ async function signedInHome(providerIds: readonly string[]) {
 
 /** Open `/logout` against the Local owner reading that credential file. */
 async function openLogout(credentialPath: string) {
-  const models = createPrivateModels(credentialPath);
+  const models = await openPrivateModels(credentialPath);
   const owner = localAccountOwner(
     {
       auth: (request, interaction) =>

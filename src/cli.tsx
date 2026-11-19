@@ -42,7 +42,7 @@ import type { LocalAcpStdioOptions } from "@fungi.computer/truffle/acp-stdio";
 import { fungiModelLoginNotice } from "./button/login-notice.js";
 import type { LocalAuthCliOptions } from "@fungi.computer/truffle/auth";
 import {
-  createPrivateModels,
+  openPrivateModels,
   resolveDefaultCredentialPath,
   listPrivateTeamComputers,
   startPrivateTeamComputer,
@@ -283,7 +283,7 @@ const fungiArgumentRules = {
       z.tuple([z.literal("list")]),
       z.tuple([
         z.enum(["enable", "disable"]),
-        z.literal("project"),
+        z.enum(["project", "logins"]),
         z.string(),
       ]),
       z.tuple([
@@ -944,7 +944,7 @@ export async function runFungiCli(
     );
     const passed = await runDoctor({
       localServiceStatus: () => createServiceManager().status(),
-      models: io.authModels ?? createPrivateModels(credentialPath),
+      models: io.authModels ?? (await openPrivateModels(credentialPath)),
       fungiAccount: readFungiStatus,
       endpoint: selected?.endpoint,
       version: fungiVersion,
@@ -1540,7 +1540,8 @@ export async function runFungiCli(
     ) {
       const { chooseLoginProvider } =
         await import("./login-provider-picker.js");
-      const models = authCall.models ?? createPrivateModels(credentialPath);
+      const models =
+        authCall.models ?? (await openPrivateModels(credentialPath));
       authCall.models = models;
       authCall.providerId = await chooseLoginProvider(
         linearCli,
@@ -1629,12 +1630,13 @@ export async function runFungiCli(
     modelId: arguments_.values.model,
     reasoning,
   };
-  const models = () => io.authModels ?? createPrivateModels(credentialPath);
+  const models = async () =>
+    io.authModels ?? (await openPrivateModels(credentialPath));
   if (
     command === undefined &&
     arguments_.values.connect === undefined &&
     arguments_.values.listen === undefined &&
-    (await modelLoginMissing(models(), arguments_.values.provider)) &&
+    (await modelLoginMissing(await models(), arguments_.values.provider)) &&
     !(await hasOnboarding())
   ) {
     const start = await runOnboarding({
@@ -1674,7 +1676,7 @@ export async function runFungiCli(
         { ...overrides, createServiceManager },
       );
     } catch (cause) {
-      if (await modelLoginMissing(models(), arguments_.values.provider))
+      if (await modelLoginMissing(await models(), arguments_.values.provider))
         (io.stderr ?? process.stderr).write(`${fungiModelLoginNotice}\n`);
       throw cause;
     }

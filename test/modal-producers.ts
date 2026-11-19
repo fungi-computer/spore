@@ -136,6 +136,7 @@ export async function runProducer(
                   commit: null,
                   capabilities: [],
                   terminals: [],
+                  logins: [],
                 },
               ]),
             remove: (id) => {
