@@ -14,9 +14,9 @@ Start here:
   fungi new                      Start a new conversation
   fungi login                    Choose a subscription, API key or Fungi models
 
-First time? Run fungi in your project folder, choose your Claude or ChatGPT
-subscription, finish browser sign-in, then send a prompt. A provider API key
-or funded Fungi Team also works. Check unfinished setup with fungi doctor.
+First time? Run fungi in your project folder, choose a subscription, finish
+browser sign-in, then send a prompt. A provider API key or funded Fungi Team
+also works. Check unfinished setup with fungi doctor.
 
 Conversations:
   fungi resume [<id>] [--last]   Reopen a saved conversation
@@ -150,16 +150,18 @@ stdin when it is omitted.
     login: `Usage: fungi login
        fungi login --provider <id> [--auth-type oauth|api_key] [--method <id>]
 
-In a terminal, fungi login asks how Shiitake should reach a model: your Claude
-or ChatGPT subscription (recommended), your Fungi account, or an API key.
+In a terminal, fungi login asks how Shiitake should reach a model: a
+subscription sign-in (recommended), your Fungi account, or an API key. An
+installed extension can add a subscription sign-in; see fungi extension.
 Without a terminal it starts the Fungi browser sign-in.
 
 Signing in to Fungi opens your browser once and asks which Team pays for
 models. The same account serves Team tools.
 
-Claude Pro/Max over SSH: run fungi login --provider anthropic --auth-type oauth
-and open the printed link on any machine. Then paste the authorization code or
-the final redirect URL back into fungi.
+A subscription over SSH: run fungi login --provider <id> --auth-type oauth and
+open the printed link on any machine. When the sign-in offers a copy-code
+method, fungi picks it over SSH; paste the authorization code or the final
+redirect URL back into fungi.
 
       --provider <id>            Model provider, e.g. fungi, anthropic, openai
       --auth-type <type>         oauth (subscription) or api_key

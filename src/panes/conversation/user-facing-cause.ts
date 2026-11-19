@@ -22,7 +22,7 @@ export function userFacingCause(cause: string | null | undefined): string {
     code === "model:rejected" &&
     remainder.startsWith("No signed-in model provider is available.")
   )
-    return "No signed-in model provider is available. Use /login to sign in with your Claude or ChatGPT subscription, an API key or Fungi, then send your message again.";
+    return "No signed-in model provider is available. Use /login to sign in with your ChatGPT subscription, an API key, Fungi or an extension, then send your message again.";
   // A bare code-only sentence says nothing the code's own plain text does not.
   const known = knownCodes.get(code);
   if (

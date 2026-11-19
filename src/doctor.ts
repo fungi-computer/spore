@@ -5,10 +5,17 @@ import process from "node:process";
 import { z } from "zod";
 import { reportFailure } from "./button/log-event.js";
 import type { PrivateLocalServiceManager } from "@fungi.computer/truffle";
+import {
+  inactiveSubscriptionNotice,
+  inactiveSubscriptions,
+  type SavedCredential,
+} from "@fungi.computer/truffle/login";
 
 /** Report public account metadata and provider readiness without displaying credentials. */
 export async function runDoctor(options: {
   models: NonNullable<LocalAuthCliOptions["models"]>;
+  /** The saved credentials, to name subscription sign-ins no slot serves. */
+  saved?: () => Promise<readonly SavedCredential[]>;
   fungiAccount: () => ReturnType<
     typeof import("@fungi.computer/truffle").readFungiAccountStatus
   >;
@@ -109,9 +116,20 @@ export async function runDoctor(options: {
     reportFailure("doctor-model-check", cause);
     report("Fungi models", false, "Could not check provider configuration");
   }
+  try {
+    const inactive = inactiveSubscriptions(
+      (await options.saved?.()) ?? [],
+      options.models.getProviders(),
+    );
+    for (const entry of inactive)
+      setup(entry.providerName, inactiveSubscriptionNotice);
+  } catch (cause) {
+    reportFailure("doctor-inactive-subscription-check", cause);
+    report("Saved sign-ins", false, "Could not read saved sign-ins");
+  }
   for (const [providerId, name] of [
     ["openai", "ChatGPT"],
-    ["anthropic", "Claude"],
+    ["anthropic", "Anthropic"],
   ] as const) {
     try {
       const auth = await options.models.checkAuth(providerId);
@@ -163,7 +181,7 @@ export async function runDoctor(options: {
   options.write(
     modelProviderReady
       ? "Next: run fungi.\n"
-      : "Next: run fungi login to use your Claude or ChatGPT subscription, an API key or Fungi models, then run fungi.\n",
+      : "Next: run fungi login to use a subscription, an API key or Fungi models, then run fungi.\n",
   );
   return passed;
 }

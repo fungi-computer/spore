@@ -86,7 +86,7 @@ try {
   const firstRun = run(["--yes"]);
   assert.match(
     firstRun,
-    /Welcome to fungi\. Use your Claude or ChatGPT subscription \(recommended\), or sign in to Fungi to use models/u,
+    /Welcome to fungi\. Use your .+ subscription \(recommended\), or sign in to Fungi to use models/u,
   );
   console.log("$ fungi --yes\n" + firstRun);
   const setup = JSON.parse(

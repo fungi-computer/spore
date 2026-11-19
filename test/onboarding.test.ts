@@ -12,6 +12,22 @@ import {
 } from "../src/onboarding.js";
 import { linearAuthInteraction } from "@fungi.computer/truffle/auth";
 import { runDoctor } from "../src/doctor.js";
+import {
+  subscriptionChoices,
+  type SubscriptionChoice,
+} from "../src/sign-in-choice.js";
+
+/** What Local offers with Pi's own OpenAI entry, as the login registry lists it. */
+const subscriptions: readonly SubscriptionChoice[] = subscriptionChoices([
+  {
+    id: "openai",
+    name: "OpenAI",
+    methods: [
+      { kind: "api_key", label: "OpenAI API key" },
+      { kind: "subscription", label: "Sign in with ChatGPT" },
+    ],
+  },
+]);
 
 test("a pipe skips every setup step without persisting consent; --yes saves local-only", async () => {
   const root = await mkdtemp(join(tmpdir(), "fungi-onboarding-"));
@@ -29,12 +45,13 @@ test("a pipe skips every setup step without persisting consent; --yes saves loca
         write: (text) => {
           output += text;
         },
+        subscriptions,
         signIn: unexpected,
       }),
     ).toBe(false);
     expect(await hasOnboarding(path)).toBe(false);
     expect(output).toContain("fungi doctor");
-    expect(output).toContain("Claude or ChatGPT subscription (recommended)");
+    expect(output).toContain("ChatGPT subscription (recommended)");
     expect(output.indexOf("subscription")).toBeLessThan(
       output.indexOf("sign in to Fungi"),
     );
@@ -46,6 +63,7 @@ test("a pipe skips every setup step without persisting consent; --yes saves loca
         write: (text) => {
           output += text;
         },
+        subscriptions,
         signIn: unexpected,
       }),
     ).toBe(false);
@@ -94,6 +112,7 @@ test("first run asks one question, signs in once, and opens fungi by default", a
       write: (text) => {
         terminal.write(text);
       },
+      subscriptions,
       signIn: (door) => {
         doors.push(door);
         return Promise.resolve();
@@ -107,10 +126,8 @@ test("first run asks one question, signs in once, and opens fungi by default", a
       );
     expect(start).toBe(true);
     expect(doors).toEqual(["subscription"]);
-    expect(screen).toContain(
-      "Use my Claude or ChatGPT subscription (recommended)",
-    );
-    expect(screen.indexOf("Use my Claude")).toBeLessThan(
+    expect(screen).toContain("Use my ChatGPT subscription (recommended)");
+    expect(screen.indexOf("Use my ChatGPT")).toBeLessThan(
       screen.indexOf("Sign in to Fungi"),
     );
     expect(screen).not.toContain("Sign in to Fungi (recommended)");
@@ -140,6 +157,7 @@ test("skipping sign-in never starts a login", async () => {
       write: (text) => {
         terminal.write(text);
       },
+      subscriptions,
       signIn: () => Promise.reject(new Error("Skip attempted a login")),
     });
     expect(start).toBe(true);
@@ -183,9 +201,7 @@ test("doctor reports actual failed checks without exposing credentials or blocki
   expect(output).toContain("SETUP Local service: Not running yet.");
   expect(output).toContain("SETUP Fungi sign-in: Not signed in to Fungi.");
   expect(output).toContain("SETUP Fungi models: Not set up.");
-  expect(output).toContain(
-    "Next: run fungi login to use your Claude or ChatGPT subscription",
-  );
+  expect(output).toContain("Next: run fungi login to use a subscription");
   expect(output).not.toContain("FAIL sign-in");
   expect(output).toContain(`Platform: ${process.platform} ${process.arch}`);
   expect(output).toContain("glibc:");
@@ -252,7 +268,7 @@ test("doctor reports Fungi readiness separately from a working subscription", as
   expect(output).toContain(
     "FAIL Fungi models: Sign in to Fungi with fungi login --provider fungi",
   );
-  expect(output).not.toContain("Use your own Claude or ChatGPT subscription");
+  expect(output).not.toContain("Use your own ChatGPT subscription");
 });
 
 test("doctor reports saved Fungi sign-in and a ready model without credential values", async () => {

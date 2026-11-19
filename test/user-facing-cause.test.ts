@@ -4,9 +4,9 @@ import { userFacingCause } from "../src/panes/conversation/user-facing-cause.js"
 
 test("diagnostic codes never reach the user", () => {
   const sentence =
-    "No signed-in model provider is available. Use your own Claude or ChatGPT subscription: /login in a Session, or fungi login --provider anthropic --auth-type oauth (Claude) or fungi login --provider openai --auth-type oauth (ChatGPT) in the CLI. For hosted Fungi: fungi login --provider fungi.";
+    "No signed-in model provider is available. Use your own ChatGPT subscription: /login in a Session, or fungi login --provider openai --auth-type oauth in the CLI. An API key or an extension's sign-in works too. For hosted Fungi: fungi login --provider fungi.";
   expect(userFacingCause(`model:rejected: ${sentence}`)).toBe(
-    "No signed-in model provider is available. Use /login to sign in with your Claude or ChatGPT subscription, an API key or Fungi, then send your message again.",
+    "No signed-in model provider is available. Use /login to sign in with your ChatGPT subscription, an API key, Fungi or an extension, then send your message again.",
   );
   expect(userFacingCause("model:rejected: Model acquisition failed")).toBe(
     "The model couldn't start. Try /retry; if it keeps failing, run fungi doctor.",

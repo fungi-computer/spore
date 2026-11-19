@@ -41,7 +41,9 @@ import type { TuiCliDependencies } from "./cli-runtime.js";
 import type { LocalAcpStdioOptions } from "@fungi.computer/truffle/acp-stdio";
 import { fungiModelLoginNotice } from "./button/login-notice.js";
 import type { LocalAuthCliOptions } from "@fungi.computer/truffle/auth";
+import { localLoginProviders } from "@fungi.computer/truffle/login";
 import {
+  createPrivateCredentialStore,
   openPrivateModels,
   resolveDefaultCredentialPath,
   listPrivateTeamComputers,
@@ -83,6 +85,8 @@ import {
   chooseSignInDoor,
   chooseSubscription,
   type SignInDoor,
+  type SubscriptionChoice,
+  subscriptionChoices,
 } from "./sign-in-choice.js";
 import { runDoctor } from "./doctor.js";
 import {
@@ -862,11 +866,15 @@ export async function runFungiCli(
     arguments_.values.method === undefined &&
     arguments_.values["fungi-mcp"] === undefined
   ) {
-    const door = await chooseSignInDoor(linearCli, { allowSkip: false });
+    const subscriptions = await offeredSubscriptions(io, credentialPath);
+    const door = await chooseSignInDoor(linearCli, {
+      allowSkip: false,
+      subscriptions,
+    });
     if (door === undefined || door === "later")
       throw new Error("Login cancelled. Run fungi login to try again.");
     await runFungiCli(
-      await signInArguments(door, linearCli),
+      await signInArguments(door, linearCli, subscriptions),
       { ...io, quiet: true },
       overrides,
       home,
@@ -945,6 +953,10 @@ export async function runFungiCli(
     const passed = await runDoctor({
       localServiceStatus: () => createServiceManager().status(),
       models: io.authModels ?? (await openPrivateModels(credentialPath)),
+      saved:
+        io.authModels === undefined
+          ? () => createPrivateCredentialStore(credentialPath).list()
+          : () => Promise.resolve([]),
       fungiAccount: readFungiStatus,
       endpoint: selected?.endpoint,
       version: fungiVersion,
@@ -1644,9 +1656,10 @@ export async function runFungiCli(
       yes: arguments_.values.yes ?? false,
       input: io.stdin === undefined ? process.stdin : Readable.from(io.stdin),
       write: (message) => stdout.write(message),
-      signIn: async (door, cli) =>
+      subscriptions: await offeredSubscriptions(io, credentialPath),
+      signIn: async (door, cli, subscriptions) =>
         runFungiCli(
-          await signInArguments(door, cli),
+          await signInArguments(door, cli, subscriptions),
           { ...io, quiet: true },
           overrides,
           home,
@@ -1722,14 +1735,24 @@ export async function runFungiCli(
     await saveProjectMcpConnection(invocationRoot, endpoint);
 }
 
+/** The subscription sign-ins Local offers, from the same registry as /login. */
+async function offeredSubscriptions(
+  io: FungiCliIo,
+  credentialPath: string,
+): Promise<readonly SubscriptionChoice[]> {
+  const models = io.authModels ?? (await openPrivateModels(credentialPath));
+  return subscriptionChoices(localLoginProviders(models.getProviders()));
+}
+
 /** The `fungi login` arguments for one sign-in door. */
 async function signInArguments(
   door: SignInDoor,
   cli: Pick<Cli, "select">,
+  subscriptions: readonly SubscriptionChoice[],
 ): Promise<string[]> {
   if (door === "fungi") return ["login", "--provider", "fungi"];
   if (door === "api_key") return ["login", "--auth-type", "api_key"];
-  const provider = await chooseSubscription(cli);
+  const provider = await chooseSubscription(cli, subscriptions);
   if (provider === undefined)
     throw new Error("Login cancelled. Run fungi login to try again.");
   return ["login", "--provider", provider, "--auth-type", "oauth"];

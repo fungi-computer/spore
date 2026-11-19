@@ -16,13 +16,8 @@ import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 import { waitForFrame } from "./native-readiness.js";
 import { captureFrame } from "./frame-capture.ts";
 
-const noticeText =
-  "Use your own Claude or ChatGPT subscription: /login in a Session";
-assert.ok(
-  fungiModelLoginNotice.includes(
-    "fungi login --provider anthropic --auth-type oauth",
-  ),
-);
+const noticeText = "Use your own ChatGPT subscription: /login in a Session";
+assert.ok(!fungiModelLoginNotice.includes("--provider anthropic"));
 assert.ok(
   fungiModelLoginNotice.includes(
     "fungi login --provider openai --auth-type oauth",

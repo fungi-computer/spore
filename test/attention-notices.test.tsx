@@ -70,7 +70,7 @@ test("the sign-in attention item disappears when account access is restored", as
   );
   try {
     await waitForFrame(setup, (frame) =>
-      frame.includes("Use your own Claude or ChatGPT subscription"),
+      frame.includes("Use your own ChatGPT subscription"),
     );
     signedIn = true;
     await act(async () => {
@@ -84,10 +84,10 @@ test("the sign-in attention item disappears when account access is restored", as
     ).not.toEqual([]);
     await waitForFrame(
       setup,
-      (frame) => !frame.includes("Use your own Claude or ChatGPT subscription"),
+      (frame) => !frame.includes("Use your own ChatGPT subscription"),
     );
     expect(setup.captureCharFrame()).not.toContain(
-      "Use your own Claude or ChatGPT subscription",
+      "Use your own ChatGPT subscription",
     );
   } finally {
     await destroyTestRenderer(setup);

@@ -1,7 +1,6 @@
 import { executeAlias } from "./command-selection.js";
 import process from "node:process";
 import assert from "node:assert/strict";
-import { setTimeout as delay } from "node:timers/promises";
 import { test } from "bun:test";
 import { act } from "react";
 import { createTestRenderer } from "@opentui/core/testing";
@@ -11,6 +10,7 @@ import { runTuiCli } from "@fungi.computer/spore/cli-runtime";
 import { createTuiFixture } from "./fixture.js";
 import { noOpClientExtensions } from "./client-extension-fixture.mjs";
 import { configuredModelAccess, modelHistory } from "./model-access-fixture.js";
+import { waitForFrame } from "./native-readiness.js";
 
 test("slash model saves update one mounted frame without duplicate commands", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -113,23 +113,22 @@ test("slash model saves update one mounted frame without duplicate commands", as
       await act(async () => setup.mockInput.pressKey("u", { ctrl: true }));
       await act(async () => setup.mockInput.typeText("/model"));
       await act(async () => setup.mockInput.pressEnter());
-      await act(async () => setup.renderOnce());
-      assert.match(setup.captureCharFrame(), /SIGNED IN/u);
-      assert.match(setup.captureCharFrame(), /DEFAULT/u);
+      // Each prompt opens after asynchronous provider and model reads, which
+      // schedule no render; wait for its frame rather than one render pass.
+      assert.match(
+        await waitForFrame(setup, (frame) => frame.includes("SIGNED IN")),
+        /DEFAULT/u,
+      );
       await act(async () => setup.mockInput.pressArrow("down"));
       await act(async () => setup.mockInput.pressArrow("down"));
       await act(async () => setup.mockInput.pressEnter());
-      await act(async () => setup.renderOnce());
-      assert.match(
-        setup.captureCharFrame(),
-        /Choose a model[\s\S]*Fixture model/u,
+      await waitForFrame(setup, (frame) =>
+        /Choose a model[\s\S]*Fixture model/u.test(frame),
       );
       // Provider, model and thinking level all use Parakeet prompts.
       await act(async () => setup.mockInput.pressEnter());
-      await act(async () => setup.renderOnce());
-      assert.match(
-        setup.captureCharFrame(),
-        /Thinking level for Fixture model/u,
+      await waitForFrame(setup, (frame) =>
+        frame.includes("Thinking level for Fixture model"),
       );
       await act(async () => setup.mockInput.pressArrow("down"));
       await act(async () => setup.mockInput.pressEnter());
@@ -157,9 +156,7 @@ test("slash model saves update one mounted frame without duplicate commands", as
           origin: "slash",
         }),
       }));
-      await act(async () => delay(10));
-      await act(async () => setup.renderOnce());
-      assert.match(setup.captureCharFrame(), /Commands/u);
+      await waitForFrame(setup, (frame) => frame.includes("Commands"));
       await act(async () => setup.mockInput.pressKey("c", { ctrl: true }));
       await act(async () => help);
       await act(async () => setup.renderOnce());

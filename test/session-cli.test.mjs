@@ -1164,7 +1164,10 @@ async function withCli(
         }),
       ]);
     });
-    await setup.waitForFrame((frame) => frame.includes(readyText));
+    // Dialogs and Session state arrive from asynchronous owner reads that
+    // schedule no render. OpenTUI's `setup.waitForFrame` stops as soon as the
+    // renderer is idle, so this file waits with the bounded native helper.
+    await waitForFrame(setup, (frame) => frame.includes(readyText));
     const input = renderedNodes(setup.renderer.root).find(
       (node) => node instanceof TextareaRenderable,
     );
@@ -1258,9 +1261,7 @@ test("text sent immediately after closing the model picker reaches the composer"
     async ({ setup, input, type, submit }) => {
       await type("/model");
       await submit();
-      await act(async () =>
-        setup.waitForFrame((frame) => frame.includes("Use agent model")),
-      );
+      await waitForFrame(setup, (frame) => frame.includes("Use agent model"));
       assert.ok(
         renderedNodes(setup.renderer.root).some(
           (node) => node.focused && node.id.startsWith("box-"),
@@ -1347,17 +1348,13 @@ test.each([
       async ({ setup, commands, type, submit, input, hostCloses }) => {
         await type("/login");
         await submit();
-        await act(async () =>
-          setup.waitForFrame((frame) =>
-            frame.includes("Sign in to a model provider"),
-          ),
+        await waitForFrame(setup, (frame) =>
+          frame.includes("Sign in to a model provider"),
         );
         await act(async () => setup.mockInput.typeText("OpenAI"));
         await act(async () => setup.mockInput.pressEnter());
-        await act(async () =>
-          setup.waitForFrame((frame) =>
-            frame.includes("How do you want to sign in to OpenAI?"),
-          ),
+        await waitForFrame(setup, (frame) =>
+          frame.includes("How do you want to sign in to OpenAI?"),
         );
         assert.match(setup.captureCharFrame(), /OpenAI API key/u);
         assert.match(setup.captureCharFrame(), /Sign in with ChatGPT/u);
@@ -1369,10 +1366,9 @@ test.each([
           await executeEscape(commands);
         });
         await cancelled.promise;
-        await act(async () =>
-          setup.waitForFrame(
-            (frame) => !frame.includes("Sign in to a model provider"),
-          ),
+        await waitForFrame(
+          setup,
+          (frame) => !frame.includes("Sign in to a model provider"),
         );
         assert.equal(input.focused, true);
         assert.equal(hostCloses, 0);
@@ -1466,9 +1462,7 @@ test("the production CLI keeps the frame mounted under the /model choice", async
     async ({ setup, type, submit, input, fixture }) => {
       await type("/model");
       await submit();
-      await act(async () =>
-        setup.waitForFrame((frame) => frame.includes("Use agent model")),
-      );
+      await waitForFrame(setup, (frame) => frame.includes("Use agent model"));
       assert.ok(setup.renderer.currentFocusedRenderable?.focused);
       assert.match(setup.captureCharFrame(), /Choose a provider/u);
       assert.equal(input.focused, false);
@@ -1480,9 +1474,7 @@ test("the production CLI keeps the frame mounted under the /model choice", async
       assert.equal(fixture.promptCalls(), 0);
       await type("/model");
       await submit();
-      await act(async () =>
-        setup.waitForFrame((frame) => frame.includes("Use agent model")),
-      );
+      await waitForFrame(setup, (frame) => frame.includes("Use agent model"));
       assert.ok(
         renderedNodes(setup.renderer.root).some(
           (node) => node.focused && node.id.startsWith("box-"),
@@ -1810,7 +1802,7 @@ test("accepted prompt clears the native composer", async () => {
     async ({ input, requests, type, submit, setup }) => {
       await type("Clear this sent prompt");
       await submit();
-      await act(async () => setup.waitForFrame(() => input.plainText === ""));
+      await waitForFrame(setup, () => input.plainText === "");
       assert.equal(
         requests.filter((request) => request.type === "prompt").length,
         1,
@@ -1855,10 +1847,8 @@ test("rejected prompt keeps the native composer input", async () => {
     async ({ input, type, submit, setup }) => {
       await type("Keep this failed prompt");
       await submit();
-      await act(async () =>
-        setup.waitForFrame((frame) =>
-          frame.includes("/retry · or edit and submit the draft"),
-        ),
+      await waitForFrame(setup, (frame) =>
+        frame.includes("/retry · or edit and submit the draft"),
       );
       assert.equal(input.plainText, "Keep this failed prompt");
       assert.match(setup.captureCharFrame(), /● failed/u);
@@ -1915,7 +1905,7 @@ function failedRunFrame() {
 test("a failed run shows choices and a new draft enters as a fresh instruction", async () => {
   await withCli(async ({ setup, requests, type, submit, pushFrame }) => {
     await pushFrame(failedRunFrame());
-    await setup.waitForFrame((frame) =>
+    await waitForFrame(setup, (frame) =>
       frame.includes("Stopped: Tool execution failed"),
     );
     assert.match(setup.captureCharFrame(), /Stopped: Tool execution failed/u);
@@ -1939,7 +1929,7 @@ test("the native recovery commands keep retry and continue distinct", async () =
   for (const command of ["/retry", "/continue"]) {
     await withCli(async ({ setup, requests, type, submit, pushFrame }) => {
       await pushFrame(failedRunFrame());
-      await setup.waitForFrame((frame) =>
+      await waitForFrame(setup, (frame) =>
         frame.includes("Stopped: Tool execution failed"),
       );
       await type(command);
@@ -1971,7 +1961,7 @@ test("exact aliases are commands and unsupported slash drafts stay out of prompt
       ]) {
         await type(text);
         await submit();
-        await act(async () => setup.waitForFrame((frame) => error.test(frame)));
+        await waitForFrame(setup, (frame) => error.test(frame));
         assert.match(setup.captureCharFrame(), error);
       }
       for (const text of [" /help", "ordinary prompt"]) {
@@ -2036,9 +2026,7 @@ test("/reload refreshes supported owners and reports the rest without a prompt",
   await withCli(async ({ fixture, setup, type, submit }) => {
     await type("/reload");
     await submit();
-    await act(async () =>
-      setup.waitForFrame((frame) => /Not reloadable:/u.test(frame)),
-    );
+    await waitForFrame(setup, (frame) => /Not reloadable:/u.test(frame));
     const frame = setup.captureCharFrame().replace(/\s+/gu, " ");
     assert.match(frame, /Refreshed now: model catalog, terminal colors\./u);
     // The report is a toast: its long lines wrap inside the card.
@@ -2328,9 +2316,7 @@ test("model selection offers supported thinking before changing the mounted owne
       const { setup, type, submit } = context;
       await type("/model");
       await submit();
-      await act(async () =>
-        setup.waitForFrame((frame) => frame.includes("Use agent model")),
-      );
+      await waitForFrame(setup, (frame) => frame.includes("Use agent model"));
       assert.match(setup.captureCharFrame(), /DEFAULT/u);
       await act(async () => setup.mockInput.pressArrow("down"));
       await act(async () => setup.mockInput.pressArrow("down"));
@@ -2375,21 +2361,15 @@ test("choosing a model returns keyboard focus to the composer without Escape", a
     async ({ setup, input, type, submit }) => {
       await type("/model");
       await submit();
-      await act(async () =>
-        setup.waitForFrame((frame) => frame.includes("SIGNED IN")),
-      );
+      await waitForFrame(setup, (frame) => frame.includes("SIGNED IN"));
       assert.match(setup.captureCharFrame(), /DEFAULT/u);
       await act(async () => setup.mockInput.pressArrow("down"));
       await act(async () => setup.mockInput.pressArrow("down"));
       await act(async () => setup.mockInput.pressEnter());
-      await act(async () =>
-        setup.waitForFrame((frame) => frame.includes("Choose a model")),
-      );
+      await waitForFrame(setup, (frame) => frame.includes("Choose a model"));
       await act(async () => setup.mockInput.pressArrow("down"));
       await act(async () => setup.mockInput.pressEnter());
-      await act(async () =>
-        setup.waitForFrame((frame) => !frame.includes("Choose a model")),
-      );
+      await waitForFrame(setup, (frame) => !frame.includes("Choose a model"));
       await act(async () => setup.mockInput.typeText("new instruction"));
       assert.equal(input.focused, true);
       assert.equal(input.plainText, "new instruction");
@@ -2598,10 +2578,8 @@ test("real Goal control renders one safe committed footer row", async () => {
     async ({ setup, type, submit }) => {
       await type("/goal pause");
       await submit();
-      await act(async () =>
-        setup.waitForFrame((frame) =>
-          frame.includes("Goal paused (/goal resume)"),
-        ),
+      await waitForFrame(setup, (frame) =>
+        frame.includes("Goal paused (/goal resume)"),
       );
       assert.match(
         setup.captureCharFrame(),
@@ -2660,7 +2638,7 @@ for (const [width, height] of [
 ]) {
   test(`skipped login wraps the complete recovery and offers /login at ${String(width)}x${String(height)}`, async () => {
     const cause =
-      "No signed-in model provider is available. Use your own Claude or ChatGPT subscription: /login in a Session, or fungi login --provider anthropic --auth-type oauth (Claude) or fungi login --provider openai --auth-type oauth (ChatGPT) in the CLI. For hosted Fungi: fungi login --provider fungi.";
+      "No signed-in model provider is available. Use your own ChatGPT subscription: /login in a Session, or fungi login --provider openai --auth-type oauth in the CLI. An API key or an extension's sign-in works too. For hosted Fungi: fungi login --provider fungi.";
     await withCli(
       async ({ type, submit, setup, pushFrame }) => {
         await type("Say hello.");
@@ -2669,9 +2647,7 @@ for (const [width, height] of [
         failed.messages[0].value.content = "Say hello.";
         failed.terminals[0].diagnostic = `model:rejected: ${cause}`;
         await pushFrame(failed);
-        await act(async () =>
-          setup.waitForFrame((frame) => frame.includes("Stopped:")),
-        );
+        await waitForFrame(setup, (frame) => frame.includes("Stopped:"));
         const frame = setup.captureCharFrame();
         await captureFrame(
           setup,
@@ -2682,7 +2658,7 @@ for (const [width, height] of [
           frame
             .replace(/\s+/gu, "")
             .includes(
-              "Stopped: No signed-in model provider is available. Use /login to sign in with your Claude or ChatGPT subscription, an API key or Fungi, then send your message again.".replace(
+              "Stopped: No signed-in model provider is available. Use /login to sign in with your ChatGPT subscription, an API key, Fungi or an extension, then send your message again.".replace(
                 /\s+/gu,
                 "",
               ),

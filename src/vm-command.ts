@@ -18,9 +18,9 @@ SSH keys are not mounted. A firewall rule inside the VM blocks your computer's
 localhost; root in the VM could remove it. Needs Lima: brew install lima on macOS, or
 https://lima-vm.io/docs/installation/ on Linux.
 
-  login      Show the VM's logins, then run fungi login in it. Claude uses
-             copy-code sign-in; port 1455 is forwarded while it runs so a
-             ChatGPT browser sign-in can finish
+  login      Show the VM's logins, then run fungi login in it. A sign-in that
+             offers copy-code uses it; port 1455 is forwarded while it runs
+             so a ChatGPT browser sign-in can finish
   stop       Stop the VM; its disk, tools and logins are kept
   rm         Delete a stopped VM and its disk; the project folder stays
 

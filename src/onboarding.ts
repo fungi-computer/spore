@@ -6,7 +6,12 @@ import { Writable, type Readable } from "node:stream";
 import { Cli } from "@fungi.computer/lantern";
 import writeFileAtomic from "write-file-atomic";
 import { z } from "zod";
-import { chooseSignInDoor, type SignInDoor } from "./sign-in-choice.js";
+import {
+  chooseSignInDoor,
+  subscriptionNames,
+  type SignInDoor,
+  type SubscriptionChoice,
+} from "./sign-in-choice.js";
 import { reportFailure } from "./button/log-event.js";
 
 /** The stored door names predate the one-question setup; their meaning is fixed. */
@@ -42,7 +47,13 @@ export type OnboardingOptions = {
   input?: Readable;
   write: (message: string) => void;
   /** Run the chosen sign-in on this same screen; the banner is already shown. */
-  signIn: (door: SignInDoor, cli: Cli) => Promise<void>;
+  signIn: (
+    door: SignInDoor,
+    cli: Cli,
+    subscriptions: readonly SubscriptionChoice[],
+  ) => Promise<void>;
+  /** The subscription sign-ins Local offers, which the doors follow. */
+  subscriptions: readonly SubscriptionChoice[];
 };
 
 /** Return whether to open the first local Session. Cancel saves nothing. */
@@ -50,8 +61,12 @@ export async function runOnboarding(
   options: OnboardingOptions,
 ): Promise<boolean> {
   if (!options.interactive || options.yes) {
+    const subscription =
+      options.subscriptions.length === 0
+        ? ""
+        : `Use your ${subscriptionNames(options.subscriptions)} subscription (recommended), or `;
     options.write(
-      "Welcome to fungi. Use your Claude or ChatGPT subscription (recommended), or sign in to Fungi to use models.\nNext: fungi login · fungi doctor · fungi\n",
+      `Welcome to fungi. ${subscription}${subscription === "" ? "S" : "s"}ign in to Fungi to use models.\nNext: fungi login · fungi doctor · fungi\n`,
     );
     // A pipe must not silently accept or persist setup choices.
     if (!options.yes) return false;
@@ -71,9 +86,12 @@ export async function runOnboarding(
     }),
   });
   cli.welcome("Your ideas, growing.");
-  const door = await chooseSignInDoor(cli, { allowSkip: true });
+  const door = await chooseSignInDoor(cli, {
+    allowSkip: true,
+    subscriptions: options.subscriptions,
+  });
   if (door === undefined) return cancelled(cli);
-  if (door !== "later") await options.signIn(door, cli);
+  if (door !== "later") await options.signIn(door, cli, options.subscriptions);
   await saveSetup(options.path ?? setupPath(), savedDoor[door]);
   cli.outro("Ready to grow.");
   return true;

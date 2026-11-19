@@ -342,7 +342,7 @@ test("help describes the actual entry modes without opening a Session", async ()
   }
 });
 
-test("Anthropic login help explains the SSH paste-code path", async () => {
+test("login help explains the SSH copy-code path for any subscription", async () => {
   let output = "";
   await runFungiCli(["login", "--help"], {
     stdout: {
@@ -352,12 +352,10 @@ test("Anthropic login help explains the SSH paste-code path", async () => {
       },
     },
   });
-  expect(output).toContain(
-    "fungi login --provider anthropic --auth-type oauth",
-  );
+  expect(output).toContain("fungi login --provider <id> --auth-type oauth");
   expect(output).toContain("over SSH");
   expect(output).toContain(
-    "paste the authorization code or\nthe final redirect URL",
+    "paste the authorization code or the final\nredirect URL",
   );
 });
 
@@ -1100,12 +1098,8 @@ test("a failed run without any model login points at fungi login", async () => {
   } finally {
     process.stderr.write = original;
   }
-  expect(written.join("")).toContain(
-    "Use your own Claude or ChatGPT subscription",
-  );
-  expect(written.join("")).toContain(
-    "fungi login --provider anthropic --auth-type oauth",
-  );
+  expect(written.join("")).toContain("Use your own ChatGPT subscription");
+  expect(written.join("")).not.toContain("--provider anthropic");
   expect(written.join("")).toContain(
     "fungi login --provider openai --auth-type oauth",
   );
@@ -1625,7 +1619,7 @@ test("fungi run --workspace tells an unsigned user how to sign in and exits 1 wi
   const rejected = new ShiitakeError(
     "model",
     "rejected",
-    "No signed-in model provider is available. Use your own Claude or ChatGPT subscription: /login in a Session, or fungi login --provider anthropic --auth-type oauth (Claude) or fungi login --provider openai --auth-type oauth (ChatGPT) in the CLI. For hosted Fungi: fungi login --provider fungi.",
+    "No signed-in model provider is available. Use your own ChatGPT subscription: /login in a Session, or fungi login --provider openai --auth-type oauth in the CLI. An API key or an extension's sign-in works too. For hosted Fungi: fungi login --provider fungi.",
   );
   try {
     await assert.rejects(
@@ -1656,7 +1650,7 @@ test("fungi run --workspace tells an unsigned user how to sign in and exits 1 wi
   }
   stream.write(fungiCliFailureLine(rejected));
   expect(stderr).toContain(
-    "Use your own Claude or ChatGPT subscription: /login in a Session, or fungi login --provider anthropic --auth-type oauth (Claude) or fungi login --provider openai --auth-type oauth (ChatGPT) in the CLI. For hosted Fungi, run fungi login --provider fungi.\nfungi: No signed-in model provider is available.",
+    "Use your own ChatGPT subscription: /login in a Session, or fungi login --provider openai --auth-type oauth in the CLI. An API key or an extension's sign-in works too. For hosted Fungi, run fungi login --provider fungi.\nfungi: No signed-in model provider is available.",
   );
   expect(stderr).not.toContain("model:rejected");
   expect(stderr).not.toMatch(/\n\s+at |Error:|terminal outcome/u);
