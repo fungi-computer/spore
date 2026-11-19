@@ -29,10 +29,10 @@ reinstall the CLI with optional dependencies enabled.
 fungi
 ```
 
-On first run, choose **Use my Claude or ChatGPT subscription**. Finish the
-provider's browser sign-in, then return to your terminal and send a prompt. You
-can also choose an API key or Fungi models. A Fungi account is optional when you
-use your own subscription.
+On first run, choose **Use my ChatGPT subscription**. Finish the provider's
+browser sign-in, then return to your terminal and send a prompt. You can also
+choose an API key or Fungi models. A Fungi account is optional when you use your
+own subscription.
 
 To change your sign-in later, run `fungi login` in an interactive terminal. It
 opens the same model-provider chooser. Without an interactive terminal, bare

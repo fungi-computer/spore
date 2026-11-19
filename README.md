@@ -6,8 +6,8 @@ Try it with one command, run it on your own Cloudflare account, or let us host
 it.
 
 Shiitake by Fungi is a coding agent that works in your project folder, on your
-own Claude or ChatGPT subscription. Spore installs it as the `fungi` command,
-for your terminal or an ACP editor such as Zed.
+own ChatGPT subscription. Spore installs it as the `fungi` command, for your
+terminal or an ACP editor such as Zed.
 
 ## Install and start
 
@@ -19,10 +19,10 @@ npm install -g @fungi.computer/spore
 fungi
 ```
 
-Choose **Use my Claude or ChatGPT subscription**, finish the provider's browser
-sign-in, then return to the terminal and send a prompt. You can also choose an
-API key or Fungi models. A Fungi account is optional with your own subscription.
-Run `fungi doctor` to check setup; unfinished steps say SETUP and give the next
+Choose **Use my ChatGPT subscription**, finish the provider's browser sign-in,
+then return to the terminal and send a prompt. You can also choose an API key or
+Fungi models. A Fungi account is optional with your own subscription. Run
+`fungi doctor` to check setup; unfinished steps say SETUP and give the next
 command. To retry a cancelled sign-in, run `fungi login`.
 
 For hosted models, run `fungi login --provider fungi` and choose the Team that
