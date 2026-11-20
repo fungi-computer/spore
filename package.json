@@ -1,6 +1,6 @@
 {
   "name": "@fungi.computer/spore",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "private": false,
   "type": "module",
   "bin": {
@@ -99,6 +99,9 @@
     "sharp": "0.35.4",
     "shell-quote": "1.10.0",
     "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=22.13"
   },
   "license": "MIT",
   "publishConfig": {

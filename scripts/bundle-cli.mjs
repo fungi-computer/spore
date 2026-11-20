@@ -30,9 +30,13 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 // The TUI's package.json version is the one source of truth for the published
 // @fungi.computer/spore and its native packages, so `fungi --version` reads the
 // same value from source and from the packed launcher.
-const { version, description, homepage, keywords } = JSON.parse(
-  await readFile(resolve(root, "package.json"), "utf8"),
-);
+const {
+  version,
+  description,
+  homepage,
+  keywords,
+  engines: nodeEngines,
+} = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
 const repository = resolve(root, "../..");
 // Refresh the in-bundle trust anchor after all available platform builds.
 const anchors = spawnSync(
@@ -210,7 +214,7 @@ await writeFile(
         "native/apply-patch/LICENSE.codex",
         "computerd-loopback.cjs",
       ],
-      engines: { node: ">=22.13" },
+      engines: nodeEngines,
       // Keep the Node diagnostic launcher installable on unsupported hosts.
       // Native optional packages retain their own OS/CPU constraints.
       publishConfig: {

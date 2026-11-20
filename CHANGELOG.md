@@ -1,5 +1,13 @@
 # @fungi.computer/spore
 
+## 0.23.0
+
+### Minor Changes
+
+- Changes since 0.22.0:
+
+  - feat(release): write the Node floor into the versions table and add its page
+
 ## 0.22.0
 
 ### Minor Changes
