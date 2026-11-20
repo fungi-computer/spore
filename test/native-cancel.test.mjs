@@ -163,6 +163,7 @@ for (const deferredNotifications of [false, true]) {
                               },
                             ]
                           : [],
+                      notPermitted: 0,
                     };
                   },
                   close: async () => undefined,
@@ -239,7 +240,7 @@ for (const deferredNotifications of [false, true]) {
           outcome === "transport rejection" || outcome === "refusal"
             ? "Stop-all unconfirmed"
             : outcome === "discovery failure"
-              ? "confirmed: unreadable-helper"
+              ? "Store unreadable."
               : "Stopped 1 helper";
         // The service reply and its observation stream are independent transports.
         // Await the actual idle observation, not an arbitrary scheduling delay.

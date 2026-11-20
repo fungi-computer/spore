@@ -1,5 +1,29 @@
 # @fungi.computer/spore
 
+## 0.22.0
+
+### Minor Changes
+
+- Changes since 0.21.1:
+
+  - fix(agar): say which Agents may still be running and why
+  - fix(hub): stop four Agents at once and count helpers a key may not stop
+  - feat(agar): add the agent.stop capability for stop all
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/agar@0.25.0
+  - @fungi.computer/shiitake-extensions@0.12.3
+  - @fungi.computer/truffle@0.19.2
+  - @fungi.computer/nacre@0.8.7
+  - @fungi.computer/parakeet@0.16.6
+  - @fungi.computer/shiitake@0.21.14
+  - @fungi.computer/veil@0.11.4
+  - @fungi.computer/corral@0.1.55
+
 ## 0.21.1
 
 ### Patch Changes

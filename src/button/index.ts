@@ -15,7 +15,7 @@ import type {
   ParakeetSession,
   ParakeetDraftCheckpoint,
 } from "@fungi.computer/parakeet/headless";
-import type { StopAllResult } from "@fungi.computer/truffle/service";
+import type { AgentStopAllResult as StopAllResult } from "@fungi.computer/agar/agents";
 import type { PaneCommands } from "@fungi.computer/nacre/command-host";
 import type { Renderable, KeyEvent, PasteEvent } from "@opentui/core";
 import { createElement, type ComponentType, type ReactNode } from "react";
@@ -25,6 +25,8 @@ import type { ToastInput } from "./toast-store.js";
 
 /** Outcome of the Agent-tree stop capability exposed to panes. */
 export type { StopAllResult };
+/** The one shared wording of a Stop all outcome, so panes and Grove say the same. */
+export { agentStopAllSummary } from "@fungi.computer/agar/agents";
 export { tuiDraftStorage } from "./draft-storage.js";
 export { type TuiSandboxSource } from "./local-sandbox.js";
 

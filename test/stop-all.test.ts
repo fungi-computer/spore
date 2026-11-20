@@ -65,7 +65,12 @@ test("the single summary counts stopped helpers, not idle helpers, and names par
     { agentId: "root", name: "Shiitake", outcome: "stopped" },
   ] satisfies Parameters<typeof stopAllSummary>[0]["agents"];
   expect(
-    stopAllSummary({ rootAgentId: "root", agents, discoveryFailures: [] }),
+    stopAllSummary({
+      rootAgentId: "root",
+      agents,
+      discoveryFailures: [],
+      notPermitted: 0,
+    }),
   ).toEqual({
     variant: "success",
     message: "Stopped Shiitake and 2 helpers",
@@ -83,12 +88,29 @@ test("the single summary counts stopped helpers, not idle helpers, and names par
         },
       ],
       discoveryFailures: [],
+      notPermitted: 0,
     }),
   ).toEqual({
     variant: "warning",
     duration: "until-dismissed",
     message:
-      "Stopped Shiitake and 2 helpers. 1 not confirmed: Remote: Unavailable host",
+      "Stopped Shiitake and 2 helpers. Remote may still be running: Unavailable host.",
+  });
+});
+
+test("the single summary counts helpers the caller may not stop without naming them", () => {
+  expect(
+    stopAllSummary({
+      rootAgentId: "root",
+      agents: [{ agentId: "root", name: "Shiitake", outcome: "stopped" }],
+      discoveryFailures: [],
+      notPermitted: 2,
+    }),
+  ).toEqual({
+    variant: "warning",
+    duration: "until-dismissed",
+    message:
+      "Stopped Shiitake. 2 helpers you may not stop were left as they were.",
   });
 });
 
@@ -104,6 +126,7 @@ test("the final toast store retains a queued stop-all refusal under transient pr
           rootAgentId: "root",
           agents: [],
           discoveryFailures: [],
+          notPermitted: 0,
         }),
       );
     expect(store.snapshot().pending).toBe(toastQueueLimit);
