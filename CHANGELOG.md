@@ -1,5 +1,19 @@
 # @fungi.computer/spore
 
+## 0.20.0
+
+### Minor Changes
+
+- Changes since 0.19.5:
+
+  - feat(almanac): show recurring asks in conversation footers
+
+### Patch Changes
+
+- Updated dependencies
+  - @fungi.computer/shiitake-extensions@0.12.0
+  - @fungi.computer/truffle@0.18.6
+
 ## 0.19.5
 
 ### Patch Changes

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import almanacClient from "@fungi.computer/shiitake-extensions/almanac/client";
 import { userFacingCause } from "./panes/conversation/user-facing-cause.js";
 import { displayText } from "./shell/display-text.js";
 import questionClient from "@fungi.computer/shiitake-extensions/question/client";
@@ -143,6 +144,7 @@ import {
 const sessionClients = [
   goalClient,
   loopClient,
+  almanacClient,
   planClient,
   corralClient,
   questionClient,
