@@ -14,9 +14,12 @@ export type ComputerCommandOwners = Readonly<{
   run: typeof runPrivateLocalComputer;
 }>;
 
-export const computerCommandHelp = `Usage: fungi computer attach <computer> <folder> --fungi-mcp <url> [--yes]
+export const computerCommandHelp = `Usage: fungi computer list | info <computer> | new [<name>] | start <computer>
+       fungi computer stop <computer> | delete <computer> [--yes]
+       fungi computer attach <computer> <folder> --fungi-mcp <url> [--yes]
        fungi computer status
        fungi computer detach <computer> --fungi-mcp <url>
+       fungi computer ssh <computer> [--fungi-mcp <url>] [-- <ssh args>]
 
 Attach a folder on this machine to a Computer as one of its execution
 backends, then keep it connected until you stop it (Ctrl-C). The Computer's
@@ -30,7 +33,23 @@ fungi mcp use <url> --from-file - with its key first.
                                  Oyster's, e.g. https://<oyster>/mcp
       --host-label <label>
                                  Name for this machine (default: hostname)
-      --yes                      Accept the access notice without asking
+      --yes                      Accept the notice, or the delete question,
+                                 without asking
+      --size <size>              With new: small, default or large
+      --json                     With list, info, new and start: one JSON
+                                 document on stdout
+
+list and info read each Computer's real state without waking it. new creates a
+Computer (the Hub names it when you give no name) and retries an unconfirmed
+creation without making a second one. start waits for admission and shows the
+queue place. stop ends a Computer's runtime and keeps its files. delete erases
+the Computer and its files for good: it asks first, and needs --yes without a
+terminal. Only a Computer's creator or a Team owner signed in as a person can
+stop or delete it. A <computer> is a name or an id.
+
+ssh opens an SSH session on a hosted Team Computer with the system ssh, using a
+throwaway key and a 5-minute certificate from the Hub; your own keys and agent
+are never offered. Arguments after -- go to ssh (fungi computer ssh home -- ls).
 `;
 
 export type OfflineStatus = Readonly<{

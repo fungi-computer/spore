@@ -36,7 +36,7 @@ Account:
 Team Computers:
   fungi computers [start <name>]
                                  List or start your Team's Computers
-  fungi computer <action>        Attach, inspect or detach a folder
+  fungi computer <action>        Create, start, attach or ssh Computers
   fungi mcp show|use|forget      Manage this project's Team MCP address
 
 Oyster and Apps:
