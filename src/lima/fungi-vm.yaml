@@ -57,11 +57,21 @@ provision:
     script: |
       #!/bin/bash
       set -euo pipefail
-      if ! command -v bwrap >/dev/null || ! command -v git >/dev/null; then
+      # Packages and Node.js with Spore do not need each other, so they install side
+      # by side. Lima's image already carries package lists, so apt updates them
+      # only when an install fails on stale ones.
+      install_apt() {
+        if command -v bwrap >/dev/null && command -v git >/dev/null; then
+          return 0
+        fi
         export DEBIAN_FRONTEND=noninteractive
-        apt-get update -q
-        apt-get install -yq --no-install-recommends bubblewrap ca-certificates curl git xz-utils
-      fi
+        local packages=(bubblewrap ca-certificates curl git xz-utils)
+        apt-get install -yq --no-install-recommends "${packages[@]}" ||
+          { apt-get update -q &&
+            apt-get install -yq --no-install-recommends "${packages[@]}"; }
+      }
+      install_apt &
+      apt_job=$!
       # Ubuntu 24.04 blocks unprivileged user namespaces by default, which
       # leaves Fungi's Workspace sandbox (bubblewrap) unavailable in the VM.
       echo "kernel.apparmor_restrict_unprivileged_userns = 0" >/etc/sysctl.d/60-fungi-sandbox.conf
@@ -85,22 +95,28 @@ provision:
       }
       EOF
       fi
-      if [ "$(node --version 2>/dev/null)" != "v${PARAM_NODE_VERSION}" ]; then
-        case "$(uname -m)" in
-          x86_64) node_arch=x64; node_sha256="${PARAM_NODE_SHA256_X64}" ;;
-          aarch64) node_arch=arm64; node_sha256="${PARAM_NODE_SHA256_ARM64}" ;;
-          *) echo "Fungi VM supports x86_64 and aarch64 guests, not $(uname -m)" >&2; exit 1 ;;
-        esac
-        archive="node-v${PARAM_NODE_VERSION}-linux-${node_arch}.tar.xz"
-        curl -fsSLo "/tmp/${archive}" "https://nodejs.org/dist/v${PARAM_NODE_VERSION}/${archive}"
-        echo "${node_sha256}  /tmp/${archive}" | sha256sum -c -
-        tar -xJf "/tmp/${archive}" -C /usr/local --strip-components=1 \
-          --exclude=CHANGELOG.md --exclude=LICENSE --exclude=README.md
-        rm -f "/tmp/${archive}"
-      fi
-      if [ ! -e /usr/local/lib/node_modules/@fungi.computer/spore/package.json ]; then
-        npm install --global --no-fund --no-audit "@fungi.computer/spore@${PARAM_SPORE_VERSION}"
-      fi
+      install_node_and_spore() {
+        if [ "$(node --version 2>/dev/null)" != "v${PARAM_NODE_VERSION}" ]; then
+          case "$(uname -m)" in
+            x86_64) node_arch=x64; node_sha256="${PARAM_NODE_SHA256_X64}" ;;
+            aarch64) node_arch=arm64; node_sha256="${PARAM_NODE_SHA256_ARM64}" ;;
+            *) echo "Fungi VM supports x86_64 and aarch64 guests, not $(uname -m)" >&2; exit 1 ;;
+          esac
+          archive="node-v${PARAM_NODE_VERSION}-linux-${node_arch}.tar.xz"
+          curl -fsSLo "/tmp/${archive}" "https://nodejs.org/dist/v${PARAM_NODE_VERSION}/${archive}"
+          echo "${node_sha256}  /tmp/${archive}" | sha256sum -c -
+          tar -xJf "/tmp/${archive}" -C /usr/local --strip-components=1 \
+            --exclude=CHANGELOG.md --exclude=LICENSE --exclude=README.md
+          rm -f "/tmp/${archive}"
+        fi
+        if [ ! -e /usr/local/lib/node_modules/@fungi.computer/spore/package.json ]; then
+          npm install --global --no-fund --no-audit "@fungi.computer/spore@${PARAM_SPORE_VERSION}"
+        fi
+      }
+      install_node_and_spore &
+      node_job=$!
+      wait "$apt_job"
+      wait "$node_job"
 
 probes:
   - mode: readiness

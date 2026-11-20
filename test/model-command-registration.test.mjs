@@ -1,5 +1,5 @@
 import { executeAlias } from "./command-selection.js";
-import process from "node:process";
+import { EventEmitter } from "node:events";
 import assert from "node:assert/strict";
 import { test } from "bun:test";
 import { act } from "react";
@@ -34,6 +34,8 @@ test("slash model saves update one mounted frame without duplicate commands", as
     useKittyKeyboard: null,
   });
   const ready = Promise.withResolvers();
+  // The CLI stops on this source, not on the process's own signals.
+  const signals = new EventEmitter();
   let running;
   let preference = null;
   let renders = 0;
@@ -52,6 +54,7 @@ test("slash model saves update one mounted frame without duplicate commands", as
       running = runTuiCli(
         { invocationRoot: "/tmp", databasePath: "/tmp/fixture.sqlite" },
         {
+          signals,
           loadThemePreference: async () => ({ theme: "terminal" }),
           createWhistle: () => observedCommands,
           enableKeymap: true,
@@ -185,7 +188,7 @@ test("slash model saves update one mounted frame without duplicate commands", as
     assert.equal(setup.renderer.isDestroyed, true);
   } finally {
     await act(async () => {
-      if (!setup.renderer.isDestroyed) process.emit("SIGTERM");
+      if (!setup.renderer.isDestroyed) signals.emit("SIGTERM");
     });
     await running;
     if (!setup.renderer.isDestroyed) setup.renderer.destroy();

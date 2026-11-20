@@ -15,7 +15,10 @@ import { act } from "react";
 import { createWhistle } from "@fungi.computer/whistle";
 import { openPrivateModels } from "../../../runtimes/local/dist/local-models.js";
 import { openPrivateLocalRuntimeHost } from "../../../runtimes/local/dist/private-local-runtime-host.js";
-import { runPrivateLocalService } from "../../../runtimes/local/dist/private-local-service-listener.js";
+import {
+  runPrivateLocalService,
+  stopPrivateLocalService,
+} from "../../../runtimes/local/dist/private-local-service-listener.js";
 import { createPrivateLocalServiceManager } from "../../../runtimes/local/dist/private-local-service.js";
 import { serviceDirectory } from "../../../runtimes/local/dist/private-local-service-discovery.js";
 import process from "node:process";
@@ -217,7 +220,7 @@ try {
   if (setup && !setup.renderer.isDestroyed) setup.renderer.destroy();
   await selected?.close();
   // fungi stop SIGTERMs the service; this listener shares the proof process.
-  process.emit("SIGTERM", "SIGTERM");
+  stopPrivateLocalService(directory);
   await serviceRun;
   await rm(root, { recursive: true, force: true });
   if (previousHome === undefined) delete process.env.HOME;

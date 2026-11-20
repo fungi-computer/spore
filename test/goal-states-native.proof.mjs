@@ -21,7 +21,10 @@ import { createWhistle } from "@fungi.computer/whistle";
 import goalClient from "@fungi.computer/shiitake-extensions/goal/client";
 import { openPrivateModels } from "../../../runtimes/local/dist/local-models.js";
 import { openPrivateLocalRuntimeHost } from "../../../runtimes/local/dist/private-local-runtime-host.js";
-import { runPrivateLocalService } from "../../../runtimes/local/dist/private-local-service-listener.js";
+import {
+  runPrivateLocalService,
+  stopPrivateLocalService,
+} from "../../../runtimes/local/dist/private-local-service-listener.js";
 import { createPrivateLocalServiceManager } from "../../../runtimes/local/dist/private-local-service.js";
 import { serviceDirectory } from "../../../runtimes/local/dist/private-local-service-discovery.js";
 import { captureFrame } from "./frame-capture.ts";
@@ -306,7 +309,7 @@ const close = async () => {
   await selected.close();
   // The listener is embedded in this process; signal its maintained shutdown
   // handler rather than asking the external manager to terminate our PID.
-  process.emit("SIGTERM", "SIGTERM");
+  stopPrivateLocalService(directory);
   await service.run;
 };
 let failure;

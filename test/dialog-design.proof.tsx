@@ -5,7 +5,9 @@ import { waitForFrame } from "./native-readiness.js";
 // Login runs the real account contribution over Local's policy-filtered Pi
 // registry; only the provider sign-in itself is scripted.
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import process from "node:process";
 import { setTimeout as wait } from "node:timers/promises";
 import { QueryClient } from "@tanstack/query-core";
@@ -101,8 +103,14 @@ const modelSource = {
   },
 };
 
+// A credential home of its own: the owner's real one may hold an installed
+// extension that fills a sign-in slot, which would change the registry this
+// proof checks against Veil's built-in policy.
+const credentialHome = await mkdtemp(join(tmpdir(), "fungi-dialog-design-"));
 const registry = localLoginProviders(
-  (await openPrivateModels()).getProviders(),
+  (
+    await openPrivateModels(join(credentialHome, "credentials.json"))
+  ).getProviders(),
 );
 const never = new Promise<never>(() => undefined);
 
@@ -547,4 +555,5 @@ for (const size of sizes) {
     await until(setup, "configured");
   });
 }
+await rm(credentialHome, { recursive: true, force: true });
 console.log("Dialog design frames captured.");

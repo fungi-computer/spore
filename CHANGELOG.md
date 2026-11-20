@@ -1,5 +1,24 @@
 # @fungi.computer/spore
 
+## 0.24.1
+
+### Patch Changes
+
+- Changes since 0.24.0:
+
+  - perf(spore): build the fungi vm base with packages and Node installing side
+    by side
+
+- @fungi.computer/parakeet@0.16.9
+  - @fungi.computer/agar@0.25.1
+  - @fungi.computer/approvals@0.2.5
+  - @fungi.computer/shiitake@0.21.16
+  - @fungi.computer/shiitake-extensions@0.12.5
+  - @fungi.computer/veil@0.11.6
+  - @fungi.computer/truffle@0.19.4
+  - @fungi.computer/nacre@0.8.8
+  - @fungi.computer/corral@0.1.57
+
 ## 0.24.0
 
 ### Minor Changes

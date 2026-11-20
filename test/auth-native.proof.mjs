@@ -15,7 +15,7 @@ import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/servic
 // Real service, Local store, HTTP/RPC client and renderer. Only provider auth is
 // injected; no credential store or inference request is used by this proof.
 const localEntry = import.meta.resolve("@fungi.computer/truffle");
-const { runPrivateLocalService } = await import(
+const { runPrivateLocalService, stopPrivateLocalService } = await import(
   new URL("./private-local-service-listener.js", localEntry).href
 );
 const { serviceDirectory, readServiceRecord } = await import(
@@ -285,8 +285,9 @@ try {
       await act(async () => setup.renderer.destroy());
     if (running) await bounded(running, "cleanup TUI");
   } finally {
-    // fungi stop SIGTERMs the service; this listener shares the proof process.
-    process.emit("SIGTERM", "SIGTERM");
+    // fungi stop SIGTERMs the service; this listener shares the proof process,
+    // so stop it through its own handle.
+    stopPrivateLocalService(directory);
     await serviceRun;
     await rm(root, { recursive: true, force: true });
     globalThis.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;

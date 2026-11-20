@@ -13,7 +13,10 @@ import { contributeAccountCommands } from "@fungi.computer/parakeet/headless";
 import { openPrivateModels } from "@fungi.computer/truffle";
 import { localAccountOwner } from "@fungi.computer/truffle/login";
 import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
-import { runPrivateLocalService } from "../../../runtimes/local/dist/private-local-service-listener.js";
+import {
+  runPrivateLocalService,
+  stopPrivateLocalService,
+} from "../../../runtimes/local/dist/private-local-service-listener.js";
 import { loginAllowed } from "@fungi.computer/veil/model-credentials";
 import { InteractionView } from "../src/button/interaction-dialog.js";
 import { useTerminalTheme } from "../src/button/terminal-theme.js";
@@ -131,7 +134,7 @@ test("/login with a blank OpenAI API key shows No key entered in the dialog", as
     // The listener lives in this test process. manager.stop() waits for its
     // PID to exit, then SIGKILLs it: that would wait on and kill the runner.
     // Exercise the listener's real shutdown without process termination.
-    process.emit("SIGTERM", "SIGTERM");
+    stopPrivateLocalService(directory);
     assert.deepEqual(await stopped, [
       { status: "fulfilled", value: undefined },
     ]);

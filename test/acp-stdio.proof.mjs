@@ -26,7 +26,10 @@ import {
 } from "@earendil-works/pi-ai/providers/faux";
 import { openPrivateLocalRuntimeHost } from "@fungi.computer/truffle";
 import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
-import { runPrivateLocalService } from "../../../runtimes/local/dist/private-local-service-listener.js";
+import {
+  runPrivateLocalService,
+  stopPrivateLocalService,
+} from "../../../runtimes/local/dist/private-local-service-listener.js";
 import { createIsolatedCliEnvironment } from "./cli-test-isolation.ts";
 
 // The actual CLI bundle talks to a real persistent Local owner. Only inference
@@ -309,9 +312,9 @@ try {
     await retainEvidence();
   } finally {
     if (child !== undefined && child.exitCode === null) child.kill();
-    // This fixture embeds the listener; invoke its owned shutdown handler rather
+    // This fixture embeds the listener; stop it through its own handle rather
     // than the external manager that must never terminate its caller's process.
-    if (serviceStarted) process.emit("SIGTERM", "SIGTERM");
+    if (serviceStarted) stopPrivateLocalService(directory);
     try {
       await running;
     } finally {

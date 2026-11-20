@@ -289,6 +289,23 @@ test("the default template ships inside Spore with no home mount", async () => {
   expect(template).not.toContain("- template:_default/mounts");
 });
 
+test("the base build installs packages and Node with Spore side by side, without a blind apt update", async () => {
+  const template = await Bun.file(fungiVmTemplate).text();
+  const script = template.slice(template.indexOf("provision:"));
+  // Lima's image already carries package lists: update only when an install fails on them.
+  const install = script.indexOf("apt-get install");
+  expect(install).toBeGreaterThan(-1);
+  expect(script.slice(0, install)).not.toMatch(/apt-get update(?![^\n]*\|\|)/u);
+  expect(script).toMatch(
+    /apt-get install[^\n]*\n?[^\n]*\|\|[^\n]*\n?[^\n]*apt-get update/u,
+  );
+  // Node and Spore do not need apt, so they install while apt runs.
+  expect(script).toMatch(/install_apt\s*&\s*\n?\s*apt_job=\$!/u);
+  expect(script).toMatch(/install_node_and_spore\s*&\s*\n?\s*node_job=\$!/u);
+  expect(script).toContain('wait "$apt_job"');
+  expect(script).toContain('wait "$node_job"');
+});
+
 test("fungi vm says plainly when this user cannot use /dev/kvm", async () => {
   const cwd = await project();
   const lima = fakeLima(undefined, { kvm: false });

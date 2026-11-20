@@ -75,6 +75,7 @@ let homeModelCalls = 0;
 await mkdir(serviceDirectory, { recursive: true });
 let serviceRun;
 let serviceSettled = false;
+let stopService;
 let owner;
 let reopened;
 let failure;
@@ -240,9 +241,10 @@ try {
       },
     }),
   }));
-  const { runPrivateLocalService } = await import(
+  const { runPrivateLocalService, stopPrivateLocalService } = await import(
     new URL("./private-local-service-listener.js", localEntry).href
   );
+  stopService = stopPrivateLocalService;
   const { openPrivateLocalRuntimeHost } = await import(
     new URL("./private-local-runtime-host.js", localEntry).href
   );
@@ -406,12 +408,13 @@ for (const close of [
   () => owner?.close(),
   async () => {
     if (serviceRun === undefined) return;
-    // A rejected listener has already removed its signal handler. Emitting then
-    // reaches signal-exit instead, re-signals this proof and hides the failure.
+    // A rejected listener has already left, so only a running one is stopped,
+    // through its own handle: a process-wide signal would reach signal-exit,
+    // re-signal this proof and hide the failure.
     process.stderr.write(
       "Installed CLI proof: collect Local service shutdown\n",
     );
-    if (!serviceSettled) assert.equal(process.emit("SIGTERM", "SIGTERM"), true);
+    if (!serviceSettled) assert.equal(stopService?.(serviceDirectory), true);
     await serviceRun;
     assert.equal(
       await manager.status(),

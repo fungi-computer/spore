@@ -15,7 +15,10 @@ import { createWhistle } from "@fungi.computer/whistle";
 import { runTuiCli } from "../dist/cli-runtime.js";
 import { openPrivateModels } from "../../../runtimes/local/dist/local-models.js";
 import { openPrivateLocalRuntimeHost } from "../../../runtimes/local/dist/private-local-runtime-host.js";
-import { runPrivateLocalService } from "../../../runtimes/local/dist/private-local-service-listener.js";
+import {
+  runPrivateLocalService,
+  stopPrivateLocalService,
+} from "../../../runtimes/local/dist/private-local-service-listener.js";
 import { createPrivateLocalServiceManager } from "../../../runtimes/local/dist/private-local-service.js";
 import { serviceDirectory } from "../../../runtimes/local/dist/private-local-service-discovery.js";
 import { captureFrame } from "./frame-capture.ts";
@@ -186,9 +189,9 @@ try {
     if (setup && !setup.renderer.isDestroyed) setup.renderer.destroy();
     await selected?.close();
     // This proof embeds the listener; the maintained stop client must not kill
-    // its own process. Use the listener's ordinary signal lifecycle, as its
-    // in-process service tests do.
-    process.emit("SIGTERM", "SIGTERM");
+    // its own process, and a process-wide signal would reach Miniflare's exit
+    // hook. Stop the listener through its own handle.
+    stopPrivateLocalService(directory);
     await serviceRun;
   } finally {
     await rm(root, { recursive: true, force: true });

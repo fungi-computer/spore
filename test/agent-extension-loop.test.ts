@@ -20,7 +20,10 @@ import {
   createPrivateLocalServiceManager,
   type PrivateLocalServiceConnection,
 } from "@fungi.computer/truffle/service";
-import { runPrivateLocalService } from "../../../runtimes/local/dist/private-local-service-listener.js";
+import {
+  runPrivateLocalService,
+  stopPrivateLocalService,
+} from "../../../runtimes/local/dist/private-local-service-listener.js";
 import { waitForAgentSettlement } from "@fungi.computer/shiitake/agent-control";
 import { bindSessionExtension } from "@fungi.computer/shiitake/client";
 import type { ShiitakeSession } from "@fungi.computer/shiitake";
@@ -365,7 +368,7 @@ for (const mode of ["full-access", "workspace", "read-only"] as const) {
         watch = undefined;
         await connection.close();
         connection = undefined;
-        process.emit("SIGTERM", "SIGTERM");
+        stopPrivateLocalService(directory);
         await running;
         running = startService();
         manager = createManager();
@@ -381,9 +384,9 @@ for (const mode of ["full-access", "workspace", "read-only"] as const) {
         await watch?.close();
         await draining;
         await connection?.close();
-        // This test embeds the listener; invoke its owned shutdown handler, not the
+        // This test embeds the listener; stop it through its own handle, not the
         // SDK stop method that must never terminate its caller's process.
-        process.emit("SIGTERM", "SIGTERM");
+        stopPrivateLocalService(directory);
         try {
           await running;
         } finally {
