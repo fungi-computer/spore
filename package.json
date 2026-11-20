@@ -1,6 +1,6 @@
 {
   "name": "@fungi.computer/spore",
-  "version": "0.20.0",
+  "version": "0.20.1",
   "private": false,
   "type": "module",
   "bin": {
@@ -48,7 +48,7 @@
     "@fungi.computer/lantern": "0.4.2",
     "@fungi.computer/maosaico": "0.1.2",
     "@fungi.computer/nacre": "0.8.6",
-    "@fungi.computer/parakeet": "0.16.2",
+    "@fungi.computer/parakeet": "0.16.3",
     "@fungi.computer/shiitake": "0.21.11",
     "@fungi.computer/shiitake-extensions": "0.12.0",
     "@fungi.computer/stipe": "0.1.1",
