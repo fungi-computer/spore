@@ -14,6 +14,10 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { lstatSync, realpathSync } from "node:fs";
 import { agentsCommandHelp, runAgentsCommand } from "./agents-command.js";
+import {
+  runSchedulesCommand,
+  schedulesCommandHelp,
+} from "./schedules-command.js";
 import { runVmCommand, type VmRunner } from "./vm-command.js";
 import { nativeVmRunner } from "./vm-native-runner.js";
 import {
@@ -219,6 +223,7 @@ const fungiCommandSchema = z.enum([
   "new",
   "sessions",
   "agents",
+  "schedules",
   "run",
   "serve",
   "stop",
@@ -353,6 +358,13 @@ const fungiArgumentRules = {
       z.tuple([z.enum(["archive", "unarchive"]), z.string()]),
     ]),
     error: agentsCommandHelp,
+  },
+  schedules: {
+    schema: z.union([
+      z.tuple([z.literal("list")]),
+      z.tuple([z.enum(["pause", "delete"]), z.string(), z.string()]),
+    ]),
+    error: schedulesCommandHelp,
   },
   login: {
     schema: noFungiPositionals,
@@ -1179,6 +1191,33 @@ export async function runFungiCli(
       action,
       agentId,
       archived: arguments_.values.archived === true,
+      invocationRoot: resolve(
+        io.cwd ?? process.cwd(),
+        arguments_.values.cd ?? ".",
+      ),
+      manager: createServiceManager(),
+      stdout,
+    });
+    return;
+  }
+  if (command === "schedules") {
+    const [action, agentId, ref] = positionals;
+    const invalid = Object.keys(arguments_.values).filter(
+      (key) => key !== "cd" && !(key === "yes" && action === "delete"),
+    );
+    if (
+      invalid.length > 0 ||
+      (action !== "list" && action !== "pause" && action !== "delete")
+    )
+      throw new Error(schedulesCommandHelp);
+    await runSchedulesCommand({
+      action,
+      agentId,
+      ref,
+      yes: arguments_.values.yes === true,
+      confirm: interactiveTerminal()
+        ? (question) => confirm(io, question)
+        : undefined,
       invocationRoot: resolve(
         io.cwd ?? process.cwd(),
         arguments_.values.cd ?? ".",

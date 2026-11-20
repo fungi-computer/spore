@@ -1,5 +1,17 @@
 # @fungi.computer/spore
 
+## 0.24.0
+
+### Minor Changes
+
+- Changes since 0.23.1:
+
+  - feat(tui): fungi schedules list, pause and delete
+
+### Patch Changes
+
+- @fungi.computer/parakeet@0.16.8
+
 ## 0.23.1
 
 ### Patch Changes

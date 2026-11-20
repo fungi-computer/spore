@@ -1,5 +1,6 @@
 import { fungiAccountCommandHelp } from "@fungi.computer/truffle";
 import { agentsCommandHelp } from "./agents-command.js";
+import { schedulesCommandHelp } from "./schedules-command.js";
 import { computerCommandHelp } from "./computer-command.js";
 import { computersCommandHelp } from "./computers-command.js";
 import { appCommandHelp, oysterCommandHelp } from "./door-command.js";
@@ -22,6 +23,7 @@ Conversations:
   fungi resume [<id>] [--last]   Reopen a saved conversation
   fungi sessions <action>        List, resume or inspect saved conversations
   fungi agents <action>          List, archive or restore this folder's Agents
+  fungi schedules <action>       List, pause or delete this folder's schedules
   fungi run [prompt]             Run one prompt and print the answer
   fungi acp                      Connect an editor (Zed, Neovim) via ACP
 
@@ -252,6 +254,7 @@ Only a human answer on an approval card can create a rule.
     app: appCommandHelp,
     computers: computersCommandHelp,
     agents: agentsCommandHelp,
+    schedules: schedulesCommandHelp,
     account: fungiAccountCommandHelp,
   }),
 );
