@@ -222,10 +222,11 @@ test("fungi computer start shows the queue place, and --json keeps stdout to one
   expect(json.calls).toEqual([["start", endpoint, "cedar"]]);
 });
 
-test("--size is only for new and only takes a real size", async () => {
+test("--size is only for new or run and only takes a real size", async () => {
   const run = harness();
   await assert.rejects(run.run("list", "--size", "small"), {
-    message: "--size is only valid with fungi computer new",
+    message:
+      "--size is only valid with fungi computer new or fungi computer run",
   });
   await assert.rejects(run.run("new", "--size", "huge"), {
     message: "--size takes small, default or large",

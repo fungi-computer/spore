@@ -1,5 +1,25 @@
 # @fungi.computer/spore
 
+## 0.21.0
+
+### Minor Changes
+
+- Changes since 0.20.1:
+
+  - fix(tui): never leave a run's Computer behind
+  - feat(tui): add fungi computer run
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/truffle@0.19.0
+  - @fungi.computer/veil@0.11.3
+  - @fungi.computer/shiitake@0.21.12
+  - @fungi.computer/corral@0.1.53
+  - @fungi.computer/parakeet@0.16.4
+  - @fungi.computer/shiitake-extensions@0.12.1
+
 ## 0.20.1
 
 ### Patch Changes

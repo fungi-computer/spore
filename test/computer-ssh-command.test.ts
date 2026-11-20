@@ -57,6 +57,7 @@ function fakeSsh(options: {
   exit?: number;
 }) {
   const calls: Call[] = [];
+  const inputs: (NodeJS.ReadableStream | undefined)[] = [];
   const snapshots: {
     mode: number;
     files: Record<string, string>;
@@ -70,6 +71,7 @@ function fakeSsh(options: {
         stdio: run.stdio,
         env: { ...run.env },
       });
+      inputs.push(run.stdin);
       if (options.missing === command) return "missing";
       if (command === "ssh-keygen") {
         const key = args[args.indexOf("-f") + 1] ?? "";
@@ -100,7 +102,7 @@ function fakeSsh(options: {
       return run.signal.aborted ? 143 : (options.exit ?? 0);
     },
   };
-  return { calls, snapshots, runner };
+  return { calls, inputs, snapshots, runner };
 }
 
 function fakeOwners(runner: SshRunner) {
@@ -410,4 +412,30 @@ test("a space, quote or percent in the temp directory or endpoint cannot split o
   expect(proxy).toContain("team%%2D1");
   expect(proxy).not.toMatch(/(?<!%)%(?!%)/u);
   await assert.rejects(stat(snapshot.directory));
+});
+
+test("a caller's stream reaches ssh as its input, and the caller's signal ends ssh", async () => {
+  const root = await temporaryRoot();
+  const fed = fakeSsh({});
+  const archive = new PassThrough();
+  expect(
+    await runComputerSshCommand(
+      input(root, { sshArguments: ["tar -x"], stdin: archive }).value,
+      fakeOwners(fed.runner).owners,
+    ),
+  ).toBe(0);
+  expect(fed.inputs).toEqual([undefined, archive]);
+
+  const held = fakeSsh({ hold: true });
+  const controller = new AbortController();
+  const run = input(root, { signal: controller.signal });
+  const session = runComputerSshCommand(
+    run.value,
+    fakeOwners(held.runner).owners,
+  );
+  while (held.snapshots.length === 0)
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  controller.abort();
+  // As SIGTERM does: ssh is ended and its own exit code comes back.
+  expect(await session).toBe(143);
 });

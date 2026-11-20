@@ -29,6 +29,8 @@ export type SshRunner = Readonly<{
       env: Readonly<Record<string, string>>;
       /** Share this terminal (ssh) or stay quiet (ssh-keygen). */
       stdio: "inherit" | "ignore";
+      /** Feed the child this stream instead of the terminal's input. */
+      stdin?: NodeJS.ReadableStream | undefined;
       signal: AbortSignal;
     }>,
   ) => Promise<number | "missing">;
@@ -38,12 +40,21 @@ export type SshRunner = Readonly<{
 export const nativeSshRunner: SshRunner = {
   run: (command, args, options) =>
     new Promise<number | "missing">((resolve, reject) => {
+      const { stdin } = options;
       const child = spawn(command, [...args], {
-        stdio: options.stdio,
+        stdio:
+          stdin === undefined ? options.stdio : ["pipe", "inherit", "inherit"],
         env: { ...options.env },
         signal: options.signal,
         killSignal: "SIGTERM",
       });
+      if (stdin !== undefined && child.stdin !== null) {
+        // A child that exits early closes its input; its exit code says why.
+        child.stdin.on("error", (error: NodeJS.ErrnoException) => {
+          if (error.code !== "EPIPE") reject(error);
+        });
+        stdin.pipe(child.stdin);
+      }
       child.once("error", (error: NodeJS.ErrnoException) => {
         if (error.code === "ENOENT") resolve("missing");
         else if (error.name === "AbortError") resolve(143);
@@ -170,6 +181,10 @@ export async function runComputerSshCommand(
         }>
       | undefined;
     temporaryRoot?: string | undefined;
+    /** ssh's input instead of the terminal's, such as an archive to unpack. */
+    stdin?: NodeJS.ReadableStream | undefined;
+    /** Ends the session as SIGTERM would, for a caller with its own signals. */
+    signal?: AbortSignal | undefined;
   },
   owners: ComputerSshOwners,
 ): Promise<number> {
@@ -177,6 +192,8 @@ export async function runComputerSshCommand(
   const stop = () => {
     controller.abort();
   };
+  if (input.signal?.aborted === true) stop();
+  input.signal?.addEventListener("abort", stop, { once: true });
   const ignore = () => undefined;
   const signals = input.signals ?? process;
   // Ctrl-C reaches ssh through the terminal; the other two end it here. All
@@ -242,7 +259,12 @@ export async function runComputerSshCommand(
         proxyCommand,
         extra: input.sshArguments,
       }),
-      { env: environment, stdio: "inherit", signal: controller.signal },
+      {
+        env: environment,
+        stdio: "inherit",
+        stdin: input.stdin,
+        signal: controller.signal,
+      },
     );
     if (code === "missing") throw new Error(missingOpenSsh);
     return code;
@@ -256,6 +278,7 @@ export async function runComputerSshCommand(
     signals.off("SIGINT", ignore);
     signals.off("SIGTERM", stop);
     signals.off("SIGHUP", stop);
+    input.signal?.removeEventListener("abort", stop);
     await rm(directory, { recursive: true, force: true });
   }
 }

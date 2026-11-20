@@ -20,6 +20,7 @@ export const computerCommandHelp = `Usage: fungi computer list | info <computer>
        fungi computer status
        fungi computer detach <computer> --fungi-mcp <url>
        fungi computer ssh <computer> [--fungi-mcp <url>] [-- <ssh args>]
+       fungi computer run [--size <size>] [--push <folder>] -- <command>
 
 Attach a folder on this machine to a Computer as one of its execution
 backends, then keep it connected until you stop it (Ctrl-C). The Computer's
@@ -35,7 +36,8 @@ fungi mcp use <url> --from-file - with its key first.
                                  Name for this machine (default: hostname)
       --yes                      Accept the notice, or the delete question,
                                  without asking
-      --size <size>              With new: small, default or large
+      --size <size>              With new or run: small, default or large
+      --push <folder>            With run: copy this folder into the Computer
       --json                     With list, info, new and start: one JSON
                                  document on stdout
 
@@ -50,6 +52,13 @@ stop or delete it. A <computer> is a name or an id.
 ssh opens an SSH session on a hosted Team Computer with the system ssh, using a
 throwaway key and a 5-minute certificate from the Hub; your own keys and agent
 are never offered. Arguments after -- go to ssh (fungi computer ssh home -- ls).
+
+run creates a Computer, copies --push's folder into /workspace, runs the
+command there over SSH, then deletes the Computer, even after Ctrl-C or a
+failure. In a Git folder only the files Git keeps go (.gitignore applies);
+any other folder goes whole. It exits with the command's exit code and prints
+how long the Computer was up, its size, and an estimated cost
+(fungi computer run --push . -- npm test).
 `;
 
 export type OfflineStatus = Readonly<{

@@ -100,7 +100,7 @@ const lastError =
   "--last is only valid with fungi resume or fungi sessions resume";
 const computersError = "Usage: fungi computers | fungi computers start <name>";
 const computerError =
-  "Usage: fungi computer list | info <computer> | new [<name>] | start <computer> | stop <computer> | delete <computer> | attach <computer> <folder> | status | detach <computer> | ssh <computer> [-- <ssh args>]";
+  "Usage: fungi computer list | info <computer> | new [<name>] | start <computer> | stop <computer> | delete <computer> | attach <computer> <folder> | status | detach <computer> | ssh <computer> [-- <ssh args>] | run [--push <folder>] -- <command>";
 const accountError =
   "Usage: fungi account [--json] | teams [--json] | use-team <team-id> | balance [--json]";
 const mcpError = "Usage: fungi mcp show | use <url> | forget";

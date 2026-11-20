@@ -53,6 +53,7 @@ import {
   pipePrivateComputerSsh,
   createPrivateTeamComputer,
   deletePrivateTeamComputer,
+  readPrivateComputerPrices,
   describePrivateTeamComputer,
   stopPrivateTeamComputer,
   attachPrivateLocalComputer,
@@ -140,6 +141,11 @@ import {
   runComputerSshProxyCommand,
   type ComputerSshOwners,
 } from "./computer-ssh-command.js";
+import {
+  nativeFolderArchive,
+  runComputerRunCommand,
+  type ComputerRunOwners,
+} from "./computer-run-command.js";
 
 const sessionClients = [
   goalClient,
@@ -281,6 +287,7 @@ const fungiArgumentRules = {
       z.tuple([z.literal("detach"), z.string()]),
       z.tuple([z.literal("ssh"), z.string()], z.string()),
       z.tuple([z.literal("ssh-proxy"), z.string()]),
+      z.tuple([z.literal("run"), z.string()], z.string()),
       z.tuple([z.literal("list")]),
       z.tuple([z.literal("info"), z.string()]),
       z.tuple([z.literal("new")]),
@@ -290,7 +297,7 @@ const fungiArgumentRules = {
       z.tuple([z.literal("delete"), z.string()]),
     ]),
     error:
-      "Usage: fungi computer list | info <computer> | new [<name>] | start <computer> | stop <computer> | delete <computer> | attach <computer> <folder> | status | detach <computer> | ssh <computer> [-- <ssh args>]",
+      "Usage: fungi computer list | info <computer> | new [<name>] | start <computer> | stop <computer> | delete <computer> | attach <computer> <folder> | status | detach <computer> | ssh <computer> [-- <ssh args>] | run [--push <folder>] -- <command>",
   },
   vm: {
     schema: z.union([
@@ -545,6 +552,7 @@ export async function runFungiCli(
     extensions?: LocalExtensions;
     computerOwners?: Partial<ComputerCommandOwners>;
     computerSshOwners?: Partial<ComputerSshOwners>;
+    computerRunOwners?: Partial<ComputerRunOwners>;
     computerLifecycleOwners?: Partial<ComputerLifecycleOwners>;
     vmRunner?: VmRunner;
     doorRunner?: DoorRunner;
@@ -604,6 +612,7 @@ export async function runFungiCli(
       "fungi-mcp": { type: "string" },
       "host-label": { type: "string" },
       size: { type: "string" },
+      push: { type: "string" },
       hub: { type: "string" },
       team: { type: "string" },
       yes: { type: "boolean" },
@@ -1440,11 +1449,21 @@ export async function runFungiCli(
     return;
   }
   if (arguments_.values.size !== undefined) {
-    if (command !== "computer" || positionals[0] !== "new")
-      throw new Error("--size is only valid with fungi computer new");
+    if (
+      command !== "computer" ||
+      (positionals[0] !== "new" && positionals[0] !== "run")
+    )
+      throw new Error(
+        "--size is only valid with fungi computer new or fungi computer run",
+      );
     if (!["small", "default", "large"].includes(arguments_.values.size))
       throw new Error("--size takes small, default or large");
   }
+  if (
+    arguments_.values.push !== undefined &&
+    (command !== "computer" || positionals[0] !== "run")
+  )
+    throw new Error("--push is only valid with fungi computer run");
   if (
     command === "computer" &&
     (positionals[0] === "list" ||
@@ -1507,6 +1526,93 @@ export async function runFungiCli(
       },
       owners,
     );
+    return;
+  }
+  if (command === "computer" && positionals[0] === "run") {
+    const selected = await teamEndpoint("fungi computer run");
+    const stderr = {
+      write: (text: string) => (io.stderr ?? process.stderr).write(text),
+    };
+    const sshOwners: ComputerSshOwners = {
+      start: (endpoint, name, options) =>
+        startPrivateTeamComputer(endpoint, name, {
+          ...options,
+          credentialPath,
+        }),
+      mint: (endpoint, computerId, publicKey, options) =>
+        mintPrivateComputerSshCertificate(endpoint, computerId, publicKey, {
+          ...options,
+          credentialPath,
+        }),
+      pipe: (endpoint, computerId, streams, options) =>
+        pipePrivateComputerSsh(endpoint, computerId, streams, {
+          ...options,
+          credentialPath,
+        }),
+      runner: nativeSshRunner,
+      ...overrides.computerSshOwners,
+    };
+    const owners: ComputerRunOwners = {
+      create: (endpoint, creation, options) =>
+        createPrivateTeamComputer(endpoint, creation, {
+          ...options,
+          credentialPath,
+        }),
+      start: (endpoint, name, options) =>
+        startPrivateTeamComputer(endpoint, name, {
+          ...options,
+          credentialPath,
+        }),
+      remove: (endpoint, confirmed, options) =>
+        deletePrivateTeamComputer(endpoint, confirmed, {
+          ...options,
+          credentialPath,
+        }),
+      prices: (endpoint, options) =>
+        readPrivateComputerPrices(endpoint, { ...options, credentialPath }),
+      list: (endpoint) =>
+        listPrivateTeamComputers(endpoint, { credentialPath }),
+      ssh: (session) =>
+        runComputerSshCommand(
+          {
+            computer: session.computer,
+            endpoint: selected,
+            sshArguments: session.sshArguments,
+            selfCommand: [
+              process.execPath,
+              process.env.FUNGI_BUNDLED_CLI ?? process.argv[1] ?? "fungi",
+            ],
+            env: process.env,
+            stderr,
+            stdin: session.stdin,
+            signal: session.signal,
+            signals: io.signals,
+          },
+          sshOwners,
+        ),
+      archive: nativeFolderArchive,
+      now: () => Date.now(),
+      ...overrides.computerRunOwners,
+    };
+    const push = arguments_.values.push;
+    const code = await runComputerRunCommand(
+      {
+        endpoint: selected,
+        size: z
+          .enum(["small", "default", "large"])
+          .optional()
+          .parse(arguments_.values.size),
+        push:
+          push === undefined
+            ? undefined
+            : resolve(io.cwd ?? process.cwd(), push),
+        command: positionals.slice(1),
+        stderr,
+        signals: io.signals,
+      },
+      owners,
+    );
+    if (code !== 0) process.exitCode = code;
     return;
   }
   if (
