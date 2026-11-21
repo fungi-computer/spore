@@ -30,8 +30,8 @@ function label(state: ComputerState): string {
   if (state.state === "queued") return `queued #${String(state.position)}`;
   if (state.state === "start_failed")
     return state.reason === undefined
-      ? "couldn't start, try again"
-      : `couldn't start: ${state.reason}; try again`;
+      ? "couldn't start: the Hub gave no reason"
+      : `couldn't start: ${state.reason}`;
   return state.state;
 }
 
