@@ -16,10 +16,10 @@ const proof = fileURLToPath(
 
 // A native signal stall cannot run a JavaScript deadline in the proof process.
 // Node owns the timeout and SIGKILL outside Bun; the ordinary scope owns descendants.
-async function runProof(env, timeout) {
+async function runProof(env, timeout, args = []) {
   const isolated = await createIsolatedCliEnvironment();
   try {
-    const child = spawnSync(bun, [proof], {
+    const child = spawnSync(bun, [proof, ...args], {
       env: isolated.environment(env),
       encoding: "utf8",
       timeout,
@@ -55,7 +55,9 @@ test("installed CLI startup refusal exits without signalling a stopped service",
     // A real invalid runtime directory fails before the service installs SIGTERM.
     const runtime = join(root, "not-a-directory");
     writeFileSync(runtime, "fixture");
-    const child = await runProof({ XDG_RUNTIME_DIR: runtime }, 10_000);
+    const child = await runProof({ XDG_RUNTIME_DIR: runtime }, 10_000, [
+      "--startup-refusal",
+    ]);
     assert.equal(child.status, 1, `signal=${child.signal}\n${child.stderr}`);
     assert.match(
       child.stderr,

@@ -235,10 +235,10 @@ test("the searchable /model choice keeps the draft and restores composer focus o
       let choosing;
       await act(async () => {
         choosing = executeAlias(commands, "model", { origin: "slash" });
-        await delay(10);
       });
-      await act(async () => setup.renderOnce());
-      assert.match(setup.captureCharFrame(), /SIGNED IN/u);
+      // The picker opens after the model list loads; wait for it, not a fixed
+      // delay (a 10 ms sleep lost that race on a loaded Gate runner).
+      await waitForFrame(setup, (frame) => frame.includes("SIGNED IN"));
       assert.match(setup.captureCharFrame(), /DEFAULT/u);
       await act(async () => setup.mockInput.pressArrow("down"));
       await act(async () => setup.mockInput.pressArrow("down"));

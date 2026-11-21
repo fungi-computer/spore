@@ -8,7 +8,7 @@ import { join } from "node:path";
 import process from "node:process";
 import { spawn } from "bun";
 import { setTimeout as delay } from "node:timers/promises";
-import { setTimeout, clearTimeout, setImmediate } from "node:timers";
+import { setTimeout, clearTimeout } from "node:timers";
 import { fileURLToPath, URL } from "node:url";
 import { test } from "bun:test";
 import { createTestRenderer } from "@opentui/core/testing";
@@ -2220,7 +2220,9 @@ for (const deferredNotifications of [false, true]) {
             // not. Deliver them only after the native renderer is genuinely idle.
             await act(async () => setup.waitForVisualIdle());
             assert.ok(notifications.length > 0);
-            setImmediate(() => {
+            // Keep older default-scheduled notifications ahead of this batch;
+            // setImmediate can otherwise replay an old idle view after streaming.
+            defaultScheduler(() => {
               notifyManager.setScheduler(defaultScheduler);
               for (const notify of notifications) notify();
             });

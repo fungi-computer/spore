@@ -25,7 +25,18 @@ const workingSlot = (): SessionExtensionSlots => ({
   [subagentsContract.id]: {
     status: "running",
     revision: "sha256:service-loss-fixture",
-    catalog: { protocol: "whistle.catalog/v1", commands: [] },
+    // The host advertises `/agents`, which the summary row's action runs.
+    catalog: {
+      protocol: "whistle.catalog/v1",
+      commands: [
+        {
+          id: "agents",
+          title: "Agents",
+          category: "Conversation",
+          projections: { slash: { aliases: ["agents"] } },
+        },
+      ],
+    },
     value: Schema.encodeSync(SubagentsProjection)({
       agents: [
         {

@@ -13,10 +13,15 @@ import { join } from "node:path";
 import process from "node:process";
 import { setTimeout, clearTimeout } from "node:timers";
 import { fileURLToPath, URL } from "node:url";
+import { parseArgs } from "node:util";
 import { spawn } from "bun";
 import { mock } from "bun:test";
 import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
 import { createIsolatedCliEnvironment } from "./cli-test-isolation.ts";
+
+const { values } = parseArgs({
+  options: { "startup-refusal": { type: "boolean", default: false } },
+});
 
 const { capturePrivateLocalExecPath } = await import(
   new URL(
@@ -84,22 +89,26 @@ const manager = createPrivateLocalServiceManager({
   executionPath: clientPath,
 });
 try {
-  for (const args of [["--help"], ["-h"]]) {
-    const result = await invoke(args);
-    assert.equal(result.exit, 0, result.stderr);
-    assert.match(result.stdout, /Usage: fungi/u);
-  }
-  for (const args of [
-    ["not-a-command"],
-    ["--not-an-option"],
-    ["run", "one", "two"],
-  ]) {
-    const result = await invoke(args);
-    assert.equal(result.exit, 1, result.stderr);
-    assert.match(
-      result.stderr,
-      /Unknown fungi command|Unknown option|at most one prompt/u,
-    );
+  // The refusal case owns startup and cleanup, within its existing 10s bound.
+  // Grammar smoke belongs to the complete proof, not to that failure path.
+  if (!values["startup-refusal"]) {
+    for (const args of [["--help"], ["-h"]]) {
+      const result = await invoke(args);
+      assert.equal(result.exit, 0, result.stderr);
+      assert.match(result.stdout, /Usage: fungi/u);
+    }
+    for (const args of [
+      ["not-a-command"],
+      ["--not-an-option"],
+      ["run", "one", "two"],
+    ]) {
+      const result = await invoke(args);
+      assert.equal(result.exit, 1, result.stderr);
+      assert.match(
+        result.stderr,
+        /Unknown fungi command|Unknown option|at most one prompt/u,
+      );
+    }
   }
 
   // Retain the native package proof's deterministic provider boundary. The owner,
