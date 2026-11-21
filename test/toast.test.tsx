@@ -8,7 +8,7 @@ import {
   toastQueueLimit,
 } from "../src/button/toast-store.js";
 import { useToast, type ToastApi } from "../src/button/toast.js";
-import { waitForFrame } from "./native-readiness.js";
+import { pressDecodedKey, waitForFrame } from "./native-readiness.js";
 import { captureFrame } from "./frame-capture.js";
 
 beforeEach(() => {
@@ -289,6 +289,10 @@ test("an action paints pending, ignores repeat activation and Escape, then paint
     );
     await act(async () => {
       await setup.mockMouse.click(x, y);
+    });
+    // Decode Escape while the action is still pending; a queued Escape could
+    // otherwise dismiss the replacement warning after the action settles.
+    await pressDecodedKey(setup, () => {
       setup.mockInput.pressEscape();
     });
     expect(setup.captureCharFrame()).toContain("Working…");

@@ -193,6 +193,9 @@ test("a watched canonical approval displays ledger facts and answers with its re
     });
     expect(producer.calls).toEqual([]);
     await pressDecodedKey(setup, () => {
+      setup.mockInput.pressKey("1");
+    });
+    await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
     });
     expect(producer.calls).toEqual([
@@ -226,7 +229,7 @@ for (const action of ["deny", "escape"]) {
       );
       if (action === "deny")
         await pressDecodedKey(setup, () => {
-          setup.mockInput.pressArrow("down");
+          setup.mockInput.pressKey("2");
         });
       await pressDecodedKey(setup, () => {
         if (action === "deny") setup.mockInput.pressEnter();
@@ -271,6 +274,9 @@ for (const [reason, words] of [
         frame.includes("Allow computer · exec?"),
       );
       await pressDecodedKey(setup, () => {
+        setup.mockInput.pressKey("1");
+      });
+      await pressDecodedKey(setup, () => {
         setup.mockInput.pressEnter();
       });
       const frame = await waitForFrame(setup, (frame) => frame.includes(words));
@@ -297,10 +303,7 @@ test("Esc steps back once from the Deny line, then postpones, through the termin
       frame.includes("Allow computer · exec?"),
     );
     await pressDecodedKey(setup, () => {
-      setup.mockInput.pressArrow("down");
-    });
-    await pressDecodedKey(setup, () => {
-      setup.mockInput.pressArrow("down");
+      setup.mockInput.pressKey("3");
     });
     await waitForFrame(setup, (frame) => frame.includes("Esc back"));
     await pressDecodedKey(setup, () => {
@@ -363,6 +366,9 @@ test("a replaced pending id cannot answer its successor", async () => {
     );
     expect(producer.calls).toEqual([]);
     await pressDecodedKey(setup, () => {
+      setup.mockInput.pressKey("1");
+    });
+    await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
     });
     expect(producer.calls[0]?.input).toEqual({
@@ -386,7 +392,7 @@ test("appending a pending form preserves the current human selection and drains 
     });
     await waitForFrame(setup, (frame) => frame.includes("First form"));
     await pressDecodedKey(setup, () => {
-      setup.mockInput.pressArrow("down");
+      setup.mockInput.pressKey("2");
     });
     act(() => {
       producer.publish([first, second]);
@@ -424,6 +430,9 @@ test("losing an answer response is an unconfirmed outcome, never success or auto
     await waitForFrame(setup, (frame) =>
       frame.includes("Allow computer · exec?"),
     );
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressKey("1");
+    });
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
     });
@@ -496,6 +505,9 @@ test("a dismissed presentation leaves the record pending and a new revision can 
     });
     await waitForFrame(setup, (frame) => frame.includes("Revision eight"));
     await pressDecodedKey(setup, () => {
+      setup.mockInput.pressKey("1");
+    });
+    await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
     });
     expect(producer.calls[0]?.input).toEqual({
@@ -520,6 +532,9 @@ test("a submitted-only result is unconfirmed, never a completed approval", async
     await waitForFrame(setup, (frame) =>
       frame.includes("Allow computer · exec?"),
     );
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressKey("1");
+    });
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
     });

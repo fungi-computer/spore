@@ -137,3 +137,86 @@ test("cancelling the Team chooser after browser sign-in shows Fungi retry guidan
   expect(shown).toContain("To try again, run fungi login --provider fungi.");
   expect(shown).not.toContain("Fungi login complete");
 });
+
+test("fungi login --device shows the page and code, then signs in to the Hub", async () => {
+  let output = "";
+  const endpoints: string[] = [];
+  await runFungiCli(
+    ["login", "--device", "--hub", "https://custom.test"],
+    {
+      interactive: false,
+      stdout: {
+        write: (chunk) => {
+          output += String(chunk);
+          return true;
+        },
+      },
+    },
+    {
+      readFungiStatus: () => Promise.resolve(undefined),
+      signInFungi: () => Promise.reject(new Error("browser login used")),
+      signInFungiDevice: (endpoint, options) => {
+        endpoints.push(endpoint);
+        options.showDeviceCode({
+          userCode: "BCDFGHJK",
+          verificationUri: "https://custom.test/device",
+          verificationUriComplete:
+            "https://custom.test/device?user_code=BCDFGHJK",
+          expiresInSeconds: 600,
+        });
+        return Promise.resolve();
+      },
+    },
+  );
+  expect(endpoints).toEqual(["https://custom.test/"]);
+  const shown = stripVTControlCharacters(output);
+  expect(shown).toContain("https://custom.test/device");
+  expect(shown).toContain("BCDFGHJK");
+  expect(shown).toContain("expires in 10 minutes");
+  expect(shown).toContain("Fungi login complete");
+});
+
+test("a failed device login names its own retry", async () => {
+  const failure = new Error("Device sign-in was denied in the browser.");
+  let output = "";
+  await assert.rejects(
+    runFungiCli(
+      ["login", "--device"],
+      {
+        interactive: false,
+        stdout: {
+          write: (chunk) => {
+            output += String(chunk);
+            return true;
+          },
+        },
+      },
+      {
+        readFungiStatus: () => Promise.resolve(undefined),
+        signInFungiDevice: () => Promise.reject(failure),
+      },
+    ),
+    (cause) => cause === failure,
+  );
+  expect(output).toContain("To try again, run fungi login --device.");
+});
+
+for (const args of [
+  ["status", "--device"],
+  ["login", "--device", "--provider", "openai"],
+  ["login", "--device", "--method", "browser"],
+]) {
+  test(`refuses ${args.join(" ")}`, async () => {
+    await assert.rejects(
+      runFungiCli(
+        args,
+        { interactive: false },
+        {
+          readFungiStatus: () => Promise.resolve(undefined),
+          signInFungiDevice: () => Promise.reject(new Error("must not run")),
+        },
+      ),
+      /--device/u,
+    );
+  });
+}

@@ -64,6 +64,8 @@ import {
   detachPrivateLocalComputer,
   listPrivateLocalComputers,
   signInFungiAccount,
+  signInFungiAccountWithDeviceCode,
+  type FungiDeviceCode,
   launchPlatformBrowser,
   runTrackerGitCredential,
   signOutFungiAccount,
@@ -556,6 +558,13 @@ export async function runFungiCli(
         "confirmReplace" | "chooseTeam" | "openBrowser"
       >,
     ) => Promise<void>;
+    signInFungiDevice?: (
+      endpoint: string,
+      options: Pick<
+        PrivateFungiAccountLoginOptions,
+        "confirmReplace" | "chooseTeam"
+      > & { showDeviceCode: (code: FungiDeviceCode) => void },
+    ) => Promise<void>;
     signOutFungi?: (
       endpoint?: string,
     ) => Promise<PrivateFungiAccountLogoutResult>;
@@ -605,6 +614,13 @@ export async function runFungiCli(
     overrides.signInFungi ??
     ((endpoint, options) =>
       signInFungiAccount(endpoint, { ...options, credentialPath }));
+  const signInFungiDevice: NonNullable<typeof overrides.signInFungiDevice> =
+    overrides.signInFungiDevice ??
+    ((endpoint, options) =>
+      signInFungiAccountWithDeviceCode(endpoint, {
+        ...options,
+        credentialPath,
+      }));
   const arguments_ = parseArgs({
     args: argv,
     allowPositionals: true,
@@ -626,6 +642,7 @@ export async function runFungiCli(
       size: { type: "string" },
       push: { type: "string" },
       hub: { type: "string" },
+      device: { type: "boolean" },
       team: { type: "string" },
       yes: { type: "boolean" },
       skills: { type: "boolean" },
@@ -943,6 +960,19 @@ export async function runFungiCli(
         arguments_.values["auth-type"] !== "oauth"))
   )
     throw new Error("--hub is only valid with fungi login --provider fungi");
+  const device = arguments_.values.device === true;
+  if (device && command !== "login")
+    throw new Error("--device is only valid with fungi login");
+  if (
+    device &&
+    ((arguments_.values.provider !== undefined &&
+      arguments_.values.provider !== "fungi") ||
+      arguments_.values.method !== undefined ||
+      arguments_.values["auth-type"] !== undefined)
+  )
+    throw new Error(
+      "fungi login --device signs in to your Fungi account; it cannot be combined with --provider, --method or --auth-type",
+    );
   let accountOrigin: string | undefined;
   if (
     command === "login" &&
@@ -1803,7 +1833,27 @@ export async function runFungiCli(
             })),
           });
       try {
-        await signInFungi(signInEndpoint, loginOptions);
+        if (device)
+          await signInFungiDevice(signInEndpoint, {
+            ...loginOptions,
+            showDeviceCode: (code) => {
+              linearCli.info("Sign in to Fungi from any browser");
+              linearCli.info(
+                `Open ${code.verificationUri} where you're signed in to Fungi and enter ${code.userCode}`,
+              );
+              linearCli.info(
+                linearCli.link(
+                  "Open approval page",
+                  code.verificationUriComplete,
+                ),
+              );
+              linearCli.url(code.verificationUriComplete);
+              linearCli.info(
+                `The code expires in ${String(Math.round(code.expiresInSeconds / 60))} minutes. Waiting for approval…`,
+              );
+            },
+          });
+        else await signInFungi(signInEndpoint, loginOptions);
       } catch (cause) {
         const retryOption =
           endpoint !== undefined
@@ -1813,7 +1863,9 @@ export async function runFungiCli(
               : undefined;
         linearCli.info(
           retryOption === undefined
-            ? "To try again, run fungi login --provider fungi."
+            ? device
+              ? "To try again, run fungi login --device."
+              : "To try again, run fungi login --provider fungi."
             : `To try again, rerun fungi login with the same ${retryOption} option.`,
         );
         throw cause;

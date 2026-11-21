@@ -150,6 +150,7 @@ stdin when it is omitted.
       --fungi-mcp <url>          Give the Agent tools on a Team Computer
 `,
     login: `Usage: fungi login
+       fungi login --device [--hub <origin>]
        fungi login --provider <id> [--auth-type oauth|api_key] [--method <id>]
 
 In a terminal, fungi login asks how Shiitake should reach a model: a
@@ -160,6 +161,10 @@ Without a terminal it starts the Fungi browser sign-in.
 Signing in to Fungi opens your browser once and asks which Team pays for
 models. The same account serves Team tools.
 
+No browser on this computer (SSH, a server): run fungi login --device, open
+the printed page on any device where you're signed in to Fungi, check the
+code and approve. Device login is for existing accounts.
+
 A subscription over SSH: run fungi login --provider <id> --auth-type oauth and
 open the printed link on any machine. When the sign-in offers a copy-code
 method, fungi picks it over SSH; paste the authorization code or the final
@@ -168,6 +173,7 @@ redirect URL back into fungi.
       --provider <id>            Model provider, e.g. fungi, anthropic, openai
       --auth-type <type>         oauth (subscription) or api_key
       --method <id>              Provider login choice (browser or device-code)
+      --device                   Sign in to Fungi by approving a code elsewhere
       --hub <origin>             Fungi Hub (default: fungi.computer)
       --fungi-mcp <url>          Advanced: sign in to one Team MCP endpoint
 `,

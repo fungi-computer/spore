@@ -190,6 +190,7 @@ test("Deny and say why preserves Esc, treats blank as Deny, and sends a typed no
       // Approve once, Deny, then the Other line: moving onto it asks why.
       await view.press("Down");
       await view.press("Down");
+      await view.press("Down");
       const askingWhy = await waitForFrame(view.setup, (value) =>
         value.includes("Enter deny"),
       );
@@ -265,14 +266,16 @@ test("typed rule coverage appears by Always allow; unavailable reason stays in D
   }
 });
 
-// Number keys only move the highlight now, so "2" then Enter is what the old
-// "2" alone was: it reaches the confirmation, which defaults to Back.
+// No card preselects a choice and number keys only move the highlight, so
+// "2" then Enter reaches the confirmation, which also starts with nothing
+// selected: only a second explicit pick of the rule writes it.
 test("Enter, Enter-Enter, and 2-Enter cannot persist an Always-allow rule", async () => {
   for (const keys of [
     "enter",
-    "down-enter-enter",
     "2-enter-enter",
-    "2-enter-down-enter",
+    "2-enter-1-enter",
+    "1-enter",
+    "2-enter-2-enter",
   ]) {
     const root = await mkdtemp(join(tmpdir(), "approval-card-rule-"));
     const producer = fakeApprovals();
@@ -310,7 +313,7 @@ test("Enter, Enter-Enter, and 2-Enter cannot persist an Always-allow rule", asyn
       const frame = await waitForFrame(setup, (value) =>
         value.includes("Approve once"),
       );
-      expect(frame).toMatch(/› 1\. Approve once/u);
+      expect(frame).not.toContain("›");
       for (const key of keys.split("-")) {
         await pressDecodedKey(setup, () => {
           if (key === "enter") setup.mockInput.pressEnter();
@@ -319,14 +322,14 @@ test("Enter, Enter-Enter, and 2-Enter cannot persist an Always-allow rule", asyn
         });
       }
       expect(producer.answers.map((answer) => answer.decision)).toEqual(
-        keys === "enter"
+        keys === "1-enter"
           ? ["approve"]
-          : keys === "2-enter-down-enter"
+          : keys === "2-enter-2-enter"
             ? ["always-allow"]
             : [],
       );
       const stored = await rulesFile(root);
-      if (keys === "2-enter-down-enter") expect(stored).toContain("git");
+      if (keys === "2-enter-2-enter") expect(stored).toContain("git");
       else expect(stored).toBe("");
     } finally {
       act(() => {
@@ -337,7 +340,7 @@ test("Enter, Enter-Enter, and 2-Enter cannot persist an Always-allow rule", asyn
   }
 });
 
-test("a resize during the Always-allow confirmation keeps Back under Enter", async () => {
+test("a resize during the Always-allow confirmation keeps nothing selected under Enter", async () => {
   const producer = fakeApprovals();
   const source: McpApprovalSource = {
     ...producer.source,
@@ -368,12 +371,14 @@ test("a resize during the Always-allow confirmation keeps Back under Enter", asy
         if (key === "enter") setup.mockInput.pressEnter();
         else setup.mockInput.pressKey(key);
       });
-    await waitForFrame(setup, (value) => value.includes("› 1. Back"));
+    await waitForFrame(setup, (value) => value.includes("1. Back"));
+    expect(setup.captureCharFrame()).not.toContain("›");
     act(() => {
       resize(70);
     });
     await act(async () => setup.renderOnce());
-    expect(setup.captureCharFrame()).toMatch(/› 1\. Back/u);
+    expect(setup.captureCharFrame()).toContain("1. Back");
+    expect(setup.captureCharFrame()).not.toContain("›");
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
     });
@@ -385,7 +390,7 @@ test("a resize during the Always-allow confirmation keeps Back under Enter", asy
   }
 });
 
-test("an immediate Enter cannot write the project grant file", async () => {
+test("an immediate Enter answers nothing and cannot write the project grant file", async () => {
   const root = await mkdtemp(join(tmpdir(), "approval-card-immediate-"));
   const producer = fakeApprovals();
   const source: McpApprovalSource = {
@@ -418,10 +423,9 @@ test("an immediate Enter cannot write the project grant file", async () => {
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
     });
+    // Nothing is selected, so an immediate Enter answers nothing at all.
     expect(await rulesFile(root)).toBe("");
-    expect(producer.answers.map(({ decision }) => decision)).toEqual([
-      "approve",
-    ]);
+    expect(producer.answers).toEqual([]);
   } finally {
     act(() => {
       setup.renderer.destroy();
@@ -528,6 +532,9 @@ test("a replacement approval can answer only its current record and revision", a
     await waitForFrame(setup, (frame) => frame.includes("Allow notes · save?"));
     expect(producer.answers).toEqual([]);
     await pressDecodedKey(setup, () => {
+      setup.mockInput.pressKey("1");
+    });
+    await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
     });
     expect(producer.answers).toEqual([
@@ -555,6 +562,9 @@ test("a newer revision of the same approval replaces the answer fence", async ()
       producer.publish(approval("approval-1", 8));
     });
     await act(async () => setup.renderOnce());
+    await pressDecodedKey(setup, () => {
+      setup.mockInput.pressKey("1");
+    });
     await pressDecodedKey(setup, () => {
       setup.mockInput.pressEnter();
     });
@@ -679,7 +689,8 @@ for (const height of [24, 26, 22]) {
         "Git hooks in this project can run code as you, and this Agent can add hooks.",
       );
       expect(frame).toContain("Always allow “git add” and run it now");
-      expect(frame).toMatch(/› 1\. Back/u);
+      expect(frame).toContain("1. Back");
+      expect(frame).not.toContain("›");
       // The confirmation carries only the warning and bounded coverage, not
       // the main card's Folder, Why or Scope fact rows.
       expect(frame).not.toMatch(/^\s*(?:Folder|Why|Scope)\s{2,}/mu);
@@ -725,7 +736,8 @@ for (const [width, height] of [
       expect(
         frame.match(/Git hooks in this project can run code as you/gu),
       ).toHaveLength(1);
-      expect(frame).toMatch(/› 1\. Back/u);
+      expect(frame).toContain("1. Back");
+      expect(frame).not.toContain("›");
       expect(frame).toContain("Always allow “git push” and run it now");
       expect(view.producer.answers).toEqual([]);
     } finally {
@@ -750,7 +762,7 @@ test("Deny is directly selectable and never creates a rule", async () => {
 test("Details returns to the previously highlighted choice without answering", async () => {
   const view = await card(exec());
   try {
-    await view.press("Down");
+    await view.press("2");
     expect(view.frame()).toMatch(/› 2\. Always allow/u);
     await view.press("d");
     expect(view.frame()).toContain("Details");
@@ -848,6 +860,7 @@ test("a stale revision refusal remains visible, not approval success", async () 
     Promise.resolve({ kind: "refused", reason: "stale-revision" }),
   );
   try {
+    await view.press("1");
     await view.press("Enter");
     expect(
       await waitForFrame(view.setup, (frame) =>
@@ -873,10 +886,10 @@ test("eligibility refusal distinguishes a denied rule from lost answer rights", 
     );
     try {
       if (always) {
-        await view.press("Down");
+        await view.press("2");
         await view.press("Enter");
-        await view.press("Down");
-      }
+        await view.press("2");
+      } else await view.press("1");
       await view.press("Enter");
       await waitForFrame(view.setup, (frame) => flat(frame).includes(expected));
       expect(view.producer.source.snapshot()?.record.state).toBe("pending");
@@ -887,13 +900,14 @@ test("eligibility refusal distinguishes a denied rule from lost answer rights", 
 });
 
 for (const width of [80, 60]) {
-  test(`the ${String(width)}-column escape keeps Approve once highlighted within the surface`, async () => {
+  test(`the ${String(width)}-column escape draws Approve once unselected within the surface`, async () => {
     const view = await card(
       exec(["commit", "-m", "a very long message with words and spaces"]),
       width,
     );
     try {
-      expect(view.frame()).toMatch(/› 1\. Approve once/u);
+      expect(view.frame()).toContain("1. Approve once (recommended)");
+      expect(view.frame()).not.toContain("›");
       for (const line of view.frame().split("\n"))
         expect(line.length).toBeLessThanOrEqual(width);
     } finally {

@@ -143,7 +143,8 @@ for (const { decision, revokeMembership } of [
             value.includes("Approve once"),
         );
         const normalized = frame.replace(/\s+/gu, " ");
-        expect(normalized).toContain("› 1. Approve once");
+        expect(normalized).toContain("1. Approve once");
+        expect(normalized).not.toContain("›");
         expect(normalized).toContain("2. Deny");
         expect(normalized).not.toContain("Always allow");
         expect(frame).toContain("Research Agent");
@@ -168,7 +169,9 @@ for (const { decision, revokeMembership } of [
         // snapshot can still be answerable when that membership disappears.
         if (revokeMembership) currentMember = false;
         await pressDecodedKey(setup, () => {
-          if (decision === "deny") setup.mockInput.pressArrow("down");
+          setup.mockInput.pressKey(decision === "deny" ? "2" : "1");
+        });
+        await pressDecodedKey(setup, () => {
           setup.mockInput.pressEnter();
         });
         if (revokeMembership) {

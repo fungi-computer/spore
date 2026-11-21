@@ -131,6 +131,7 @@ for (const theme of ["latte", "mocha"] as const)
           });
           await waitForFrame(setup, (frame) => frame.includes("Approve once"));
           refuse = true;
+          await press("1");
           await press("Enter");
           await waitForFrame(setup, (frame) =>
             frame.includes("This request changed"),
