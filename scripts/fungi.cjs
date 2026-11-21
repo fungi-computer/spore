@@ -35,13 +35,20 @@ const translated =
   process.platform === "darwin" &&
   process.arch === "x64" &&
   (hostCpus.length === 0 || hostCpus.some(({ model }) => /Apple/.test(model)));
+// The bundled Bun runtime needs glibc 2.17; the OS sandbox's native package
+// needs 2.35. Between them the CLI runs, in Full access only: the Local service
+// (runtimes/local private-local-host-support.ts) applies the same 2.35 line and
+// never uses the native package there.
+const glibcAtLeast = (wantedMajor, wantedMinor) =>
+  major > wantedMajor || (major === wantedMajor && minor >= wantedMinor);
 const supported =
   runtimes[platform] !== undefined &&
   !translated &&
-  (process.platform !== "linux" || major > 2 || (major === 2 && minor >= 35)) &&
+  (process.platform !== "linux" || glibcAtLeast(2, 17)) &&
   (process.platform !== "darwin" ||
     darwinMajor > 22 ||
     (darwinMajor === 22 && darwinMinor >= 6));
+const sandboxHost = process.platform !== "linux" || glibcAtLeast(2, 35);
 if (!supported) {
   if (process.argv[2] === "doctor") {
     console.log(`Platform: ${process.platform} ${process.arch}`);
@@ -53,7 +60,7 @@ if (!supported) {
   console.error(
     translated
       ? "Use arm64 Node on Apple Silicon and reinstall the CLI with npm install -g @fungi.computer/spore --include=optional. The Intel Bun runtime is not supported under Rosetta."
-      : "Fungi CLI needs Linux x64/arm64 with glibc 2.35+, or macOS 13.5+ on Apple Silicon or Intel.",
+      : "Fungi CLI needs Linux x64/arm64 with glibc 2.17+ (2.35+ for the OS sandbox), or macOS 13.5+ on Apple Silicon or Intel.",
   );
   process.exit(1);
 }
@@ -67,7 +74,9 @@ function nativeResolution() {
     return { kind: "missing" };
   }
 }
-if (nativeResolution().kind === "missing") {
+// A host that cannot run the sandbox does not use the native package: whether
+// or not npm installed it, Full access runs and the sandboxed modes are refused.
+if (sandboxHost && nativeResolution().kind === "missing") {
   console.error(
     `Fungi's native package for ${platform} is missing or doesn't match this version. Reinstall: npm i -g @fungi.computer/spore@${sporeVersion} --include=optional`,
   );

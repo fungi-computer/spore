@@ -14,10 +14,12 @@ fungi --version
 ```
 
 Shiitake needs Linux x64/arm64 with glibc 2.35+, or macOS 13.5+ on Apple Silicon
-or Intel. Windows and Alpine/musl are not supported. The Node launcher reports
-this requirement before loading native code on an unsupported machine. Keep npm
-optional dependencies enabled: they supply the patch engine and pinned Bun
-runtime. A separate Bun installation is not required.
+or Intel. Linux with glibc 2.17 to 2.34 starts in Full access only: it has no OS
+sandbox, so Workspace and Read-only are refused. Windows and Alpine/musl are not
+supported. The Node launcher reports this requirement before loading native code
+on an unsupported machine. Keep npm optional dependencies enabled: they supply
+the patch engine and pinned Bun runtime. A separate Bun installation is not
+required.
 
 On Apple Silicon, use arm64 Node. An x64 Node installation under Rosetta is
 refused before loading the Intel runtime; switch Node architectures and

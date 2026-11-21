@@ -1,5 +1,20 @@
 # @fungi.computer/spore
 
+## 0.25.0
+
+### Minor Changes
+
+- Changes since 0.24.2:
+
+  - feat(spore): start in Full access on a Linux host too old for the OS sandbox
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/shiitake-extensions@0.12.6
+  - @fungi.computer/truffle@0.20.0
+
 ## 0.24.2
 
 ### Patch Changes

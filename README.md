@@ -11,8 +11,9 @@ terminal or an ACP editor such as Zed.
 
 ## Install and start
 
-You need Node 22.13 or newer on Linux (x64 or arm64, glibc 2.35+) or macOS 13.5+
-(Apple Silicon or Intel). Then, in your project folder:
+You need Node 22.13 or newer on Linux (x64 or arm64, glibc 2.35+; glibc 2.17 to
+2.34 runs in Full access only, without the OS sandbox) or macOS 13.5+ (Apple
+Silicon or Intel). Then, in your project folder:
 
 ```sh
 npm install -g @fungi.computer/spore

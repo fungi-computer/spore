@@ -10,16 +10,17 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { nativeSandboxHost } from "../../../runtimes/local/dist/private-local-host-support.js";
 
 const requirement =
-  "Fungi CLI needs Linux x64/arm64 with glibc 2.35+, or macOS 13.5+ on Apple Silicon or Intel.\n";
+  "Fungi CLI needs Linux x64/arm64 with glibc 2.17+ (2.35+ for the OS sandbox), or macOS 13.5+ on Apple Silicon or Intel.\n";
 
 async function launch(
   platform: string,
   arch: string,
   glibc: string | undefined,
   args: string[] = [],
-  native = false,
+  native: boolean | "runtime" = false,
   darwinRelease = "22.6.0",
   cpuModel: string | null = "Intel(R) Core(TM)",
   nodeVersion = process.versions.node,
@@ -59,9 +60,12 @@ require("node:os").cpus = () => ${JSON.stringify(cpuModel === null ? [] : [{ mod
         root,
         `node_modules/@oven/bun-${platform}-${arch === "arm64" ? "aarch64" : "x64"}/bin`,
       );
-      await mkdir(nativeBin, { recursive: true });
       await mkdir(bunBin, { recursive: true });
-      await writeFile(join(nativeBin, "fungi-apply-patch"), "");
+      // "runtime": the Bun runtime alone, as on a host npm installed no native package for.
+      if (native !== "runtime") {
+        await mkdir(nativeBin, { recursive: true });
+        await writeFile(join(nativeBin, "fungi-apply-patch"), "");
+      }
       const bun = join(bunBin, "bun");
       await writeFile(
         bun,
@@ -84,8 +88,8 @@ require("node:os").cpus = () => ${JSON.stringify(cpuModel === null ? [] : [{ mod
 }
 
 for (const [platform, arch, glibc] of [
-  ["linux", "x64", "2.31"],
-  ["linux", "arm64", "2.34"],
+  ["linux", "x64", "2.16"],
+  ["linux", "arm64", "2.9"],
   ["linux", "x64", undefined],
   ["linux", "riscv64", "2.39"],
   ["darwin", "riscv64", undefined],
@@ -112,11 +116,45 @@ for (const arch of ["x64", "arm64"]) {
   }
 }
 
+// Bun runs on glibc 2.17 and newer, the OS sandbox on 2.35 and newer. Between
+// them the CLI starts for Full access, and never reads the native package.
+for (const arch of ["x64", "arm64"])
+  for (const glibc of ["2.17", "2.31", "2.34"])
+    for (const native of [false, true] as const)
+      test(`npm launcher admits Linux ${arch} glibc ${glibc} without using ${native ? "an installed" : "an absent"} native package`, async () => {
+        const child = await launch(
+          "linux",
+          arch,
+          glibc,
+          ["--yolo"],
+          native ? true : "runtime",
+        );
+        expect(child.error).toBeUndefined();
+        expect(child.status).toBe(0);
+        expect(child.stdout).toBe("RUNTIME_STARTED\n");
+        expect(child.stderr).toBe("");
+      });
+
+// The launcher is a standalone published file, so it carries its own glibc 2.35
+// line. The Local service decides the same question for Agents; if the two ever
+// disagree a host would start for Full access but refuse, or the reverse.
+test("the launcher and the Local service draw the sandbox's glibc line in the same place", async () => {
+  for (const glibc of ["2.17", "2.31", "2.34", "2.35", "2.36", "2.39", "3.0"]) {
+    const child = await launch("linux", "x64", glibc, ["--yolo"], "runtime");
+    const launcherNeedsNative =
+      child.status === 1 && child.stderr.includes("native package");
+    expect([glibc, launcherNeedsNative]).toEqual([
+      glibc,
+      nativeSandboxHost("linux", glibc).kind === "supported",
+    ]);
+  }
+});
+
 test("doctor explains an unsupported host without loading account or native code", async () => {
-  const child = await launch("linux", "x64", "2.31", ["doctor"]);
+  const child = await launch("linux", "x64", "2.16", ["doctor"]);
   expect(child.status).toBe(1);
   expect(child.stdout).toBe(
-    "Platform: linux x64\nglibc: 2.31\nSign-in: not checked on an unsupported platform\n",
+    "Platform: linux x64\nglibc: 2.16\nSign-in: not checked on an unsupported platform\n",
   );
   expect(child.stderr).toBe(requirement);
 });
