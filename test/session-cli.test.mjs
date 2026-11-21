@@ -2241,6 +2241,9 @@ for (const deferredNotifications of [false, true]) {
         await type("draft before native cancel");
         await pressEscape(setup);
         await pressEscape(setup);
+        // The cancel reaches the owner through async keymap dispatch; observe
+        // the request itself instead of assuming it landed by the second key.
+        await waitFor(() => requests.length >= 1);
         assert.deepEqual(requests, [
           { type: "cancel", commandId: "owner-active-work" },
         ]);

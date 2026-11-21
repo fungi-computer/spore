@@ -7,8 +7,9 @@ import { act } from "react";
 export async function waitForFrame(
   setup: Pick<Setup, "renderOnce" | "captureCharFrame" | "renderer">,
   predicate: (frame: string) => boolean | Promise<boolean>,
+  timeoutMs = 2000,
 ) {
-  const signal = globalThis.AbortSignal.timeout(2000);
+  const signal = globalThis.AbortSignal.timeout(timeoutMs);
   const render = async () => {
     await act(async () => setup.renderOnce());
     return setup.captureCharFrame();

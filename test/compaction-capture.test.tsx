@@ -36,6 +36,9 @@ const contextWindow = 200_000;
 const oldTurns = 10;
 const oldReplyChars = 12_000; // ≈ 3_000 tokens each; ≈ 30_000 tokens together.
 const keepRecentTokens = 4_000;
+// The streamed projection reaches the renderer after the host settles; on a
+// loaded runner that takes seconds, so wait on the real condition, not 2s.
+const projectionWaitMs = 15_000;
 
 function descendants(node: Renderable): Renderable[] {
   return [node, ...node.getChildren().flatMap(descendants)];
@@ -121,6 +124,7 @@ test("the footer shows compacting live with a real window, then the divider's pl
       (frame) =>
         observed()?.cursor === settledBefore.cursor &&
         footerRow(frame, "idle") !== undefined,
+      projectionWaitMs,
     );
     expect(observed()?.cursor).toBe(settledBefore.cursor);
     expect(observed()?.context).toEqual(settledBefore.context);
@@ -138,6 +142,7 @@ test("the footer shows compacting live with a real window, then the divider's pl
     const compactingFrame = await waitForFrame(
       setup,
       (frame) => footerRow(frame, "thinking") !== undefined,
+      projectionWaitMs,
     );
     expect(footerRow(compactingFrame, "thinking")).toBeDefined();
     await captureFrame(setup, output, "compaction-capture-compacting");
@@ -151,6 +156,7 @@ test("the footer shows compacting live with a real window, then the divider's pl
       (frame) =>
         observed()?.cursor === settled.cursor &&
         footerRow(frame, "thinking") === undefined,
+      projectionWaitMs,
     );
     expect(observed()?.cursor).toBe(settled.cursor);
     expect(observed()?.context).toEqual(settled.context);
