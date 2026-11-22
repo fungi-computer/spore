@@ -1,5 +1,13 @@
 # @fungi.computer/spore
 
+## 0.26.5
+
+### Patch Changes
+
+- Changes since 0.26.4:
+
+  - fix(tui): keep the native frame proof from hardlinking into source dist
+
 ## 0.26.4
 
 ### Patch Changes
