@@ -1,5 +1,13 @@
 # @fungi.computer/spore
 
+## 0.26.6
+
+### Patch Changes
+
+- Changes since 0.26.5:
+
+  - fix(tui): detach injected files in the package-local deploy
+
 ## 0.26.5
 
 ### Patch Changes

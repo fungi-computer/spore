@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
 import console from "node:console";
 import {
   access,
@@ -14,6 +13,10 @@ import { dirname, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL, URL } from "node:url";
 import process from "node:process";
+import {
+  deployDetached,
+  packageLocalDeployArguments,
+} from "./injected-deploy.mjs";
 import { expectFileAccess, isMissingFileError } from "./file-probe.mjs";
 
 const tuiRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -59,21 +62,9 @@ try {
   if (!isMissingFileError(cause)) throw cause;
 }
 
-const deployed = spawnSync(
-  "pnpm",
-  [
-    "--filter",
-    "@fungi.computer/spore",
-    "deploy",
-    "--prod",
-    "--legacy",
-    destination,
-  ],
-  { cwd: repositoryRoot, stdio: "inherit" },
-);
-if (deployed.error !== undefined) throw deployed.error;
-if (deployed.status !== 0)
-  throw new Error(`pnpm deploy failed (${String(deployed.status)})`);
+await deployDetached(packageLocalDeployArguments(destination), destination, {
+  cwd: repositoryRoot,
+});
 
 const nativeInstalled = resolve(destination, nativeRelative);
 await expectFileAccess(
