@@ -548,6 +548,33 @@ test("normal completion never aborts the accepted Session", async () => {
   assert.equal(fake.abortCalls, 0);
 });
 
+test("a commentary and final answer pair prints once", async () => {
+  const fake = fakeSession();
+  const output: string[] = [];
+  const run = runOneShot(fake.session, {
+    prompt: "prompt from stdin",
+    requestId: "request-1",
+    stdout: outputSink(output),
+  });
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  const signature = (phase: string) => JSON.stringify({ v: 1, id: "m", phase });
+  fake.emit(
+    idleFrame([
+      user(1),
+      assistant(2, "", "stop", "request-1", [
+        { type: "text", text: "Hello", textSignature: signature("commentary") },
+        {
+          type: "text",
+          text: "Hello",
+          textSignature: signature("final_answer"),
+        },
+      ]),
+    ]),
+  );
+  await run;
+  assert.deepEqual(output, ["Hello\n"]);
+});
+
 test("installed dispatcher accepts one positional prompt", async () => {
   const fake = fakeSession("idle", "prompt from argv");
   const output: string[] = [];

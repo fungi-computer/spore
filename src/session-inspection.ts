@@ -1,5 +1,6 @@
 import { terminalText } from "./button/terminal-text.js";
 import { appendSessionProgress } from "@fungi.computer/shiitake/client";
+import { assistantTextBlocks } from "@fungi.computer/mule/assistant-text";
 import type {
   SessionFrame,
   SessionMessage,
@@ -103,14 +104,14 @@ function textContent(message: SessionMessage["value"]): string {
     );
   if (message.role === "assistant")
     return boundedText(
-      message.content
-        .flatMap((part) => {
-          if (part.type === "text") return [part.text];
-          if (part.type === "toolCall")
-            return [`${part.name}(${JSON.stringify(part.arguments)})`];
-          return [];
-        })
-        .join("\n"),
+      [
+        ...assistantTextBlocks(message.content),
+        ...message.content.flatMap((part) =>
+          part.type === "toolCall"
+            ? [`${part.name}(${JSON.stringify(part.arguments)})`]
+            : [],
+        ),
+      ].join("\n"),
     );
   return boundedText(
     message.content

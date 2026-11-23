@@ -1,3 +1,4 @@
+import { assistantTextBlocks } from "@fungi.computer/mule/assistant-text";
 import { terminalText } from "./button/terminal-text.js";
 import process from "node:process";
 import { StringDecoder } from "node:string_decoder";
@@ -103,10 +104,7 @@ export async function readOneShotPrompt(
 
 function assistantText(message: SessionMessage["value"]): string {
   if (message.role !== "assistant") return "";
-  return message.content
-    .filter((part) => part.type === "text")
-    .map((part) => part.text)
-    .join("");
+  return assistantTextBlocks(message.content).join("");
 }
 
 function frameMessages(frame: SessionFrame): readonly SessionMessage[] {

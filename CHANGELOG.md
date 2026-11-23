@@ -1,5 +1,26 @@
 # @fungi.computer/spore
 
+## 0.26.9
+
+### Patch Changes
+
+- Changes since 0.26.8:
+
+  - fix(shiitake): show every other agent text surface once too
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/approvals@0.2.8
+  - @fungi.computer/nacre@0.9.9
+  - @fungi.computer/parakeet@0.17.10
+  - @fungi.computer/shiitake@0.22.11
+  - @fungi.computer/agar@0.28.5
+  - @fungi.computer/truffle@0.21.6
+  - @fungi.computer/corral@0.1.69
+  - @fungi.computer/shiitake-extensions@0.13.7
+
 ## 0.26.8
 
 ### Patch Changes
