@@ -154,6 +154,7 @@ for (const deferredNotifications of [false, true]) {
                           outcome: "idle",
                         },
                       ],
+                      schedules: [],
                       discoveryFailures:
                         outcome === "discovery failure"
                           ? [

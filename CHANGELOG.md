@@ -1,5 +1,25 @@
 # @fungi.computer/spore
 
+## 0.27.0
+
+### Minor Changes
+
+- Changes since 0.26.9:
+
+  - feat(spore): say how many schedules Stop all paused
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/agar@0.29.0
+  - @fungi.computer/truffle@0.22.0
+  - @fungi.computer/nacre@0.9.10
+  - @fungi.computer/parakeet@0.17.11
+  - @fungi.computer/shiitake@0.22.12
+  - @fungi.computer/corral@0.1.70
+  - @fungi.computer/shiitake-extensions@0.13.8
+
 ## 0.26.9
 
 ### Patch Changes

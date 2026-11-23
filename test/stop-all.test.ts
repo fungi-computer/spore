@@ -68,6 +68,7 @@ test("the single summary counts stopped helpers, not idle helpers, and names par
     stopAllSummary({
       rootAgentId: "root",
       agents,
+      schedules: [],
       discoveryFailures: [],
       notPermitted: 0,
     }),
@@ -87,6 +88,7 @@ test("the single summary counts stopped helpers, not idle helpers, and names par
           reason: "Unavailable host",
         },
       ],
+      schedules: [],
       discoveryFailures: [],
       notPermitted: 0,
     }),
@@ -103,6 +105,7 @@ test("the single summary counts helpers the caller may not stop without naming t
     stopAllSummary({
       rootAgentId: "root",
       agents: [{ agentId: "root", name: "Shiitake", outcome: "stopped" }],
+      schedules: [],
       discoveryFailures: [],
       notPermitted: 2,
     }),
@@ -111,6 +114,61 @@ test("the single summary counts helpers the caller may not stop without naming t
     duration: "until-dismissed",
     message:
       "Stopped Shiitake. 2 helpers you may not stop were left as they were.",
+  });
+});
+
+test("the summary says how many schedules were paused and names any that were not", () => {
+  const base = {
+    rootAgentId: "root",
+    agents: [{ agentId: "root", name: "Shiitake", outcome: "stopped" }],
+  } satisfies Pick<
+    Parameters<typeof stopAllSummary>[0],
+    "rootAgentId" | "agents"
+  >;
+  expect(
+    stopAllSummary({
+      ...base,
+      schedules: [
+        {
+          agentId: "root",
+          kind: "almanac",
+          scheduleId: "water",
+          outcome: "paused",
+        },
+        {
+          agentId: "root",
+          kind: "loop",
+          scheduleId: "loop_1",
+          outcome: "paused",
+        },
+      ],
+      discoveryFailures: [],
+      notPermitted: 0,
+    }),
+  ).toEqual({
+    variant: "success",
+    message: "Stopped Shiitake; paused 2 schedules",
+  });
+  expect(
+    stopAllSummary({
+      ...base,
+      schedules: [
+        {
+          agentId: "root",
+          kind: "almanac",
+          scheduleId: "water",
+          outcome: "paused",
+        },
+        { agentId: "helper", outcome: "failed", reason: "Store unreadable" },
+      ],
+      discoveryFailures: [],
+      notPermitted: 0,
+    }),
+  ).toEqual({
+    variant: "warning",
+    duration: "until-dismissed",
+    message:
+      "Stopped Shiitake; paused 1 schedule. helper has schedules that may still be active: Store unreadable.",
   });
 });
 
@@ -125,6 +183,7 @@ test("the final toast store retains a queued stop-all refusal under transient pr
         stopAllSummary({
           rootAgentId: "root",
           agents: [],
+          schedules: [],
           discoveryFailures: [],
           notPermitted: 0,
         }),
