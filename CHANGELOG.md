@@ -1,5 +1,14 @@
 # @fungi.computer/spore
 
+## 0.27.4
+
+### Patch Changes
+
+- Updated dependencies
+  - @fungi.computer/nacre@0.9.13
+  - @fungi.computer/parakeet@0.17.15
+  - @fungi.computer/truffle@0.22.3
+
 ## 0.27.3
 
 ### Patch Changes

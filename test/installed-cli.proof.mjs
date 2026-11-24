@@ -373,7 +373,10 @@ try {
   hookCode =
     'async () => await env.computers.local.exec({command:"git push origin HEAD"})';
   const hookResult = await invoke(
-    ["run", "-C", repository, "Prove the Git hook PATH"],
+    // Workspace mode hides this fixture's remote and toolchain (the private
+    // /tmp the sandbox gives a command) and makes Git writes an approval;
+    // the proof is about the PATH a hook sees, so it runs without a sandbox.
+    ["run", "--yolo", "-C", repository, "Prove the Git hook PATH"],
     {
       PATH: `${toolchain}:/usr/bin:/bin`,
     },
