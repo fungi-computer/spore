@@ -16,6 +16,8 @@ import { fileURLToPath, URL } from "node:url";
 import { parseArgs } from "node:util";
 import { spawn } from "bun";
 import { mock } from "bun:test";
+import { bindSessionExtension } from "@fungi.computer/shiitake/client";
+import { mcpFormApprovalContract } from "@fungi.computer/truffle";
 import { createPrivateLocalServiceManager } from "@fungi.computer/truffle/service";
 import { createIsolatedCliEnvironment } from "./cli-test-isolation.ts";
 
@@ -76,6 +78,9 @@ const releaseRun = Promise.withResolvers();
 let modelCalls = 0;
 let hookCode;
 let hookModelCalls = 0;
+let escalationCode;
+let escalationModelCalls = 0;
+const escalationStarted = Promise.withResolvers();
 let homeModelCalls = 0;
 await mkdir(serviceDirectory, { recursive: true });
 let serviceRun;
@@ -162,6 +167,33 @@ try {
             held: false,
             reason: "stop",
             content: [{ type: "text", text: "HOME_DIRECT_FILES_OK" }],
+          };
+    }
+    // The escalation leg reuses the hook project's Session, so its history
+    // also holds the earlier leg's prompt: test the later prompt first.
+    if (
+      escalationCode !== undefined &&
+      JSON.stringify(context).includes("Prove the approved Git hook PATH")
+    ) {
+      escalationModelCalls += 1;
+      escalationStarted.resolve();
+      return escalationModelCalls === 1
+        ? {
+            held: false,
+            reason: "toolUse",
+            content: [
+              {
+                type: "toolCall",
+                id: "escalated-hook-path-call",
+                name: "execute",
+                arguments: { code: escalationCode },
+              },
+            ],
+          }
+        : {
+            held: false,
+            reason: "stop",
+            content: [{ type: "text", text: "ESCALATION_PROOF_OK" }],
           };
     }
     if (
@@ -396,6 +428,106 @@ try {
   );
   assert.equal(git(["status", "--short"], repository), "");
   assert.equal(hookModelCalls, 2);
+
+  // The default flow: Workspace, an escalation request, a person's approval
+  // through the Session's own approval command, then the unsandboxed run.
+  await rm(hookMarker);
+  escalationCode = `async () => {
+    const request = { command: "git push origin HEAD:refs/heads/escalated" };
+    const first = await env.computers.local.exec(request);
+    if (first.exitCode === 0) return first;
+    return await env.computers.local.exec({
+      ...request,
+      escape: { justification: "Push the fixture branch and run its hook" },
+    });
+  }`;
+  const escalated = invoke(
+    [
+      "run",
+      "--workspace",
+      "-C",
+      repository,
+      "Prove the approved Git hook PATH",
+    ],
+    { PATH: `${toolchain}:/usr/bin:/bin` },
+  );
+  await Promise.race([escalationStarted.promise, escalated]);
+  // The approving client is the same person's client: same toolchain, so it
+  // may join the live Session whose PATH the run captured.
+  const approvers = createPrivateLocalServiceManager({
+    directory: serviceDirectory,
+    executionPath: capturePrivateLocalExecPath(
+      `${toolchain}:/usr/bin:/bin`,
+      process.cwd(),
+    ),
+  });
+  const approver = await approvers.connect({ invocationRoot: repository });
+  const approverWatch = await approver.session.watch();
+  try {
+    const forms = bindSessionExtension(
+      approver.session,
+      mcpFormApprovalContract,
+    );
+    const form = await Promise.race([
+      (async () => {
+        for await (const frame of approverWatch.changes) {
+          if (frame.kind !== "update") continue;
+          const view = forms.view(frame);
+          if (view.status === "running" && view.value?.pending[0] !== undefined)
+            return view.value.pending[0];
+        }
+        throw new Error("Session closed before an approval was requested");
+      })(),
+      escalated.then((early) => {
+        throw new Error(
+          `Run ended without an approval: exit ${String(early.exit)} ${early.stdout} ${early.stderr}`,
+        );
+      }),
+    ]);
+    assert.equal(form.approval.record.module, "computer");
+    assert.equal(form.approval.record.operation, "exec");
+    assert.equal(form.approval.canAnswer, true);
+    // Nothing escaped yet: only the approved run may leave the marker.
+    await rm(hookMarker, { force: true });
+    assert.equal(
+      git(["--git-dir", remote, "for-each-ref", "refs/heads/escalated"]),
+      "",
+    );
+    assert.equal(
+      (
+        await approver.session
+          .extension(mcpFormApprovalContract.id)
+          .call("answer", {
+            id: form.id,
+            decision: "approve",
+            expectedRevision: form.approval.record.revision,
+          })
+      ).kind,
+      "answered",
+    );
+  } finally {
+    await approverWatch.close();
+    await approver.close();
+  }
+  const escalatedResult = await escalated;
+  assert.equal(escalatedResult.exit, 0, escalatedResult.stderr);
+  assert.match(escalatedResult.stdout, /ESCALATION_PROOF_OK/u);
+  assert.equal(
+    await readFile(hookMarker, "utf8"),
+    "fixture-pnpm",
+    "the approved command keeps the client PATH, so the hook found its toolchain",
+  );
+  assert.equal(
+    git([
+      "--git-dir",
+      remote,
+      "for-each-ref",
+      "--format=%(objectname)",
+      "refs/heads/escalated",
+    ]),
+    git(["rev-parse", "HEAD"], repository),
+  );
+  assert.equal(escalationModelCalls, 2);
   process.stdout.write(
     JSON.stringify(
       {
