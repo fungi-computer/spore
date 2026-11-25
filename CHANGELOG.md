@@ -1,5 +1,17 @@
 # @fungi.computer/spore
 
+## 0.27.8
+
+### Patch Changes
+
+- Updated dependencies
+  - @fungi.computer/shiitake-extensions@0.13.14
+  - @fungi.computer/shiitake@0.23.4
+  - @fungi.computer/veil@0.11.15
+  - @fungi.computer/truffle@0.22.7
+  - @fungi.computer/parakeet@0.17.19
+  - @fungi.computer/corral@0.1.76
+
 ## 0.27.7
 
 ### Patch Changes
