@@ -276,7 +276,10 @@ export async function mount(
     act(async () => setup.waitForFrame((value) => value.includes(text)));
   const gone = async (text: string) =>
     act(async () => setup.waitForFrame((value) => !value.includes(text)));
-  const key = async (name: string, modifiers?: { meta?: boolean }) => {
+  const key = async (
+    name: string,
+    modifiers?: { meta?: boolean; shift?: boolean },
+  ) => {
     act(() => {
       setup.mockInput.pressKey(name, modifiers);
     });

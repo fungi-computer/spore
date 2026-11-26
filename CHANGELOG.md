@@ -1,5 +1,20 @@
 # @fungi.computer/spore
 
+## 0.27.20
+
+### Patch Changes
+
+- Changes since 0.27.19:
+
+  - fix(tui): give the card the keys on request, show who has them, and drop
+    dead takeover code
+  - fix(tui): keep the composer visible and usable while a card is pending
+  - fix(parakeet): focus ring on the row, keep Shift+Tab honest, one typing rule
+    everywhere
+
+- Updated dependencies
+  - @fungi.computer/parakeet@0.19.5
+
 ## 0.27.19
 
 ### Patch Changes

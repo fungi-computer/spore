@@ -6,6 +6,7 @@ import {
   type DecisionIntent,
   type DecisionRowView,
   type DecisionView,
+  type KeyHint,
 } from "@fungi.computer/parakeet/headless";
 import { useEffect, useRef } from "react";
 
@@ -19,7 +20,7 @@ import { terminalText } from "./terminal-text.js";
 /** At or below this many cells, the rows give way to the highlighted one's detail. */
 const narrowWidth = 72;
 
-/** Props for the decision that has taken over the composer. */
+/** Props for a waiting decision, drawn above the composer. */
 export type DecisionBoxProps = Readonly<{
   /** What to draw: Parakeet's decision view, the same one the web composer draws. */
   view: DecisionView;
@@ -30,10 +31,12 @@ export type DecisionBoxProps = Readonly<{
   width: number;
   /** Terminal rows, to cap the box at half of them. */
   rows: number;
-  /** The composer surface the box replaces. */
+  /** The surface the box is drawn on. */
   surface: TuiPresentation["colors"]["background"];
   /** Whether this box owns the keys. */
   active: boolean;
+  /** Tab hands the keys to the composer below, which stays visible and usable. */
+  onLeave?: (() => void) | undefined;
   /**
    * Esc can reach the terminal's global cancel binding before this box; the
    * frame calls this to give it to the decision's own rules instead.
@@ -55,9 +58,9 @@ function isPrintable(event: KeyEvent) {
 }
 
 /**
- * The composer while the Agent waits on the person. It draws a decision view
- * with the dialogs' own header, field and hint row, inside the composer's
- * place: no overlay, no dim, and the transcript stays scrollable above it.
+ * A decision the Agent waits on, drawn above the composer. It draws a decision
+ * view with the dialogs' own header, field and hint row: no overlay, no dim,
+ * the transcript stays scrollable above it and the composer stays usable below.
  */
 export function DecisionBox({
   view,
@@ -67,6 +70,7 @@ export function DecisionBox({
   rows,
   surface,
   active,
+  onLeave,
   escapeRef,
 }: DecisionBoxProps) {
   const box = useRef<import("@opentui/core").BoxRenderable>(null);
@@ -102,15 +106,24 @@ export function DecisionBox({
         event.preventDefault();
         dispatch({ type: "details" });
       }
-    } else if (name === "up" || name === "down") {
+    } else if (name === "tab" && !event.shift && onLeave !== undefined) {
       event.preventDefault();
-      dispatch({ type: "move", delta: name === "up" ? -1 : 1 });
+      onLeave();
+    } else if (
+      name === "up" ||
+      name === "down" ||
+      // Vim's j and k move like the arrows; any other letter starts the answer.
+      (!event.meta && !event.option && (name === "j" || name === "k"))
+    ) {
+      event.preventDefault();
+      dispatch({ type: "move", delta: name === "up" || name === "k" ? -1 : 1 });
     } else if (name === "return" || name === "enter") {
       event.preventDefault();
       dispatch({ type: "enter" });
-    } else if ((name === "space" || event.sequence === " ") && view.multiple) {
+    } else if (name === "space" || event.sequence === " ") {
       event.preventDefault();
-      dispatch({ type: "toggle" });
+      // Space picks a single choice like Enter, and toggles one of several.
+      dispatch({ type: view.multiple ? "toggle" : "enter" });
     } else if (!event.meta && !event.option && /^[1-9]$/u.test(name)) {
       event.preventDefault();
       dispatch({ type: "pick", number: Number(name) });
@@ -132,11 +145,25 @@ export function DecisionBox({
     else if (name === "escape") {
       event.preventDefault();
       dispatch({ type: "escape" });
+    } else if (name === "tab" && !event.shift && onLeave !== undefined) {
+      event.preventDefault();
+      onLeave();
     } else if (name === "up" || name === "down") {
       event.preventDefault();
       dispatch({ type: "move", delta: name === "up" ? -1 : 1 });
     }
   };
+  // The composer below stays usable: Tab goes there, and the hint says so.
+  const moved = view.hints.map((hint) =>
+    hint.keys === "↑↓" ? { ...hint, keys: "↑↓/jk" } : hint,
+  );
+  // While the composer has the keys the card's own keys do nothing, so its
+  // hint row names the one that matters instead.
+  const hints: readonly KeyHint[] = !active
+    ? [{ keys: "Shift+Tab", label: "answer", priority: 0 }]
+    : onLeave === undefined || view.detailsOpen
+      ? moved
+      : [...moved, { keys: "Tab", label: "message", priority: 2 }];
   const compact = rows < 30;
   const content = {
     title: view.title,
@@ -165,7 +192,7 @@ export function DecisionBox({
           colors={colors}
           onKeyDown={keyDown}
         />
-        <HintRow hints={view.hints} width={inner} colors={colors} />
+        <HintRow hints={hints} width={inner} colors={colors} />
       </box>
     );
   // Half the terminal at most; the list scrolls inside what is left.
@@ -204,7 +231,8 @@ export function DecisionBox({
   );
   const row = (entry: DecisionRowView) => {
     const tone = entry.destructive ? colors.error : colors.foreground;
-    const lit = entry.highlighted;
+    // The highlight is muted while the composer has the keys.
+    const lit = entry.highlighted && active;
     const label = fitFooterCaption(entry.text, Math.max(1, inner - 2));
     const aligned =
       entry.kind === "option" && entry.description !== undefined && !narrow;
@@ -223,7 +251,7 @@ export function DecisionBox({
             flexShrink={0}
             fg={lit ? colors.selectionForeground : colors.primary}
           >
-            {lit ? "› " : "  "}
+            {entry.highlighted ? "› " : "  "}
           </text>
           <text
             flexShrink={entry.kind === "other" ? 0 : 1}
@@ -315,7 +343,7 @@ export function DecisionBox({
           )}
         </text>
       )}
-      <HintRow hints={view.hints} width={inner} colors={colors} />
+      <HintRow hints={hints} width={inner} colors={colors} />
     </box>
   );
 }

@@ -1,6 +1,5 @@
 import { ScrollBoxRenderable } from "@opentui/core";
 import {
-  awaitingTakeover,
   useApprovalAwaiting,
   formatContextUsage,
   formatModelWithLevel,
@@ -551,7 +550,37 @@ function TuiFrameConversation({
     else if (initialCommandNotice !== undefined)
       store.report({ tone: "info", message: initialCommandNotice });
   }, [initialCommandError, initialCommandNotice, store]);
-  const takeover = awaitingTakeover(slash.awaiting, composer.draft);
+  // A waiting decision sits above the composer, never over it. Who has the
+  // keys is decided when a card arrives (a draft being typed keeps them) and
+  // again whenever the person asks to answer (Alt+Up, /answer, a row's action),
+  // which hands them to the card. Tab and Shift+Tab swap them after that.
+  // It is derived while rendering, so a draft never loses the keys for a frame.
+  const takeover = slash.awaiting.current;
+  const takeoverKey = takeover?.key;
+  const requests = slash.interactions.awaiting.requests;
+  const [owner, setOwner] = useState(() => ({
+    key: takeoverKey,
+    requests,
+    composer: takeoverKey !== undefined && composer.draft !== "",
+  }));
+  let keys = owner;
+  if (owner.key !== takeoverKey || owner.requests !== requests) {
+    keys = {
+      key: takeoverKey,
+      requests,
+      // Only a card's arrival can leave the keys with a draft.
+      composer:
+        owner.requests === requests &&
+        takeoverKey !== undefined &&
+        composer.draft !== "",
+    };
+    setOwner(keys);
+  }
+  const composerKeys = keys.composer;
+  const cardHasKeys = takeover !== undefined && !composerKeys;
+  const giveKeys = (to: "card" | "composer") => {
+    setOwner({ ...keys, composer: to === "composer" });
+  };
   // Esc may arrive through the terminal's cancel binding; the decision gets it.
   const decisionEscape = useRef<(() => void) | undefined>(undefined);
   const escapeDecision = () => {
@@ -625,7 +654,7 @@ function TuiFrameConversation({
     interaction: rowActions.selecting
       ? "actions"
       : dialog.isOpen ||
-          takeover !== undefined ||
+          cardHasKeys ||
           slash.interactions.open !== undefined ||
           inspectedRow !== undefined ||
           slash.open
@@ -797,7 +826,7 @@ function TuiFrameConversation({
         terminalWidth={width}
       />
       <box flexShrink={0}>
-        {slash.open && !dialog.isOpen && takeover === undefined ? (
+        {slash.open && !dialog.isOpen && !cardHasKeys ? (
           <SlashCompletionList
             slash={slash}
             colors={colors}
@@ -818,27 +847,25 @@ function TuiFrameConversation({
             surface={surface}
             width={width - 2 * inset}
             rows={height}
-            active={focused && !dialog.isOpen}
-            escapeRef={decisionEscape}
+            active={focused && !dialog.isOpen && cardHasKeys}
+            escapeRef={cardHasKeys ? decisionEscape : undefined}
+            onLeave={() => {
+              giveKeys("composer");
+            }}
           />
         )}
-        {/* The draft stays mounted while a decision has the composer, so it returns untouched. */}
         <box
           flexDirection="row"
           backgroundColor={surface}
           paddingX={1}
           paddingY={1}
-          visible={takeover === undefined}
         >
           <text fg={colors.primary} width={2} flexShrink={0}>
             ›{" "}
           </text>
           <TerminalComposer
             focused={
-              focused &&
-              !dialog.isOpen &&
-              !showingAttention &&
-              takeover === undefined
+              focused && !dialog.isOpen && !showingAttention && !cardHasKeys
             }
             readOnly={composer.recallState.kind === "recalling"}
             inputHandoff={inputHandoff}
@@ -846,6 +873,17 @@ function TuiFrameConversation({
             colors={colors}
             onKeyDown={(event) => {
               const current = slashRef.current;
+              if (
+                takeover !== undefined &&
+                event.name === "tab" &&
+                event.shift &&
+                !event.ctrl &&
+                !event.meta
+              ) {
+                event.preventDefault();
+                giveKeys("card");
+                return;
+              }
               if (
                 focused &&
                 !dialog.isOpen &&
