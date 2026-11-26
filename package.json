@@ -1,6 +1,6 @@
 {
   "name": "@fungi.computer/spore",
-  "version": "0.27.11",
+  "version": "0.27.12",
   "private": false,
   "type": "module",
   "bin": {
@@ -50,9 +50,9 @@
     "@fungi.computer/nacre": "0.9.16",
     "@fungi.computer/parakeet": "0.18.2",
     "@fungi.computer/shiitake": "0.23.6",
-    "@fungi.computer/shiitake-extensions": "0.13.16",
+    "@fungi.computer/shiitake-extensions": "0.13.17",
     "@fungi.computer/stipe": "0.1.1",
-    "@fungi.computer/truffle": "0.22.9",
+    "@fungi.computer/truffle": "0.22.10",
     "@fungi.computer/veil": "0.11.16",
     "@fungi.computer/whistle": "0.3.0",
     "@opencode-ai/pty": "0.3.0",
