@@ -1,5 +1,16 @@
 # @fungi.computer/spore
 
+## 0.27.21
+
+### Patch Changes
+
+- Changes since 0.27.20:
+
+  - fix(spore): export only the decisionKeys function
+  - fix(spore): rest the question card's hint whenever a dialog or lost focus
+    pauses the keys
+  - fix(spore): name Shift+Tab only while the composer holds the keys
+
 ## 0.27.20
 
 ### Patch Changes

@@ -302,3 +302,29 @@ test("j and k move like the arrows, Space picks, and any other letter starts the
     await second.close();
   }
 });
+
+test("while a real dialog is open the card names no key, even with the keys on the composer", async () => {
+  const page = await mount(100, 30);
+  try {
+    const [color] = asks;
+    if (color === undefined) throw new Error("Missing fixture");
+    await act(page.question.ask.bind(null, color));
+    await page.frame("1. Blue (recommended)");
+    // Tab hands the keys to the composer: the card names the key that returns them.
+    await page.key("TAB");
+    const handed = await page.frame("Shift+Tab answer");
+    expect(handed).toContain("Ask anything");
+    // /theme opens a dialog over the frame, a real one from the frame's own controls.
+    await page.type("/theme");
+    await page.key("RETURN");
+    const opened = await page.frame("Esc cancel");
+    expect(opened).not.toContain("Shift+Tab answer");
+    // Closing it gives the hint back.
+    await page.key("ESCAPE");
+    await page.gone("Esc cancel");
+    const closed = await page.frame("Shift+Tab answer");
+    expect(closed).toContain("Shift+Tab answer");
+  } finally {
+    await page.close();
+  }
+});

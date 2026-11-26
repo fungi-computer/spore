@@ -33,6 +33,8 @@ function Box({
       width={width}
       rows={height}
       active
+      hasKeys
+      paused={false}
     />
   );
 }

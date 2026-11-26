@@ -4,7 +4,7 @@ import {
   formatContextUsage,
   formatModelWithLevel,
 } from "@fungi.computer/parakeet/headless";
-import { tuiDraftStorage } from "../../button/index.js";
+import { decisionKeys, tuiDraftStorage } from "../../button/index.js";
 import {
   messageAuthor,
   terminalText,
@@ -847,7 +847,11 @@ function TuiFrameConversation({
             surface={surface}
             width={width - 2 * inset}
             rows={height}
-            active={focused && !dialog.isOpen && cardHasKeys}
+            {...decisionKeys({
+              focused,
+              dialogOpen: dialog.isOpen,
+              cardHasKeys,
+            })}
             escapeRef={cardHasKeys ? decisionEscape : undefined}
             onLeave={() => {
               giveKeys("composer");

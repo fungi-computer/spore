@@ -48,6 +48,8 @@ export function ApprovalComposer({
       width={width - 2}
       rows={height}
       active
+      hasKeys
+      paused={false}
     />
   );
 }

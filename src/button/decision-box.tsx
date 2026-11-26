@@ -33,8 +33,19 @@ export type DecisionBoxProps = Readonly<{
   rows: number;
   /** The surface the box is drawn on. */
   surface: TuiPresentation["colors"]["background"];
-  /** Whether this box owns the keys. */
+  /**
+   * Whether this box can take key presses now: it holds the keys, the pane has
+   * focus and no dialog is open over it.
+   */
   active: boolean;
+  /**
+   * Whether the card, not the composer, holds the keys. It stays true while a
+   * dialog is open or the pane is unfocused: the highlight follows who holds
+   * the keys, `active` only whether a press would land.
+   */
+  hasKeys: boolean;
+  /** No press lands anywhere (unfocused pane or an open dialog): the hint row names no key. */
+  paused: boolean;
   /** Tab hands the keys to the composer below, which stays visible and usable. */
   onLeave?: (() => void) | undefined;
   /**
@@ -70,6 +81,8 @@ export function DecisionBox({
   rows,
   surface,
   active,
+  hasKeys,
+  paused,
   onLeave,
   escapeRef,
 }: DecisionBoxProps) {
@@ -158,12 +171,16 @@ export function DecisionBox({
     hint.keys === "↑↓" ? { ...hint, keys: "↑↓/jk" } : hint,
   );
   // While the composer has the keys the card's own keys do nothing, so its
-  // hint row names the one that matters instead.
-  const hints: readonly KeyHint[] = !active
-    ? [{ keys: "Shift+Tab", label: "answer", priority: 0 }]
-    : onLeave === undefined || view.detailsOpen
-      ? moved
-      : [...moved, { keys: "Tab", label: "message", priority: 2 }];
+  // hint row names the one that matters instead. While a dialog is open or the
+  // pane is unfocused no key lands for either owner, so the row rests and
+  // names none.
+  const hints: readonly KeyHint[] = paused
+    ? []
+    : !hasKeys
+      ? [{ keys: "Shift+Tab", label: "answer", priority: 0 }]
+      : onLeave === undefined || view.detailsOpen
+        ? moved
+        : [...moved, { keys: "Tab", label: "message", priority: 2 }];
   const compact = rows < 30;
   const content = {
     title: view.title,
@@ -232,7 +249,7 @@ export function DecisionBox({
   const row = (entry: DecisionRowView) => {
     const tone = entry.destructive ? colors.error : colors.foreground;
     // The highlight is muted while the composer has the keys.
-    const lit = entry.highlighted && active;
+    const lit = entry.highlighted && hasKeys;
     const label = fitFooterCaption(entry.text, Math.max(1, inner - 2));
     const aligned =
       entry.kind === "option" && entry.description !== undefined && !narrow;
