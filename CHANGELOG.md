@@ -1,5 +1,17 @@
 # @fungi.computer/spore
 
+## 0.27.16
+
+### Patch Changes
+
+- Changes since 0.27.15:
+
+  - fix(parakeet): word a failed tool call as a failure, in its row and the
+    summary
+
+- Updated dependencies
+  - @fungi.computer/parakeet@0.19.1
+
 ## 0.27.15
 
 ### Patch Changes

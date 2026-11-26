@@ -115,7 +115,7 @@ for (const width of [80, 160]) {
             "Read apps/tui/src/transcript.tsx",
             "Searched ToolRow",
             "Updated apps/tui/src/transcript.tsx",
-            "Ran pnpm --dir apps/tui run test",
+            "Couldn't run pnpm --dir apps/tui run test",
             "Ran pnpm --dir apps/tui run typecheck",
           ];
           expect(
@@ -136,7 +136,7 @@ for (const width of [80, 160]) {
           // The failed group summary and failed test call are red; successful calls are green.
           if (index === 5)
             expect(cells.map((cell) => cell.text).join("")).toContain(
-              "Ran pnpm --dir apps/tui run test",
+              "Couldn't run pnpm --dir apps/tui run test",
             );
           expect(status.fg.slice(0, 3)).toEqual(
             index === 0 || index === 5 ? [243, 139, 168] : [166, 227, 161],
@@ -149,10 +149,10 @@ for (const width of [80, 160]) {
           await act(async () => {
             const lines = setup.captureCharFrame().split("\n");
             const y = lines.findIndex((line) =>
-              line.includes("Ran pnpm --dir apps/tui run test"),
+              line.includes("Couldn't run pnpm --dir apps/tui run test"),
             );
             if (y < 0) throw new Error("Missing failed tool row");
-            await setup.mockMouse.click(lines[y]?.indexOf("Ran") ?? 0, y);
+            await setup.mockMouse.click(lines[y]?.indexOf("Couldn't") ?? 0, y);
             setup.renderer.resize(width, width === 80 ? 24 : 48);
             await setup.renderOnce();
           });

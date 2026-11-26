@@ -113,7 +113,9 @@ test("consecutive calls render as one group; a failure opens it on the failed ca
     expect(frame.match(/6 calls/gu)).toHaveLength(1);
     expect(frame).toContain("1 failed");
     expect(frame).toContain("Read apps/tui/src/frame.tsx");
-    expect(frame).toContain("Ran pnpm --dir apps/tui run test · exit 1");
+    expect(frame).toContain(
+      "Couldn't run pnpm --dir apps/tui run test · exit 1",
+    );
     // The failed call opens error-first with one bounded output block.
     expect(frame).toMatch(/▾\s+✗ groups fold consecutive calls/u);
     expect(frame).toContain("$ pnpm --dir apps/tui run test");
@@ -127,7 +129,7 @@ test("consecutive calls render as one group; a failure opens it on the failed ca
     });
     expect(collapsed).toContain("Read 2 files, searched 1 pattern");
     expect(collapsed).not.toContain("Read apps/tui/src/frame.tsx");
-    expect(collapsed).toContain("Ran pnpm --dir apps/tui run test");
+    expect(collapsed).toContain("Couldn't run pnpm --dir apps/tui run test");
 
     const reopened = await frameAfter(setup, () => {
       setup.mockInput.pressKey("g", { ctrl: true });
@@ -857,7 +859,7 @@ for (const { name, snapshot, label, color } of [
   {
     name: "failed",
     snapshot: groupedToolsDesignSnapshot,
-    label: "Ran pnpm --dir apps/tui run test",
+    label: "Couldn't run pnpm --dir apps/tui run test",
     color: "#f38ba8",
   },
   {
