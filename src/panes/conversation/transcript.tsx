@@ -792,7 +792,14 @@ function isAgentMessage(item: UserMessageItem): boolean {
 
 /** A human line on the raised user surface; another Agent's message is not one. */
 function userBlock(item: ParakeetTimelineItem): boolean {
-  return item.kind === "user_message" && !isAgentMessage(item);
+  return (
+    item.kind === "user_message" && !isAgentMessage(item) && !isOutcome(item)
+  );
+}
+
+/** An extension's message read for the person: a compact line, not a user block. */
+function isOutcome(item: UserMessageItem): boolean {
+  return item.outcome === true;
 }
 
 /**
@@ -937,6 +944,20 @@ function TimelineRowView({
       </box>
     );
   }
+  if (item.kind === "user_message" && isOutcome(item))
+    return (
+      <box
+        id={rowRenderableId(item.id)}
+        flexShrink={0}
+        paddingX={inset}
+        height={1}
+        marginBottom={1}
+      >
+        <text fg={presentation.dimForeground} attributes={2} wrapMode="none">
+          {terminalText(`· ${item.text}`)}
+        </text>
+      </box>
+    );
   if (item.kind === "user_message") {
     const { cue, foreground } = userMessageAppearance(item, presentation);
     return (

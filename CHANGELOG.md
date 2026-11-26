@@ -1,5 +1,26 @@
 # @fungi.computer/spore
 
+## 0.27.13
+
+### Patch Changes
+
+- Changes since 0.27.12:
+
+  - fix(shiitake): let a client entry describe its extension's own messages
+  - fix(parakeet): leave messages alone without outcomes and show the TUI row
+    compactly
+  - fix(parakeet): show answers from the question's own outcome and tie a card
+    to its call
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/parakeet@0.18.3
+  - @fungi.computer/shiitake-extensions@0.13.18
+  - @fungi.computer/shiitake@0.23.7
+  - @fungi.computer/truffle@0.22.11
+  - @fungi.computer/corral@0.1.79
+
 ## 0.27.12
 
 ### Patch Changes
