@@ -799,7 +799,7 @@ function userBlock(item: ParakeetTimelineItem): boolean {
 
 /** An extension's message read for the person: a compact line, not a user block. */
 function isOutcome(item: UserMessageItem): boolean {
-  return item.outcome === true;
+  return item.outcome !== undefined;
 }
 
 /**

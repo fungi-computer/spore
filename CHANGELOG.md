@@ -1,5 +1,23 @@
 # @fungi.computer/spore
 
+## 0.27.24
+
+### Patch Changes
+
+- Changes since 0.27.23:
+
+  - fix(parakeet): only the person's own answer is their bubble, and a parked
+    answer shows once
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @fungi.computer/parakeet@0.19.8
+  - @fungi.computer/shiitake-extensions@0.15.4
+  - @fungi.computer/shiitake@0.24.4
+  - @fungi.computer/truffle@0.22.18
+  - @fungi.computer/corral@0.1.86
+
 ## 0.27.23
 
 ### Patch Changes
