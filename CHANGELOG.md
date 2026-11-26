@@ -1,5 +1,16 @@
 # @fungi.computer/spore
 
+## 0.27.10
+
+### Patch Changes
+
+- Changes since 0.27.9:
+
+  - fix(parakeet): keep the composer usable and never preselect an answer
+
+- Updated dependencies
+  - @fungi.computer/parakeet@0.18.1
+
 ## 0.27.9
 
 ### Patch Changes

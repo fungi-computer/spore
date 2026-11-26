@@ -121,6 +121,8 @@ test("a multiple question toggles with Space and needs one pick", async () => {
     expect(open).toContain("Space toggle");
     await page.key("RETURN");
     expect(page.question.answers()).toEqual([]);
+    // Nothing is preselected: the first arrow lands on the first row.
+    await page.key("ARROW_DOWN");
     await page.key(" ");
     await page.key("ARROW_DOWN");
     await page.key("ARROW_DOWN");
